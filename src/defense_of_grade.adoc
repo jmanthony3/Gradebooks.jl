@@ -1,0 +1,110 @@
+// document metadata
+= Instructor Defense for Student's {{ assignment_name }} Grade: {{ class_code }} | {{ student_name }} ({{ student_id }})
+{{ instructor_name }}, {{ instructor_jobtitle }}, {{ instructor_organization }} <{{ instructor_id }}, {{ instructor_email }}>
+:templateauthor: Dr. Joby M. Anthony III
+:templateauthorinitials: JMA3
+:templateauthoremail: jmanthony1@liberty.edu
+:templateversion: 0.1.0
+:templatedate: January 06, 2026
+:revnumber: v1
+:revdate: {docdate}
+:revremark: : Initial export of student gradebook.
+:version-label: {{ class_code }}-{{ student_initials }}
+:description: A summary of student performance and an instructor's defense of the applied grade.
+// :keywords: 
+:docdir: {{ cwd |> ensure_formattedpath }}/reports/{{ student_name_last |> lower }}_{{ student_name_first |> lower }}
+:imagesdir: {docdir}/defense_of_grade
+// :bibtex-file: defense_of_grade.bib
+:toc: auto
+:xrefstyle: short
+:sectnums: |,all|
+:chapter-refsig: Chap.
+:section-refsig: Sec.
+:eqnums: AMS
+// :stylesdir: {docdir}
+// :stylesheet: asme.css
+// :noheader:
+// :nofooter:
+// :docinfodir: {docdir}
+// :docinfo: private
+:front-matter: any
+:!last-update-label:
+
+// example variable
+// :fn-1: footnote:[]
+:course_code: {{ course_code |> upper }}
+:course_name: {{ course_name }}
+:class_semester: {{ class_semester }}
+:class_section: {{ class_section }}
+:instructor_name_first: {{ instructor_name_first }}
+:instructor_name_last: {{ instructor_name_last }}
+:instructor_name: {{ instructor_name }}
+:instructor_initials: {{ instructor_initials |> upper }}
+:instructor_id: {{ instructor_id |> ensure_orgidprefix }}
+:instructor_email: {{ instructor_email |> ensure_orgemailaddress }}
+:student_name_first: {{ student_name_first }}
+:student_name_last: {{ student_name_last }}
+:student_name: {{ student_name }}
+:student_initials: {{ student_initials |> upper }}
+:student_id: {{ student_id |> ensure_orgidprefix }}
+:student_email: {{ student_email |> ensure_orgemailaddress }}
+:student_grade_points: {{ student_grade_points }}
+:student_grade_letter: {{ student_grade_letter |> upper }}
+
+// // Python modules
+// <%!
+//     from engineering_notation import EngNumber as engr
+//     import numpy as np
+//     from pint import UnitRegistry as ureg
+// %>
+// end document metadata
+
+
+
+
+
+// begin document
+// [abstract]
+.Abstract
+****
+Class::
+[horizontal]
+Course Code::: {course_code}
+Course Name::: {course_name}
+Class Semester::: {class_semester}
+Class Section::: {class_section}
+Class Code::: {class_code}
+Instructor::
+[horizontal]
+Instructor Name::: {instructor_name}
+Instructor ID::: {instructor_id}
+Instructor Email::: mailto:{instructor_email}[]
+Student::
+[horizontal]
+Student Name::: {student_name}
+Student ID::: {student_id}
+Student Email::: mailto:{student_email}[]
+Student Final Grade::: {student_grade_points} ({student_grade_letter})
+****
+
+.Reasons
+. Reason 1
+.. Reason 1.1
+.. Reason 1.2
+. Reason 2
+
+.Local view of gradebook for {student_name}.
+image::gradebook-{{ assignment_name |> ensure_assignment_name_sanitization }}+{{ export_datetime }}[caption="Figure {counter:figs}: ", reftext="Fig. {figs}"]
+
+.Additional Comments/Data
+_insert text here..._
+
+.Timeline
+_insert Register of Correspondence table here..._
+// end document
+
+
+
+
+
+// that's all folks!

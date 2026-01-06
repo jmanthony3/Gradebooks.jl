@@ -6,6 +6,8 @@ using Dates
 using Distributed
 using Glob
 using JSON
+using OteraEngine
+using Preferences
 using PrettyTables
 using Printf
 using RecipesBase
@@ -18,6 +20,23 @@ using RecipesBase
 #     label=nothing,
 #     grid=false)
 # scalefontsizes(1.3)
+
+const ORG_IDPREFIX = @load_preference("ORG_IDPREFIX")
+const ORG_EMAILDOMAIN = @load_preference("ORG_EMAILDOMAIN")
+
+function set_orgidprefix(prefix::String)
+    @set_preferences!("ORG_IDPREFIX" => prefix)
+    @info("New `ORG_IDPREFIX` set; restart your Julia session for this change to take effect!")
+end
+
+get_orgidprefix() = @load_preference("ORG_IDPREFIX")
+
+function set_orgemaildomain(domain::String)
+    @set_preferences!("ORG_EMAILDOMAIN" => domain)
+    @info("New `ORG_EMAILDOMAIN` set; restart your Julia session for this change to take effect!")
+end
+
+set_orgemaildomain() = @load_preference("ORG_EMAILDOMAIN")
 
 const MIDNIGHT = Time(23, 59, 59, 999)
 
@@ -39,82 +58,32 @@ function datetime(d)
                 return DateTime(Date(DateTime(d, ISODateFormat)), MIDNIGHT)
             catch
                 try
-                    d = first(filter(!isnothing, map(s->DateTime(d, s), [
-                        dateformat"yyyy-mm-ddTH:M:S.s",
-                        dateformat"yyyy-mm-ddTH:M",
-                        dateformat"yyyymmddTH:M",
-                        dateformat"yymmddTH:M",
-                        dateformat"yyyymmddTHM",
-                        dateformat"yymmddTHM",
-                        dateformat"yyyymmddTI:Mp",
-                        dateformat"yymmddTI:Mp",
-                        dateformat"yyyymmddTIMp",
-                        dateformat"yymmddTIMp",
-                        dateformat"yyyy-mm-dd H:M:S.s",
-                        dateformat"yyyy-mm-dd H:M",
-                        dateformat"yyyymmdd H:M",
-                        dateformat"yymmdd H:M",
-                        dateformat"yyyymmdd HM",
-                        dateformat"yymmdd HM",
-                        dateformat"yyyymmdd I:M p",
-                        dateformat"yymmdd I:M p",
-                        dateformat"yyyymmdd IM p",
-                        dateformat"yymmdd IM p",
-                        dateformat"yyyymmdd I:Mp",
-                        dateformat"yymmdd I:Mp",
-                        dateformat"yyyymmdd IMp",
-                        dateformat"yymmdd IMp",
-                        dateformat"yyyy-mm-dd",
-                        dateformat"y-m-d",
-                        dateformat"yyyymmdd",
-                        dateformat"yymmdd",
-                        dateformat"ymd",
-                        dateformat"m/d/yyyy H:M:S.s",
-                        dateformat"m/d/yyyy H:M",
-                        dateformat"m/d/y H:M",
-                        dateformat"m/d H:M",
-                        dateformat"m/d/yyyy HM",
-                        dateformat"m/d/y HM",
-                        dateformat"m/d HM",
-                        dateformat"m/d/yyyy I:M p",
-                        dateformat"m/d/y I:M p",
-                        dateformat"m/d I:M p",
-                        dateformat"m/d/yyyy IM p",
-                        dateformat"m/d/y IM p",
-                        dateformat"m/d IM p",
-                        dateformat"m/d/yyyy I:Mp",
-                        dateformat"m/d/y I:Mp",
-                        dateformat"m/d I:Mp",
-                        dateformat"m/d/yyyy IMp",
-                        dateformat"m/d/y IMp",
-                        dateformat"m/d IMp",
-                        dateformat"m/d",
-                        dateformat"U d, y H:M",
-                        dateformat"U d, y I:M p",
-                        dateformat"U d, y I:Mp",
-                        dateformat"U d H:M",
-                        dateformat"U d I:M p",
-                        dateformat"U d I:Mp",
-                        dateformat"U d",
-                        dateformat"u. d, y H:M",
-                        dateformat"u. d, y I:M p",
-                        dateformat"u. d, y I:Mp",
-                        dateformat"u. d H:M",
-                        dateformat"u. d I:M p",
-                        dateformat"u. d I:Mp",
-                        dateformat"u. d",
-                        dateformat"u. d",
-                        dateformat"u. d",
-                        dateformat"u d, y H:M",
-                        dateformat"u d, y I:M p",
-                        dateformat"u d, y I:Mp",
-                        dateformat"u d H:M",
-                        dateformat"u d I:M p",
-                        dateformat"u d I:Mp",
-                        dateformat"u d",
-                        dateformat"u d",
-                        dateformat"u d",
-                    ])))
+                    function parse_datetime(df)
+                        return try
+                            DateTime(d, df)
+                        catch exc
+                            if isa(exc, ArgumentError)
+                                nothing
+                            else
+                                @error "Could not parse..."
+                            end
+                        end
+                    end
+                    date_variations = ["y-m-d", "m-d", "yyyymmdd", "m/d/y", "m/d", "U d, y", "U d", "u. d, y", "u. d", "u d, y", "u d"]
+                    time_variations = ["H:M:S.s", "H:M", "HHMM", "I:M p", "I:MMp", "IIMM p", "IIMMp"]
+                    datetimeformats = DateFormat.(vcat(
+                        vcat(vcat(map(delim->map(ds->map(ts->join([ds, ts], delim), time_variations), date_variations[1:3]), ["T", " ", ""])...)...),
+                        vcat(vcat(map(delim->map(ds->map(ts->join([ds, ts], delim), time_variations), date_variations[4:end]), [" "])...)...),
+                    ))
+                    i, parse, n = 0, nothing, length(datetimeformats)
+                    while isnothing(parse)
+                        i += 1
+                        if i == n + 1
+                            @error "Could not parse..."
+                        end
+                        parse = parse_datetime(datetimeformats[i])
+                    end
+                    d = parse
                     d = if Dates.value(Time(d)) == 0
                         DateTime(d, MIDNIGHT)
                     else
@@ -138,21 +107,28 @@ end
 
 abstract type AbstractPerson end
 
-name(firstname, lastname; title="", suffix="") = (title == "" ? "" : "$title ") * join([firstname, lastname]) * (suffix == "" ? "" : ", $suffix")
-codename(firstname, lastname) = uppercase(join(map(s->first(s, 1), [firstname, lastname])))
+name(firstname, lastname; title="", suffix="", nickname="") = join(filter(!isnothing, [(isempty(title) ? nothing : (title=strip(title); last(title) == '.' ? title : "$title.")), firstname, (isempty(nickname) ? nothing : "\"$nickname\""), lastname]), " ") * (suffix == "" ? "" : (first(suffix) == ',' ? suffix : ", $suffix"))
+codename(firstname, lastname; nickname="") = uppercase(join(map(s->first(s, 1), [!isempty(nickname) ? nickname : firstname, lastname])))
 
 struct Instructor <: AbstractPerson
     firstname
     lastname
     title
     suffix
-    id
+    nickname
+    initials
     email
     phone
+    organization
+    job_title
+    id
     name
     codename
-    job_title
-    Instructor(firstname, lastname; title="", suffix="", initials="", id="", email="", phone="", job_title="") = new(firstname, lastname, title, suffix, id, email, phone, name(firstname, lastname; title=title, suffix=suffix), isempty(initials) ? codename(firstname, lastname) : initials, job_title)
+    function Instructor(firstname, lastname; title="", suffix="", nickname="", initials="", email="", phone="", organization="", job_title="", id="")
+        name = name(firstname, lastname; title=title, suffix=suffix, nickname=nickname)
+        codename = !isempty(initials) ? initials : codename(firstname, lastname; nickname=nickname)
+        return new(firstname, lastname, title, suffix, nickname, codename, email, phone, organization, job_title, id, name, codename)
+    end
 end
 
 struct Student <: AbstractPerson
@@ -160,13 +136,20 @@ struct Student <: AbstractPerson
     lastname
     title
     suffix
-    id
+    nickname
+    initials
     email
     phone
+    organization
+    discipline
+    id
     name
     codename
-    discipline
-    Student(firstname, lastname; title="", suffix="", initials="", id="", email="", phone="", discipline="") = new(firstname, lastname, title, suffix, id, email, phone, name(firstname, lastname; title=title, suffix=suffix), isempty(initials) ? codename(firstname, lastname) : initials, discipline)
+    function Student(firstname, lastname; title="", suffix="", nickname="", initials="", email="", phone="", organization="", discipline="", id="")
+        name = name(firstname, lastname; title=title, suffix=suffix, nickname=nickname)
+        codename = !isempty(initials) ? initials : codename(firstname, lastname; nickname=nickname)
+        return new(firstname, lastname, title, suffix, nickname, codename, email, phone, organization, discipline, id, name, codename)
+    end
 end
 
 struct Course
@@ -190,8 +173,8 @@ struct Class
     function Class(course::Course, section, semester, year, instructor::Instructor, students::Vector{Student})
         section_padded = @sprintf("%03d", section)
         return new(
-            course, "$section", semester, year,
-            course.codename, join(uppercase.(["$code$number", "$section_padded", first("$semester") * last("$year", 2)], "-")),
+            course, section, uppercasefirst(lowercase(semester)), year,
+            course.codename, join(["$(course.codename)", "$section_padded", first(uppercase(semester)) * (uppercase(semester)[1:2] == "SU" ? "u" : "") * last("$year", 2)], "-"),
             instructor, students, students
         )
     end
@@ -206,7 +189,7 @@ abstract type AbstractExam{T<:AbstractAssignmentType} <: AbstractAssignment end
 abstract type AbstractPaper{T<:AbstractAssignmentType} <: AbstractAssignment end
 abstract type AbstractPresentation{T<:AbstractAssignmentType} <: AbstractAssignment end
 abstract type AbstractProject{T<:AbstractAssignmentType} <: AbstractAssignment end
-const AbstractQuiz{T<:AbstractAssignmentType} = AbstractExam{T<:AbstractAssignmentType}
+const AbstractQuiz = AbstractExam
 abstract type AbstrasctAttendance <: AbstractAssignment end
 abstract type AbstractAssignmentValueType end
 abstract type Points <: AbstractAssignmentValueType end
@@ -216,29 +199,54 @@ struct Assignment{T<:AbstractAssignment}
     name::String
     value::UInt64
     due_datetime::DateTime
-    Assignment{T}(name, value, due_date) where {T<:AbstractAssignment} = new{T}(name, value, fetch_datetime(due_date))
+    class::Class
+    Assignment{T}(name, value, due_date, class) where {T<:AbstractAssignment} = new{T}(name, value, fetch_datetime(due_date), class)
 end
 # Attendance()
-Homework(T, name, value, due_date) = Assignment{AbstractHomework{T}}(name, value, due_date)
-Exam(T, name, value, due_date) = Assignment{AbstractExam{T}}(name, value, due_date)
-Paper(T, name, value, due_date) = Assignment{AbstractPaper{T}}(name, value, due_date)
-Presentation(T, name, value, due_date) = Assignment{AbstractPresentation{T}}(name, value, due_date)
-Project(T, name, value, due_date) = Assignment{AbstractProject{T}}(name, value, due_date)
-Quiz(T, name, value, due_date) = Assignment{AbstractQuiz{T}}(name, value, due_date)
+Homework(T, name, value, due_date, class) = Assignment{AbstractHomework{T}}(name, value, due_date, class)
+Exam(T, name, value, due_date, class) = Assignment{AbstractExam{T}}(name, value, due_date, class)
+Paper(T, name, value, due_date, class) = Assignment{AbstractPaper{T}}(name, value, due_date, class)
+Presentation(T, name, value, due_date, class) = Assignment{AbstractPresentation{T}}(name, value, due_date, class)
+Project(T, name, value, due_date, class) = Assignment{AbstractProject{T}}(name, value, due_date, class)
+Quiz(T, name, value, due_date, class) = Assignment{AbstractQuiz{T}}(name, value, due_date, class)
+
+function fetch_lettergrade(p)
+    return if p >= 90
+        'A'
+    elseif p >= 80
+        'B'
+    elseif p >= 70
+        'C'
+    elseif p >= 60
+        'D'
+    else
+        'F'
+    end
+end
+
+fetch_lettergrade(s, v) = fetch_lettergrade(100(s / v))
 
 struct Submission{T<:Assignment}
     assignment::T
-    score::AbstractFloat
     submission_datetime::DateTime
-    # Submission{T}(assignment, score, submission_datetime) where {T<:Assignment} = new{T}(assignment, score, submission_datetime)
+    score_points::AbstractFloat
+    score_percentage::AbstractFloat
+    score_letter::String
+    function Submission{T}(assignment, submission_datetime, score) where {T<:Assignment}
+        score_percentage = 100(score / assignment.value)
+        score_letter = fetch_lettergrade(score_percentage)
+        return new{T}(assignment, submission_datetime, score, score_percentage, score_letter)
+    end
 end
 # Submission{T<:Assignment{<:AbstractAssignment, Group}} = map_students_from_group;
+
 struct Grade{T<:Submission}
+    class::Class
+    instructor::Instructor
     student::Student
     assignment::Assignment
-    score::AbstractFloat
-    submission_datetime::DateTime
-    Grade{T}(student, submission) where {T<:Submission} = new{T}(student, submission.assignment, submission.score, submission.submission_datetime)
+    submission::T
+    Grade{T}(class, instructor, student, submission) where {T<:Submission} = new{T}(class, instructor, student, submission.assignment, submission)
 end
 
 abstract type AbstractGradebook <: AbstractDataFrame end
@@ -248,7 +256,7 @@ struct Gradebook{T<:Union{Class,Student}} <: AbstractGradebook
     df::DataFrame
     Gradebook{T}(who, assignments, df) where {T<:Union{Class,Student}} = new{T}(who, assignments, df)
 end
-Gradebook(class::Class, assignments::Vector{Assignment}) = Gradebook{Class}(class, assignments, DataFrame(zeros((length(class.roster)+1, length(assignments)+1)), push!([a.name for a in assignments], "Total")))
+Gradebook(class::Class, assignments::Vector{Assignment}) = Gradebook{Class}(class, assignments, DataFrame(zeros((length(class.roster)+1, length(assignments)+1)), push!([a.name for a in assignments], "Final")))
 const StudentGradebook = Gradebook{Student}
 const ClassGradebook = Gradebook{Class}
 # const Attendance{T} = Gradebook{T}
@@ -276,4 +284,55 @@ fetch_class_gradebook(class::Class) = _fetch_class_data(class, "Gradebook")
 
 @recipe f(::Type{Gradebook}, gb::Gradebook) = gb.df
 
+# @filter ensure_formattedpath(p) = join(string.(split(p, r"(\\|/)+")), "/")
+# @filter ensure_orgidprefix(id) = first(id) == ORG_IDPREFIX ? id : "$ORG_IDPREFIX$id"
+# @filter ensure_orgemailaddress(e) = occursin("@", e) ? e : "$e$ORG_EMAILDOMAIN"
+# @filter ensure_assignment_name_sanitization(n) = lowercase(replace(n, " "=>"_"))
+
+get_reportdata(grade::T) where {T<:Grade} = ( # init
+    "cwd"                       => pwd(),
+    "course_code"               => grade.class.course.code,
+    "course_name"               => grade.class.course.name,
+    "class_semester"            => grade.class.semester,
+    "class_section"             => grade.class.section,
+    "class_code"                => grade.class.codename_long,
+    "instructor_name_first"     => grade.instructor.firstname,
+    "instructor_name_last"      => grade.instructor.lastname,
+    "instructor_name"           => grade.instructor.name,
+    "instructor_initials"       => grade.instructor.initials,
+    "instructor_email"          => grade.instructor.email,
+    "instructor_jobtitle"       => grade.instructor.job_title,
+    "instructor_organization"   => grade.instructor.organization,
+    "instructor_id"             => grade.instructor.id,
+    "student_name_first"        => grade.student.firstname,
+    "student_name_last"         => grade.student.lastname,
+    "student_name"              => grade.student.name,
+    "student_initials"          => grade.student.initials,
+    "student_email"             => grade.student.email,
+    "student_id"                => grade.student.id,
+    "assignment_name"           => grade.assignment.name,
+    "assignment_value"          => grade.assignment.value,
+    "student_grade_points"      => grade.submission.score_points,
+    "student_grade_percentage"  => grade.submission.score_percentage,
+    "student_grade_letter"      => grade.submission.score_letter,
+    "export_datetime"           => replace(string(now()), "-"=>"", ":"=>"", "."=>""),
+)
+
+abstract type AbstractReport end
+struct DefendGrade <: AbstractReport
+    template
+    init
+    DefendGrade() = new(Template("defense_of_grade.adoc"), Dict())
 end
+
+function DefendGrade(grade::T) where {T<:Grade}
+    return new(Template("defense_of_grade.adoc"), get_reportdata(grade))
+end
+
+function write_report(report::DefendGrade, grade::T) where {T<:Grade}
+    report_grade = report.template(init=get_reportdata(grade))
+end
+
+# print(report::DefendGrade) = export student view of gradebook and `print2pdf report`
+
+end # end of module
