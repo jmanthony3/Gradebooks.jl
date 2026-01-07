@@ -1,18 +1,20 @@
-export name, codename
+export fetch_name, fetch_codename
 export AbstractPerson, Instructor, Student
 
-name(firstname, lastname; title="", suffix="", nickname="") = join(filter(!isnothing, [(isempty(title) ? nothing : (title=strip(title); last(title) == '.' ? title : "$title.")), firstname, (isempty(nickname) ? nothing : "\"$nickname\""), lastname]), " ") * (suffix == "" ? "" : (first(suffix) == ',' ? suffix : ", $suffix"))
-codename(firstname, lastname; nickname="") = uppercase(join(map(s->first(s, 1), [!isempty(nickname) ? nickname : firstname, lastname])))
+using JSON
+
+fetch_name(given, family; title="", suffix="", nickname="") = join(filter(!isnothing, [(isempty(title) ? nothing : (title=strip(title); last(title) == '.' ? title : "$title.")), given, (isempty(nickname) ? nothing : "\"$nickname\""), family]), " ") * (suffix == "" ? "" : (first(suffix) == ',' ? suffix : ", $suffix"))
+fetch_codename(given, family; nickname="") = uppercase(join(map(s->first(s, 1), [!isempty(nickname) ? nickname : given, family])))
 
 abstract type AbstractPerson end
 
 struct Instructor <: AbstractPerson
-    firstname
-    lastname
-    title
-    suffix
-    nickname
-    initials
+    name_given
+    name_family
+    name_title
+    name_suffix
+    name_preferred
+    name_initials
     email
     phone
     organization
@@ -20,20 +22,20 @@ struct Instructor <: AbstractPerson
     id
     name
     codename
-    function Instructor(firstname, lastname; title="", suffix="", nickname="", initials="", email="", phone="", organization="", job_title="", id="")
-        name = name(firstname, lastname; title=title, suffix=suffix, nickname=nickname)
-        codename = !isempty(initials) ? initials : codename(firstname, lastname; nickname=nickname)
-        return new(firstname, lastname, title, suffix, nickname, codename, email, phone, organization, job_title, id, name, codename)
-    end
+end
+function Instructor(name_given, name_family; name_title="", name_suffix="", name_preferred="", name_initials="", email="", phone="", organization="", job_title="", id="")
+    name = fetch_name(name_given, name_family; title=name_title, suffix=name_suffix, nickname=name_preferred)
+    codename = !isempty(name_initials) ? name_initials : fetch_codename(name_given, name_family; nickname=name_preferred)
+    return Instructor(name_given, name_family, name_title, name_suffix, name_preferred, codename, email, phone, organization, job_title, id, name, codename)
 end
 
 struct Student <: AbstractPerson
-    firstname
+    name_family
     lastname
-    title
-    suffix
-    nickname
-    initials
+    name_title
+    name_suffix
+    name_preferred
+    name_initials
     email
     phone
     organization
@@ -41,9 +43,9 @@ struct Student <: AbstractPerson
     id
     name
     codename
-    function Student(firstname, lastname; title="", suffix="", nickname="", initials="", email="", phone="", organization="", discipline="", id="")
-        name = name(firstname, lastname; title=title, suffix=suffix, nickname=nickname)
-        codename = !isempty(initials) ? initials : codename(firstname, lastname; nickname=nickname)
-        return new(firstname, lastname, title, suffix, nickname, codename, email, phone, organization, discipline, id, name, codename)
-    end
+end
+function Student(name_given, name_family; name_title="", name_suffix="", name_preferred="", name_initials="", email="", phone="", organization="", discipline="", id="")
+    name = fetch_name(name_given, name_family; title=name_title, suffix=name_suffix, nickname=name_preferred)
+    codename = !isempty(name_initials) ? name_initials : fetch_codename(name_given, name_family; nickname=name_preferred)
+    return Student(name_given, name_family, name_title, name_suffix, name_preferred, codename, email, phone, organization, discipline, id, name, codename)
 end

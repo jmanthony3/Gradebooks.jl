@@ -34,7 +34,7 @@ get_reportdata(grade::T) where {T<:Grade} = ( # init
     "student_grade_points"      => grade.submission.score_points,
     "student_grade_percentage"  => grade.submission.score_percentage,
     "student_grade_letter"      => grade.submission.score_letter,
-    "export_datetime"           => replace(string(now()), "-"=>"", ":"=>"", "."=>""),
+    "export_datetime"           => safe_datetime_stamp(),
 )
 
 abstract type AbstractReport end
