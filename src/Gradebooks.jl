@@ -1,46 +1,30 @@
 module Gradebooks
 
+export MIDNIGHT
+export parse_datetimestring
+export Course, Class
+export AbstractAssignmentType, Group, Individual
+export AbstractAssignment, AbstractHomework, AbstractExam, AbstractPaper, AbstractPresentation, AbstractProject, AbstractQuiz
+export Assignment, Homework, Exam, Paper, Presentation, Project, Quiz
+export fetch_lettergrade
+export Submission, Grade
+export AbstractGradebook, Gradebook, StudentGradebook, ClassGradebook
+export fetch_class_gradebook, fetch_student_gradebook 
+
 using CSV
 using DataFrames
 using Dates
 using Distributed
 using Glob
 using JSON
-using OteraEngine
-using Preferences
 using PrettyTables
 using Printf
-using RecipesBase
-# using Plots; gr()
 
-# default(
-#     fontfamily="Computer Modern",
-#     linewidth=1,
-#     framestyle=:box,
-#     label=nothing,
-#     grid=false)
-# scalefontsizes(1.3)
-
-const ORG_IDPREFIX = @load_preference("ORG_IDPREFIX")
-const ORG_EMAILDOMAIN = @load_preference("ORG_EMAILDOMAIN")
-
-function set_orgidprefix(prefix::String)
-    @set_preferences!("ORG_IDPREFIX" => prefix)
-    @info("New `ORG_IDPREFIX` set; restart your Julia session for this change to take effect!")
-end
-
-get_orgidprefix() = @load_preference("ORG_IDPREFIX")
-
-function set_orgemaildomain(domain::String)
-    @set_preferences!("ORG_EMAILDOMAIN" => domain)
-    @info("New `ORG_EMAILDOMAIN` set; restart your Julia session for this change to take effect!")
-end
-
-set_orgemaildomain() = @load_preference("ORG_EMAILDOMAIN")
+include("preferences.jl")
 
 const MIDNIGHT = Time(23, 59, 59, 999)
 
-function datetime(d)
+function parse_datetimestring(d)
     if isa(d, DateTime)
         return d
     elseif isa(d, Date)
@@ -105,52 +89,7 @@ function datetime(d)
     end
 end
 
-abstract type AbstractPerson end
-
-name(firstname, lastname; title="", suffix="", nickname="") = join(filter(!isnothing, [(isempty(title) ? nothing : (title=strip(title); last(title) == '.' ? title : "$title.")), firstname, (isempty(nickname) ? nothing : "\"$nickname\""), lastname]), " ") * (suffix == "" ? "" : (first(suffix) == ',' ? suffix : ", $suffix"))
-codename(firstname, lastname; nickname="") = uppercase(join(map(s->first(s, 1), [!isempty(nickname) ? nickname : firstname, lastname])))
-
-struct Instructor <: AbstractPerson
-    firstname
-    lastname
-    title
-    suffix
-    nickname
-    initials
-    email
-    phone
-    organization
-    job_title
-    id
-    name
-    codename
-    function Instructor(firstname, lastname; title="", suffix="", nickname="", initials="", email="", phone="", organization="", job_title="", id="")
-        name = name(firstname, lastname; title=title, suffix=suffix, nickname=nickname)
-        codename = !isempty(initials) ? initials : codename(firstname, lastname; nickname=nickname)
-        return new(firstname, lastname, title, suffix, nickname, codename, email, phone, organization, job_title, id, name, codename)
-    end
-end
-
-struct Student <: AbstractPerson
-    firstname
-    lastname
-    title
-    suffix
-    nickname
-    initials
-    email
-    phone
-    organization
-    discipline
-    id
-    name
-    codename
-    function Student(firstname, lastname; title="", suffix="", nickname="", initials="", email="", phone="", organization="", discipline="", id="")
-        name = name(firstname, lastname; title=title, suffix=suffix, nickname=nickname)
-        codename = !isempty(initials) ? initials : codename(firstname, lastname; nickname=nickname)
-        return new(firstname, lastname, title, suffix, nickname, codename, email, phone, organization, discipline, id, name, codename)
-    end
-end
+include("people.jl")
 
 struct Course
     code
@@ -252,11 +191,21 @@ end
 abstract type AbstractGradebook <: AbstractDataFrame end
 struct Gradebook{T<:Union{Class,Student}} <: AbstractGradebook
     who::T
-    assignments::Vector{Assignment}
+    # assignments::Vector{Assignment}
     df::DataFrame
-    Gradebook{T}(who, assignments, df) where {T<:Union{Class,Student}} = new{T}(who, assignments, df)
+    # Gradebook{T}(who, assignments, df) where {T<:Union{Class,Student}} = new{T}(who, assignments, df)
 end
-Gradebook(class::Class, assignments::Vector{Assignment}) = Gradebook{Class}(class, assignments, DataFrame(zeros((length(class.roster)+1, length(assignments)+1)), push!([a.name for a in assignments], "Final")))
+# Gradebook{Class}(class::Class, assignments::Vector{Assignment}) = new{Class}(class, assignments, DataFrame(zeros((length(class.roster), length(assignments))), [a.name for a in assignments]))
+function Gradebook{Class}(class::Class, assignments)
+    names = [a.name for a in assignments]
+    if any(isa.(assignments, AbstractAssignment{Group}))
+        pushfirst!(names, ["ID", "Preferred", "Last", "Team", "Email"])
+    else
+        pushfirst!(names, ["ID", "Preferred", "Last", "Email"])
+    end
+    Gradebook{Class}(class, DataFrame(zeros((length(class.roster), length(names))), names))
+end
+Gradebook{Student}(student::Student, assignments) = Gradebook{Student}(student, DataFrame(zeros((1, length(assignments))), [a.name for a in assignments]))
 const StudentGradebook = Gradebook{Student}
 const ClassGradebook = Gradebook{Class}
 # const Attendance{T} = Gradebook{T}
@@ -272,67 +221,18 @@ function _fetch_class_data(class::Class, data::String)
     data_times_sorted = sortperm(data_times)
     data_names_strings = data_names_strings[data_times_sorted]
     data_times = data_times[data_times_sorted]
-    df = CSV.read(joinpath[@__DIR__, data_names_strings[end]], DataFrame)
-    return Gradebook{Class}(class, names(df), df)
+    # df = CSV.read(joinpath[@__DIR__, data_names_strings[end]], DataFrame)
+    # return Gradebook{Class}(class, names(df), df)
+    return Gradebook{Class}(class, CSV.read(joinpath[@__DIR__, data_names_strings[end]], DataFrame))
 end
 
 fetch_class_gradebook(class::Class) = _fetch_class_data(class, "Gradebook")
 # fetch_class_attendance(class::Class) = _fetch_class_data(class, "Attendance")
 
-@userplot ViewGradebook
-# @userplot ViewAttendance
-
-@recipe f(::Type{Gradebook}, gb::Gradebook) = gb.df
-
-# @filter ensure_formattedpath(p) = join(string.(split(p, r"(\\|/)+")), "/")
-# @filter ensure_orgidprefix(id) = first(id) == ORG_IDPREFIX ? id : "$ORG_IDPREFIX$id"
-# @filter ensure_orgemailaddress(e) = occursin("@", e) ? e : "$e$ORG_EMAILDOMAIN"
-# @filter ensure_assignment_name_sanitization(n) = lowercase(replace(n, " "=>"_"))
-
-get_reportdata(grade::T) where {T<:Grade} = ( # init
-    "cwd"                       => pwd(),
-    "course_code"               => grade.class.course.code,
-    "course_name"               => grade.class.course.name,
-    "class_semester"            => grade.class.semester,
-    "class_section"             => grade.class.section,
-    "class_code"                => grade.class.codename_long,
-    "instructor_name_first"     => grade.instructor.firstname,
-    "instructor_name_last"      => grade.instructor.lastname,
-    "instructor_name"           => grade.instructor.name,
-    "instructor_initials"       => grade.instructor.initials,
-    "instructor_email"          => grade.instructor.email,
-    "instructor_jobtitle"       => grade.instructor.job_title,
-    "instructor_organization"   => grade.instructor.organization,
-    "instructor_id"             => grade.instructor.id,
-    "student_name_first"        => grade.student.firstname,
-    "student_name_last"         => grade.student.lastname,
-    "student_name"              => grade.student.name,
-    "student_initials"          => grade.student.initials,
-    "student_email"             => grade.student.email,
-    "student_id"                => grade.student.id,
-    "assignment_name"           => grade.assignment.name,
-    "assignment_value"          => grade.assignment.value,
-    "student_grade_points"      => grade.submission.score_points,
-    "student_grade_percentage"  => grade.submission.score_percentage,
-    "student_grade_letter"      => grade.submission.score_letter,
-    "export_datetime"           => replace(string(now()), "-"=>"", ":"=>"", "."=>""),
-)
-
-abstract type AbstractReport end
-struct DefendGrade <: AbstractReport
-    template
-    init
-    DefendGrade() = new(Template("defense_of_grade.adoc"), Dict())
+function fetch_student_gradebook(student::Student, class::Class)
 end
 
-function DefendGrade(grade::T) where {T<:Grade}
-    return new(Template("defense_of_grade.adoc"), get_reportdata(grade))
-end
-
-function write_report(report::DefendGrade, grade::T) where {T<:Grade}
-    report_grade = report.template(init=get_reportdata(grade))
-end
-
-# print(report::DefendGrade) = export student view of gradebook and `print2pdf report`
+include("plots.jl")
+include("reports.jl")
 
 end # end of module
