@@ -1,26 +1,67 @@
-export AbstractScore, Points, Percentage, Score, score_letter
+export AbstractScore, Points, Percentage, score2letter, Score
 
+import Base: +, -, *, /, ==, <, <=, zero, one, convert, promote_rule, show
 
-abstract type AbstractScore{T<:Real} end
+abstract type AbstractScore <: Real end
 
-struct Points{T} <: AbstractScore{T}
-    value::T
+struct Points <: AbstractScore
+    x::Float64
 end
 
-struct Percentage{T} <: AbstractScore{T}
-    value::T
+struct Percentage <: AbstractScore
+    x::Float64
     # Percentage{T} where {T<:AbstractScore{T}} = new(value > 1 ? 0.01value : value)
 end
 
-score_letter(p::T) where {T<:Real} = (p >= 0.90 ? 'A' : (p >= 0.80 ? 'B' : (p >= 0.70 ? 'C' : (p >= 0.60 ? 'D' : 'F'))))
-score_letter(p::Percentage) = score_letter(p.value)
-score_letter(s::T, v::T) where {T<:Points} = score_letter(s.value / v.value)
+Points(x::Real) = Points(float(x))
+Percentage(x::Real) = Percentage(float(x))
 
-struct Score{T} <: AbstractScore{T}
-    score::Points{T}
-    value::Points{T}
-    percent::Percentage{T}
++(a::Points, b::Points) = Points(a.x + b.x)
+-(a::Points, b::Points) = Points(a.x - b.x)
+# *(a::Points, b::Points) = Points(a.x * b.x)
+/(a::Points, b::Points) = Percentage(a.x / b.x)
++(a::Percentage, b::Percentage) = Percentage(a.x + b.x)
+-(a::Percentage, b::Percentage) = Percentage(a.x - b.x)
+# *(a::Percentage, b::Percentage) = Percentage(a.x * b.x)
+# /(a::Percentage, b::Percentage) = Percentage(a.x / b.x)
+*(a::Points, b::Percentage) = Points(a.x * b.x)
+*(a::Percentage, b::Points) = b * a
+
+==(a::Points, b::Points) = a.x == b.x
+<(a::Points, b::Points) = a.x < b.x
+<=(a::Points, b::Points) = a.x <= b.x
+==(a::Percentage, b::Percentage) = a.x == b.x
+<(a::Percentage, b::Percentage) = a.x < b.x
+<=(a::Percentage, b::Percentage) = a.x <= b.x
+
+zero(::Type{Points}) = Points(0.0)
+one(::Type{Points}) = Points(1.0)
+zero(::Type{Percentage}) = Percentage(0.0)
+one(::Type{Percentage}) = Percentage(1.0)
+
+show(io::IO, x::Points) = print(io, "Points(", x.x, ")")
+show(io::IO, x::Percentage) = print(io, "Percentage(", x.x, ")")
+
+Base.float(x::Points) = x.x
+convert(::Type{Float64}, x::Points) = x.x
+Base.float(x::Percentage) = x.x
+convert(::Type{Float64}, x::Percentage) = x.x
+
+promote_rule(::Type{Points}, ::Type{Float64}) = Float64
+promote_rule(::Type{Points}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
+promote_rule(::Type{Percentage}, ::Type{Float64}) = Float64
+promote_rule(::Type{Percentage}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
+
+# TODO: maybe overload `convert` instead?
+score2letter(p::Percentage) = (p >= 0.90 ? 'A' : (p >= 0.80 ? 'B' : (p >= 0.70 ? 'C' : (p >= 0.60 ? 'D' : 'F'))))
+score2letter(s::T, v::T) where {T<:Points} = score2letter(s.value / v.value)
+
+struct Score <: AbstractScore
+    score::Points
+    value::Points
+    percent::Percentage
     letter::Char
 end
-Score(score::Points{T}, value::Points{T}) where {T<:Real} = (p = Percentage{T}(score/value); Score{T}(score, value, p, score_letter(p)))
-Score(percent::Percentage{T}, value::Points{T}) where {T<:Real} = Score{T}(Points{T}(percent.value*value.value), value, percent, score_letter(percent))
+Score(score::T, value::T) where {T<:Points} = (p = Percentage(score/value); Score(score, value, p, score2letter(p)))
+Score(percent::Percentage, value::Points) = Score(percent*value, value, percent, score2letter(percent))
+Score(value::Points, percent::Percentage) = Score(percent, value)

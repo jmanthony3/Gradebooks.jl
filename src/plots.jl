@@ -12,4 +12,4 @@ using RecipesBase
 @userplot ViewGradebook
 # @userplot ViewAttendance
 
-@recipe f(::Type{Gradebook}, gb::Gradebook) = gb.df
+@recipe f(::Type{Gradebook}, gb::Gradebook) = gb.data

@@ -1,135 +1,65 @@
 module Gradebooks
 
-export MIDNIGHT
+export uppercase2symbol
 export Course, Class
-export AbstractAssignmentType, Group, Individual
-export AbstractAssignment, AbstractHomework, AbstractExam, AbstractPaper, AbstractPresentation, AbstractProject, AbstractQuiz
-export Assignment, Homework, Exam, Paper, Presentation, Project, Quiz
-export Submission, Grade
-export AbstractGradebook, Gradebook, StudentGradebook, ClassGradebook
 
-using CSV
-using DataFrames
-using Dates
-using Distributed
-using Glob
-using JSON
-using PrettyTables
-using Printf
+import Printf: @sprintf
 
+# configuration preferences for environment/workspace
 include("preferences.jl")
-
-const MIDNIGHT = Time(23, 59, 59, 999)
-
-include("academictypes.jl")
-include("functions.jl")
+# types and overloads
+include("score.jl")
+include("datetime.jl")
 include("people.jl")
 
+uppercase2symbol(s) = Symbol(uppercase(s))
+
 struct Course
-    code
-    number
-    name
-    codename
-    Course(code, number, name) = new(code, number, name, uppercase("$code$number"))
+    code::Symbol
+    number::Integer
+    name::String
+    codename::Symbol
+    function Course(code, number, name, codename)
+        return new(uppercase2symbol("$code")), Int(number), name, uppercase2symbol("$codename")
+    end
 end
+Course(code, number, name) = Course(code, number, name, "$code$number")
 
 struct Class
     course::Course
-    section
-    semester
-    year
-    codename_short
-    codename_long
-    instructor::Instructor
+    section::Integer
+    semester::Symbol
+    year::Integer
+    frequency::Symbol
+    time_start::Time
+    time_finish::Time
+    time_duration::Dates.CompoundPeriod
+    codename_short::Symbol
+    codename_long::Symbol
+    instructors::Vector{Instructor}
+    primary_instructor::Instructor
     students::Vector{Student}
     roster::Vector{Student}
-    function Class(course::Course, section, semester, year, instructor::Instructor, students::Vector{Student})
-        section_padded = @sprintf("%03d", section)
-        return new(
-            course, section, uppercasefirst(lowercase(semester)), year,
-            course.codename, join(["$(course.codename)", "$section_padded", first(uppercase(semester)) * (uppercase(semester)[1:2] == "SU" ? "u" : "") * last("$year", 2)], "-"),
-            instructor, students, students
+    function Class(course, section, semester, year, frequency, time_start, time_finish, time_duration, codename_short, codename_long, primary_instructor, instructors, students, roster)
+        time_start, time_finish = map(parse_time, [time_start, time_finish])
+        return new(course, section, uppercase2symbol(semester), year, dayname2codename(frequency), time_start, time_finish, canonicalize(time_finish - time_start),
+            uppercase2symbol("$codename_short"), uppercase2symbol("$codename_long"),
+            instructors, primary_instructor, students, roster
         )
     end
 end
-
-abstract type AbstractAssignment end
-abstract type AbstractAssignmentType end
-struct Group <: AbstractAssignmentType end
-struct Individual <: AbstractAssignmentType end
-abstract type AbstractHomework{T<:AbstractAssignmentType} <: AbstractAssignment end
-abstract type AbstractExam{T<:AbstractAssignmentType} <: AbstractAssignment end
-abstract type AbstractPaper{T<:AbstractAssignmentType} <: AbstractAssignment end
-abstract type AbstractPresentation{T<:AbstractAssignmentType} <: AbstractAssignment end
-abstract type AbstractProject{T<:AbstractAssignmentType} <: AbstractAssignment end
-const AbstractQuiz = AbstractExam
-abstract type AbstrasctAttendance <: AbstractAssignment end
-abstract type AbstractAssignmentValueType end
-abstract type Points <: AbstractAssignmentValueType end
-abstract type Percentage <: AbstractAssignmentValueType end
-
-struct Assignment{T<:AbstractAssignment}
-    name::String
-    value::UInt64
-    due_datetime::DateTime
-    class::Class
-    Assignment{T}(name, value, due_date, class) where {T<:AbstractAssignment} = new{T}(name, value, fetch_datetime(due_date), class)
+function Class(course, section, semester, year, frequency, time_start, time_finish, time_duration, roster, instructors::Vararg{Instructor})
+    return Class(course, section, semester, year, frequency, time_start, time_finish, time_duration,
+        course.codename, uppercase2symbol(join(["$(course.codename)", @sprintf("%03d", section), first(uppercase("$semester")) * (uppercase("$semester")[1:2] == "SU" ? "u" : "") * last("$year", 2)], "-")),
+        [instructors...], first(instructors), roster, roster
+    )
 end
-# Attendance()
-Homework(T, name, value, due_date, class) = Assignment{AbstractHomework{T}}(name, value, due_date, class)
-Exam(T, name, value, due_date, class) = Assignment{AbstractExam{T}}(name, value, due_date, class)
-Paper(T, name, value, due_date, class) = Assignment{AbstractPaper{T}}(name, value, due_date, class)
-Presentation(T, name, value, due_date, class) = Assignment{AbstractPresentation{T}}(name, value, due_date, class)
-Project(T, name, value, due_date, class) = Assignment{AbstractProject{T}}(name, value, due_date, class)
-Quiz(T, name, value, due_date, class) = Assignment{AbstractQuiz{T}}(name, value, due_date, class)
-
-struct Submission{T<:Assignment}
-    assignment::T
-    submission_datetime::DateTime
-    score_points::AbstractFloat
-    score_percentage::AbstractFloat
-    score_letter::String
-    function Submission{T}(assignment, submission_datetime, score) where {T<:Assignment}
-        score_percentage = 100(score / assignment.value)
-        score_letter = score_letter(score_percentage)
-        return new{T}(assignment, submission_datetime, score, score_percentage, score_letter)
-    end
-end
-# Submission{T<:Assignment{<:AbstractAssignment, Group}} = map_students_from_group;
-
-struct Grade{T<:Submission}
-    class::Class
-    instructor::Instructor
-    student::Student
-    assignment::Assignment
-    submission::T
-    Grade{T}(class, instructor, student, submission) where {T<:Submission} = new{T}(class, instructor, student, submission.assignment, submission)
+function Class(course, section, semester, year, frequency, time_start, time_duration::Dates.CompoundPeriod, roster, instructors::Vararg{Instructor})
+    return Class(course, section, semester, year, frequency, time_start, time_start + time_duration, time_duration, roster, instructors...)
 end
 
-abstract type AbstractGradebook <: AbstractDataFrame end
-struct Gradebook{T<:Union{Class,Student}} <: AbstractGradebook
-    who::T
-    # assignments::Vector{Assignment}
-    df::DataFrame
-    # Gradebook{T}(who, assignments, df) where {T<:Union{Class,Student}} = new{T}(who, assignments, df)
-end
-# Gradebook{Class}(class::Class, assignments::Vector{Assignment}) = new{Class}(class, assignments, DataFrame(zeros((length(class.roster), length(assignments))), [a.name for a in assignments]))
-function Gradebook{Class}(class::Class, assignments)
-    names = [a.name for a in assignments]
-    if any(isa.(assignments, AbstractAssignment{Group}))
-        pushfirst!(names, ["ID", "Preferred", "Last", "Team", "Email"])
-    else
-        pushfirst!(names, ["ID", "Preferred", "Last", "Email"])
-    end
-    Gradebook{Class}(class, DataFrame(zeros((length(class.roster), length(names))), names))
-end
-Gradebook{Student}(student::Student, assignments) = Gradebook{Student}(student, DataFrame(zeros((1, length(assignments))), [a.name for a in assignments]))
-const StudentGradebook = Gradebook{Student}
-const ClassGradebook = Gradebook{Class}
-# const Attendance{T} = Gradebook{T}
-# const StudentAttendance = Attendance{Student}
-# const ClassAttendance = Attendance{Class}
-
+include("assignments.jl")
+include("gradebook.jl")
 include("io.jl")
 include("plots.jl")
 include("reports.jl")

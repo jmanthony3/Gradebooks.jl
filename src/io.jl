@@ -2,8 +2,13 @@ export fetch_class_gradebook, fetch_student_gradebook
 export archive
 
 using CSV
-using DataFrames
 using Dates
+using DataFrames
+using Distributed
+using Glob
+using JSON
+using PrettyTables
+using Printf
 
 function _fetch_class_data(class::Class, data::String)
     data_name = join([class.codename_long, data], "-")
@@ -121,12 +126,12 @@ function archive(data::Vector{Grade}, filename)
 end
 
 function archive(data::Gradebook{Class}, filename)
-    df = data.df
+    df = data.data
     sort!(df, [:name_last, :name_first])
     archive(df, filename)
 end
 function archive(data::Gradebook{Student}, filename)
-    df = data.df
+    df = data.data
     sort!(df, [:due_datetime, :value, :name])
     archive(df, filename)
 end
