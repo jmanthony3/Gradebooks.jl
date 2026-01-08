@@ -64,4 +64,4 @@ struct Score <: AbstractScore
 end
 Score(percent::Percentage, value::Points) = Score(percent*value, value, percent, score2letter(percent))
 Score(value::Points, percent::Percentage) = Score(percent, value)
-Score(score::T, value::T) where {T<:Real} = Score(Percentage(score/value), value)
+Score(score::T, value::T) where {T<:Real} = Score(Percentage(score/value), Points(value))
