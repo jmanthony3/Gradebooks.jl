@@ -22,16 +22,16 @@ struct Assignment{T<:AbstractAssignment}
     # class::Class
     codename::Symbol
     function Assignment{T}(name, value, due_date, codename) where {T<:AbstractAssignment}
-        codename = if isa(codename, String)
-            articles = ["a", "an", "the"]
-            prepositions = ["of", "in", "for", "with", "on", "at", "from", "into", "during", "through", "without", "under", "over", "above", "below", "to"]
-            conjuctions = ["for", "and", "nor", "but", "or", "yet", "so"]
-            forbidden = vcat(articles, prepositions, conjuctions)
-            tokens = filter(s->lowercase(s) .∉ forbidden, split(codename, " "))
-            firstword_idx = findfirst(t->isletter(first(t)), tokens)
-            reduce(*, filter(!ispunct, first.(tokens[firstword_idx:end])))
-        elseif isa(codename, Symbol)
+        codename = if isa(codename, Symbol)
             codename
+        elseif isa(codename, String)
+            articles = ["a", "an", "the"]
+            conjuctions = ["for", "and", "nor", "but", "or", "yet", "so"]
+            prepositions = ["of", "in", "for", "with", "on", "at", "from", "into", "during", "through", "without", "under", "over", "above", "below", "to"]
+            forbidden = vcat(articles, conjuctions, prepositions)
+            tokens = filter(s->lowercase(s) .∉ forbidden, split(filter(!ispunct, codename), " "))
+            firstword_idx = findfirst(t->isletter(first(t)), tokens)
+            uppercase2symbol(mapreduce(t->isdigit(first(t)) ? t : first(t), *, tokens[firstword_idx:end]))
         else
             @error "`codename` must be of type Symbol or String."
         end

@@ -14,9 +14,9 @@ dayabbr_codes = (Sun=dayname_codes[:Sunday], Mon=dayname_codes[:Monday], Tues=da
 
 function dayname2codename(s::String)
     articles = ["a", "an", "the"]
-    prepositions = ["of", "in", "for", "with", "on", "at", "from", "into", "during", "through", "without", "under", "over", "above", "below", "to"]
     conjuctions = ["for", "and", "nor", "but", "or", "yet", "so"]
-    forbidden = vcat(articles, prepositions, conjuctions)
+    prepositions = ["of", "in", "for", "with", "on", "at", "from", "into", "during", "through", "without", "under", "over", "above", "below", "to"]
+    forbidden = vcat(articles, conjuctions, prepositions)
     tokens = uppercasefirst.(lowercase.(filter(s->lowercase(s) .∉ forbidden, split(filter(!ispunct, s), " "))))
     dayname_codes_str = string.(keys(dayname_codes))
     return mapreduce(t->dayname_codes[findfirst(occursin(t, dayname_codes_str))], *, tokens)
