@@ -35,7 +35,7 @@ struct Assignment{T<:AbstractAssignment}
         else
             @error "`codename` must be of type Symbol or String."
         end
-        return new{T}(name, Points(value), fetch_datetime(due_date), uppercase2symbol(codename))
+        return new{T}(name, Points(value), parse_datetime(due_date), uppercase2symbol(codename))
     end
 end
 # Attendance()
