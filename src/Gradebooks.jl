@@ -12,7 +12,7 @@ include("score.jl")
 include("datetime.jl")
 include("people.jl")
 
-uppercase2symbol(s) = Symbol(uppercase(s))
+uppercase2symbol(s) = Symbol(uppercase("$s"))
 
 struct Course
     code::Symbol
