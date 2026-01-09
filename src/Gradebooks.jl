@@ -18,12 +18,13 @@ struct Course
     code::Symbol
     number::Integer
     name::String
+    credits::Integer
     codename::Symbol
-    function Course(code, number, name, codename)
-        return new(uppercase2symbol("$code")), Int(number), name, uppercase2symbol("$codename")
+    function Course(code, number, name, credits, codename)
+        return new(uppercase2symbol("$code")), Int(number), name, credits, uppercase2symbol("$codename")
     end
 end
-Course(code, number, name) = Course(code, number, name, "$code$number")
+Course(code, number, name, credits=3) = Course(code, number, name, credits, "$code$number")
 
 struct Class
     course::Course
