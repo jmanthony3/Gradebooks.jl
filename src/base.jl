@@ -1,4 +1,13 @@
-import Base: +, -, *, /, ==, <, <=, zero, one, convert, promote_rule, show
+import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, convert, promote_rule, show
+
+
+
+const Dictable = Union{AbstractPerson,Course,AbstractAssignment,AbstractScore}
+const Indictable = Union{Class,Submission,Grade}
+
+convert(::Type{Dict}, x::Dictable) = (fns = fieldnames(x); Dict(zip(fns, getproperty.(x, fns))))
+convert(::Type{DataFrame}, x::Dictable) = DataFrame(Dict(x))
+
 
 
 ## Points/Percentage/Score
@@ -9,6 +18,8 @@ import Base: +, -, *, /, ==, <, <=, zero, one, convert, promote_rule, show
 ==(a::Points, b::Points) = a.val == b.val
 <(a::Points, b::Points) = a.val < b.val
 <=(a::Points, b::Points) = a.val <= b.val
+>(a::Points, b::Points) = a.val > b.val
+>=(a::Points, b::Points) = a.val >= b.val
 zero(::Type{Points}) = Points(0.0)
 one(::Type{Points}) = Points(1.0)
 show(io::IO, x::Points) = print(io, x.val)
@@ -24,6 +35,8 @@ promote_rule(::Type{Points}, ::Type{T}) where {T<:Real} = promote_rule(Float64, 
 ==(a::Percentage, b::Percentage) = a.val == b.val
 <(a::Percentage, b::Percentage) = a.val < b.val
 <=(a::Percentage, b::Percentage) = a.val <= b.val
+>(a::Percentage, b::Percentage) = a.val > b.val
+>=(a::Percentage, b::Percentage) = a.val >= b.val
 zero(::Type{Percentage}) = Percentage(0.0)
 one(::Type{Percentage}) = Percentage(1.0)
 show(io::IO, x::Percentage) = print(io, x.val)
@@ -42,6 +55,11 @@ promote_rule(::Type{Percentage}, ::Type{T}) where {T<:Real} = promote_rule(Float
 -(a::Score, b::Score...) = a + reduce(-, b)
 # *(a::Score, b::Score) = Score(a.x * b.x)
 # /(a::Score, b::Score) = Score(a.x / b.x)
+==(a::Score, b::Score) = a.percent == b.percent
+<(a::Score, b::Score) = a.percent < b.percent
+<=(a::Score, b::Score) = a.percent <= b.percent
+>(a::Score, b::Score) = a.percent > b.percent
+>=(a::Score, b::Score) = a.percent >= b.percent
 Base.float(x::Score) = x.score.val
 convert(::Type{Float64}, x::Score) = x.score.val
 
@@ -50,6 +68,11 @@ convert(::Type{Float64}, x::Score) = x.score.val
 ## Assignment/Submission/Grade
 +(a::Assignment, b::Assignment) = a.value + b.value
 -(a::Assignment, b::Assignment) = a.value - b.value
+==(a::Assignment, b::Assignment) = a.value == b.value
+<(a::Assignment, b::Assignment) = a.value < b.value
+<=(a::Assignment, b::Assignment) = a.value <= b.value
+>(a::Assignment, b::Assignment) = a.value > b.value
+>=(a::Assignment, b::Assignment) = a.value >= b.value
 Base.float(x::Assignment) = x.value.val
 convert(::Type{Float64}, x::Assignment) = x.value.val
 promote_rule(::Type{Assignment}, ::Type{Float64}) = Float64
@@ -57,6 +80,11 @@ promote_rule(::Type{Assignment}, ::Type{T}) where {T<:Real} = promote_rule(Float
 
 +(a::Submission, b::Submission) = a.score + b.score
 -(a::Submission, b::Submission) = a.score - b.score
+==(a::Submission, b::Submission) = a.score == b.score
+<(a::Submission, b::Submission) = a.score < b.score
+<=(a::Submission, b::Submission) = a.score <= b.score
+>(a::Submission, b::Submission) = a.score > b.score
+>=(a::Submission, b::Submission) = a.score >= b.score
 Base.float(x::Submission) = x.score.value.val
 convert(::Type{Float64}, x::Submission) = x.score
 promote_rule(::Type{Submission}, ::Type{Float64}) = Float64
@@ -64,10 +92,29 @@ promote_rule(::Type{Submission}, ::Type{T}) where {T<:Real} = promote_rule(Float
 
 +(a::Grade, b::Grade) = a.submission + b.submission
 -(a::Grade, b::Grade) = a.submission - b.submission
+==(a::Grade, b::Grade) = a.submission == b.submission
+<(a::Grade, b::Grade) = a.submission < b.submission
+<=(a::Grade, b::Grade) = a.submission <= b.submission
+>(a::Grade, b::Grade) = a.submission > b.submission
+>=(a::Grade, b::Grade) = a.submission >= b.submission
 Base.float(x::Grade) = x.submission.score.value.val
 convert(::Type{Float64}, x::Grade) = x.submission.score.value.val
+function convert(::Type{Dict}, x::Grade)
+    dict_student = Dict(data.student)
+    dict_assignment = Dict(data.assignment)
+    dict_submission = Dict()
+    dict_submission["assignment"] = dict_assignment
+    dict_submission["datetime"] = data.submission.datetime
+    dict_submission["score"] = Dict(data.submission.score)
+    return Dict(
+        "student"       => dict_student,
+        "assignment"    => dict_assignment,
+        "submission"    => dict_submission,
+    )
+end
 promote_rule(::Type{Grade}, ::Type{Float64}) = Float64
 promote_rule(::Type{Grade}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
+
 
 
 ## Gradebook

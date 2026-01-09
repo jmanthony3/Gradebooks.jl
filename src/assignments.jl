@@ -7,13 +7,13 @@ abstract type AbstractAssignment end
 abstract type AssignmentType end
 abstract type Group <: AssignmentType end
 abstract type Individual <: AssignmentType end
-abstract type AbstractAttendance <: AbstractAssignment end
+abstract type AbstractAttendance{T<:Individual} <: AbstractAssignment end
 abstract type AbstractExam{T<:AssignmentType} <: AbstractAssignment end
 abstract type AbstractHomework{T<:AssignmentType} <: AbstractAssignment end
 abstract type AbstractPaper{T<:AssignmentType} <: AbstractAssignment end
 abstract type AbstractPresentation{T<:AssignmentType} <: AbstractAssignment end
 abstract type AbstractProject{T<:AssignmentType} <: AbstractAssignment end
-const AbstractQuiz = AbstractExam
+abstract type AbstractQuiz{T<:AssignmentType} <: AbstractAssignment end
 
 struct Assignment{T<:AbstractAssignment, Y<:AssignmentType}
     name::String

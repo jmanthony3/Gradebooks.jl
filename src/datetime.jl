@@ -6,8 +6,26 @@ using Dates
 
 const MIDNIGHT = Time(23, 59, 59, 999)
 
-safe_datetime_stamp() = replace(string(now()), "-"=>"", ":"=>".") # , "."=>"")
-safe_datetime_stamp(dt::DateTime) = replace(string(dt), "-"=>"", ":"=>".") # , "."=>"")
+safe_datetime_stamp(dt::DateTime)   = replace(string(dt), "-"=>".", ":"=>".") # , "."=>"")
+safe_datetime_stamp()               = safe_datetime_stamp(now())
+safe_datetime_stamp(::Nothing)      = safe_datetime_stamp(now())
+function safe_datetime_stamp(path::String)
+    dir = dirname(path)
+    base = basename(path)
+    name, ext = splitext(base)
+    name_data = string(split(name, "+")[first])
+    # name_metadata = string(split(splitext(path)[1], "+")[end]
+    datetimestamp = try
+        parse_datetime(datetimestamp)
+    catch exc
+        if isa(exc, BoundsError)
+            nothing
+        elseif isa(exc, Error)
+            nothing
+        end
+    end
+    return name * "+" * safe_datetime_stamp(datetimestamp) * ext
+end
 
 dayname_codes = (Sunday=:U, Monday=:M, Tuesday=:T, Wednesday=:W, Thursday=:R, Friday=:F, Saturday=:S)
 dayabbr_codes = (Sun=dayname_codes[:Sunday], Mon=dayname_codes[:Monday], Tues=dayname_codes[:Tuesday], Wed=dayname_codes[:Wednesday], Thu=dayname_codes[:Thursday], Fri=dayname_codes[:Friday], Sat=dayname_codes[:Saturday])
@@ -52,7 +70,7 @@ function parse_time(t)
                 while isnothing(parse)
                     i += 1
                     if i == n + 1
-                        @error "Could not parse..."
+                        return nothing
                     end
                     parse = parse_time_g(timeformats[i])
                 end
@@ -89,11 +107,7 @@ function parse_datetime(d)
                         return try
                             DateTime(d, df)
                         catch exc
-                            if isa(exc, ArgumentError)
-                                nothing
-                            else
-                                @error "Could not parse..."
-                            end
+                            nothing
                         end
                     end
                     date_variations = ["y-m-d", "m-d", "yyyymmdd", "m/d/y", "m/d", "U d, y", "U d", "u. d, y", "u. d", "u d, y", "u d"]
@@ -106,7 +120,7 @@ function parse_datetime(d)
                     while isnothing(parse)
                         i += 1
                         if i == n + 1
-                            @error "Could not parse..."
+                            return nothing
                         end
                         parse = parse_datetime_g(datetimeformats[i])
                     end
