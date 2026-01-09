@@ -41,13 +41,14 @@ struct Assignment{T<:AbstractAssignment, Y<:AssignmentType}
         return new{T,Y}(name, Points(value), parse_datetime(due_date), uppercase2symbol(codename))
     end
 end
-# Attendance()
+Attendance(::Type{Y}, name, value, due_date, codename) where {Y<:Individual}        = Assignment{AbstractAttendance, Y}(name, value, due_date, codename)
 Exam(::Type{Y}, name, value, due_date, codename) where {Y<:AssignmentType}          = Assignment{AbstractExam, Y}(name, value, due_date, codename)
 Homework(::Type{Y}, name, value, due_date, codename) where {Y<:AssignmentType}      = Assignment{AbstractHomework, Y}(name, value, due_date, codename)
 Paper(::Type{Y}, name, value, due_date, codename) where {Y<:AssignmentType}         = Assignment{AbstractPaper, Y}(name, value, due_date, codename)
 Presentation(::Type{Y}, name, value, due_date, codename) where {Y<:AssignmentType}  = Assignment{AbstractPresentation, Y}(name, value, due_date, codename)
 Project(::Type{Y}, name, value, due_date, codename) where {Y<:AssignmentType}       = Assignment{AbstractProject, Y}(name, value, due_date, codename)
 Quiz(::Type{Y}, name, value, due_date, codename) where {Y<:AssignmentType}          = Assignment{AbstractQuiz, Y}(name, value, due_date, codename)
+Attendance(Y, name, value, due_date)                                                = Attendance(Y, name, value, due_date, name)
 Exam(Y, name, value, due_date)                                                      = Exam(Y, name, value, due_date, name)
 Homework(Y, name, value, due_date)                                                  = Homework(Y, name, value, due_date, name)
 Paper(Y, name, value, due_date)                                                     = Paper(Y, name, value, due_date, name)
