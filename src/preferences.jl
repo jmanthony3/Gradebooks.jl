@@ -6,6 +6,7 @@ export ORG_EMAILDOMAIN, set_orgemaildomain, get_orgemaildomain
 export ORG_GRADESCALE, set_orggradescale, get_orggradescale
 export COURSE_GRADESCALE, set_coursegradescale, get_coursegradescale
 
+# TODO: can define Course or Class as preferences?
 const ORGANIZATION = @load_preference("ORGANIZATION")
 const ORG_IDPREFIX = @load_preference("ORG_IDPREFIX")
 const ORG_EMAILDOMAIN = @load_preference("ORG_EMAILDOMAIN")
