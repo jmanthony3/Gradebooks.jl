@@ -6,25 +6,13 @@ using Dates
 
 const MIDNIGHT = Time(23, 59, 59, 999)
 
-safe_datetime_stamp(dt::DateTime)   = replace(string(dt), "-"=>".", ":"=>".") # , "."=>"")
+safe_datetime_stamp(dt::DateTime)   = replace(string(dt), "-"=>"", ":"=>"", "."=>"")
 safe_datetime_stamp()               = safe_datetime_stamp(now())
 safe_datetime_stamp(::Nothing)      = safe_datetime_stamp(now())
 function safe_datetime_stamp(path::String)
-    dir = dirname(path)
-    base = basename(path)
-    name, ext = splitext(base)
-    name_data = string(split(name, "+")[first])
-    # name_metadata = string(split(splitext(path)[1], "+")[end]
-    datetimestamp = try
-        parse_datetime(datetimestamp)
-    catch exc
-        if isa(exc, BoundsError)
-            nothing
-        elseif isa(exc, Error)
-            nothing
-        end
-    end
-    return name * "+" * safe_datetime_stamp(datetimestamp) * ext
+    dir, base, name, ext = dirbasenameextname(path)
+    datetimestamp = match(DATETIME_REGEX, string(split(name, "+")[end]))
+    return name * "+" * (isnothing(datetimestamp) ? safe_datetime_stamp() : datetimestamp) * ext
 end
 
 dayname_codes = (Sunday=:U, Monday=:M, Tuesday=:T, Wednesday=:W, Thursday=:R, Friday=:F, Saturday=:S)
@@ -64,7 +52,7 @@ function parse_time(t)
                         end
                     end
                 end
-                time_variations = ["H:M:S.s", "H.M.S.s", "H:M", "H.M", "HHMM", "I:M p", "I.M p", "I:MMp", "I.MMp", "IIMM p", "IIMMp"]
+                time_variations = ["H:M:S.s", "H.M.S.s", "H:M", "H.M", "HHMMSSsss", "HHMMSS", "HHMM", "I:M p", "I.M p", "I:MMp", "I.MMp", "IIMM p", "IIMMp"]
                 timeformats = DateFormat.(time_variations)
                 i, parse, n = 0, nothing, length(timeformats)
                 while isnothing(parse)
@@ -111,7 +99,7 @@ function parse_datetime(d)
                         end
                     end
                     date_variations = ["y-m-d", "m-d", "yyyymmdd", "m/d/y", "m/d", "U d, y", "U d", "u. d, y", "u. d", "u d, y", "u d"]
-                    time_variations = ["H:M:S.s", "H.M.S.s", "H:M", "H.M", "HHMM", "I:M p", "I.M p", "I:MMp", "I.MMp", "IIMM p", "IIMMp"]
+                    time_variations = ["H:M:S.s", "H.M.S.s", "H:M", "H.M", "HHMMSSsss", "HHMMSS", "HHMM", "I:M p", "I.M p", "I:MMp", "I.MMp", "IIMM p", "IIMMp"]
                     datetimeformats = DateFormat.(vcat(
                         vcat(vcat(map(delim->map(ds->map(ts->join([ds, ts], delim), time_variations), date_variations[1:3]), ["T", " ", ""])...)...),
                         vcat(vcat(map(delim->map(ds->map(ts->join([ds, ts], delim), time_variations), date_variations[4:end]), [" "])...)...),
