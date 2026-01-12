@@ -35,14 +35,16 @@ using Tables
 struct Gradebook{T <: AbstractVecOrMat} <: Tables.AbstractColumns
     names::Vector{Symbol}
     lookup::Dict{Symbol, Int}
+    students::Vector{Student}
     matrix::T
 end
 # declare that MatrixTable is a table
 Tables.istable(::Type{<:Gradebook}) = true
 # getter methods to avoid getproperty clash
 names(m::Gradebook) = getfield(m, :names)
-matrix(m::Gradebook) = getfield(m, :matrix)
 lookup(m::Gradebook) = getfield(m, :lookup)
+students(m::Gradebook) = getfield(m, :students)
+matrix(m::Gradebook) = getfield(m, :matrix)
 # schema is column names and types
 Tables.schema(m::Gradebook{T}) where {T} = Tables.Schema(names(m), fill(eltype(T), size(matrix(m), 2)))
 
@@ -84,21 +86,17 @@ columnnames(m::GradebookRow) = names(getfield(m, :source))
 const StudentGradebook = GradebookRow
 
 function post_grades!(gb::Gradebook, grades::Grade...)
-    gb_headers = names(gb.data)
-    # gb_matrix = Matrix(gb.data)
-    gb_emails = gb.data[!, "Email"]
     for grade in grades
-        i = findfirst(x->x==grade.student.email, gb_emails)
+        i = findfirst(x->x==grade.student.email, gb.students)
         if isnothing(i)
             @error "Student not found in roster by email" grade.student.email
         end
-        j = findfirst(x->x==grade.assignment.codename, gb_headers)
+        gb_row = GradebookRow(i, gb)
+        j = findfirst(x->x==grade.assignment.codename, gb.names)
         if isnothing(j)
             @error "Assignment not found by code name" grade.assignment.codename
         end
-        # gb_matrix[i, j] = grade.submission
-        gb[!, gb_headers[j]][i] = grade.submission
+        gb_row[j] = grade.submission
     end
-    # return DataFrame(gb_matrix, gb_headers)
     return gb
 end
