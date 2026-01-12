@@ -10,6 +10,12 @@ convert(::Type{DataFrame}, x::Dictable) = DataFrame(Dict(x))
 
 
 
+## Instructor/Student
+show(io::IO, x::Instructor) = print(io, join(["Name: " * x.name, "Email: " * x.email, "Phone: " * x.phone, "Job Title: " * x.job_title, "Organization: " * x.organization, "ID: " * x.id], "\n"))
+show(io::IO, x::Student) = print(io, join(["Name: " * x.name * " (" * x.discipline * ")", "Email: " * x.email, "Phone: " * x.phone, "Organization: " * x.organization, "ID: " * x.id], "\n"))
+
+
+
 ## Points/Percentage/Score
 +(a::Points, b::Points) = Points(a.val + b.val)
 -(a::Points, b::Points) = Points(a.val - b.val)
@@ -39,7 +45,7 @@ promote_rule(::Type{Points}, ::Type{T}) where {T<:Real} = promote_rule(Float64, 
 >=(a::Percentage, b::Percentage) = a.val >= b.val
 zero(::Type{Percentage}) = Percentage(0.0)
 one(::Type{Percentage}) = Percentage(1.0)
-show(io::IO, x::Percentage) = print(io, x.val)
+show(io::IO, x::Percentage) = print(io, 100x.val, " %")
 Base.float(x::Percentage) = x.val
 convert(::Type{Float64}, x::Percentage) = x.val
 convert(::Type{Char}, x::Percentage) = (x >= 0.90 ? 'A' : (x >= 0.80 ? 'B' : (x >= 0.70 ? 'C' : (x >= 0.60 ? 'D' : 'F'))))
