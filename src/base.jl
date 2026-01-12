@@ -63,6 +63,9 @@ promote_rule(::Type{Percentage}, ::Type{T}) where {T<:Real} = promote_rule(Float
 Base.float(x::Score) = x.score.val
 convert(::Type{Float64}, x::Score) = x.score.val
 
+*(a::Score, b::Percentage) = Score(a.score * b, a.value)
+*(a::Percentage, b::Score) = b * a
+
 
 
 ## Assignment/Submission/Grade
@@ -114,6 +117,12 @@ function convert(::Type{Dict}, x::Grade)
 end
 promote_rule(::Type{Grade}, ::Type{Float64}) = Float64
 promote_rule(::Type{Grade}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
+
+
+*(a::Submission, b::Percentage) = Submission(a.assignment, a.submitted, a.score * b)
+*(a::Percentage, b::Submission) = b * a
+*(a::Grade, b::Percentage) = Grade(a.student, a.assignment, a.submission * b)
+*(a::Percentage, b::Grade) = b * a
 
 
 

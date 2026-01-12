@@ -58,7 +58,7 @@ Quiz(Y, name, value, due_date)                                                  
 
 struct Submission # {T<:Assignment}
     assignment::Assignment
-    submitted::DateTime
+    submitted::Union{DateTime, Dates.CompoundPeriod, Millisecond}
     score::Score
     Submission(assignment, submitted, score) = new(assignment, parse_datetime(submitted), score)
 end
@@ -72,3 +72,16 @@ struct Grade # {T<:Assignment}
     submission::Submission
 end
 Grade(student, submission) = Grade(student, submission.assignment, submission)
+
+
+islate(x::Millisecond) = x > Millisecond(0)
+islate(x::Dates.CompoundPeriod) = x > Millisecond(0)
+function islate(a::T, b::T) where {T<:DateTime}
+    # x = canonicalize(a - b)
+    # return x >= Millisecond(0.0) ? false : late_penalty(x)
+    return islate(a - b)
+end
+islate(x::Submission) = islate(x.submitted, x.assignment.due)
+
+late_penalty(x::Millisecond) = Percentage(x < Day(7) ? 0.05 : (x < Day(14) ? 0.10 : 1.0))
+late_penalty(x::Dates.CompoundPeriod) = Percentage(x < Day(7) ? 0.05 : (x < Day(14) ? 0.10 : 1.0))
