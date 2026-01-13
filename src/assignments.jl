@@ -29,16 +29,16 @@ struct Assignment{T<:AbstractAssignment, Y<:AssignmentType}
             conjuctions = ["for", "and", "nor", "but", "or", "yet", "so"]
             prepositions = ["of", "in", "for", "with", "on", "at", "from", "into", "during", "through", "without", "under", "over", "above", "below", "to"]
             forbidden = vcat(articles, conjuctions, prepositions)
-            tokens = filter(s->lowercase(s) ∉ forbidden, split(filter(!ispunct, codename), " "))
-            firstword_idx = findfirst(t->isletter(first(t)), tokens)
+            tokens = filter(s->lowercase(s) ∉ forbidden, split(filter(cn->!ispunct(cn) || cn ∈ ['{', '}'], codename), " "))
+            firstword_idx = findfirst(t->(first(t) == '{' ? true : isletter(first(t))), tokens)
             if isnothing(firstword_idx)
                 @error "After sanitization, no remaining tokens begin with a letter." codename tokens
             end
-            uppercase2symbol(mapreduce(t->isdigit(first(t)) ? t : first(t), *, tokens[firstword_idx:end]))
+            uppercase2symbol(mapreduce(t->(first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : (isdigit(first(t)) ? t : first(filter(!ispunct, t))), *, tokens[firstword_idx:end]))
         else
             @error "`codename` must be of type Symbol or String."
         end
-        return new{T,Y}(name, Points(value), parse_datetime(due_date), uppercase2symbol(codename))
+        return new{T,Y}(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), Points(value), parse_datetime(due_date), uppercase2symbol(codename))
     end
 end
 Attendance(::Type{Y}, name, value, due_date, codename) where {Y<:Individual}        = Assignment{AbstractAttendance, Y}(name, value, due_date, codename)
