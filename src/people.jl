@@ -1,5 +1,6 @@
 export fetch_name, fetch_codename
 export AbstractPerson, Instructor, Student
+export modify_info, modify_roster!
 
 using JSON
 
@@ -31,7 +32,7 @@ function Instructor(name_given, name_family; name_title="", name_suffix="", name
     organization = isempty(organization) ? ORGANIZATION : organization
     name = fetch_name(name_given, name_family; title=name_title, suffix=name_suffix, nickname=name_preferred)
     codename = !isempty(name_initials) ? uppercase2symbol(name_initials) : fetch_codename(name_given, name_family; nickname=name_preferred)
-    return Instructor(name_given, name_family, name_title, name_suffix, name_preferred, codename, email, phone, organization, job_title, id, name, codename)
+    return Instructor(name_given, name_family, name_title, name_suffix, isempty(name_preferred) ? name_given : name_preferred, codename, email, phone, organization, job_title, id, name, codename)
 end
 
 struct Student <: AbstractPerson
@@ -57,5 +58,19 @@ function Student(name_given, name_family; name_title="", name_suffix="", name_pr
     organization = isempty(organization) ? ORGANIZATION : organization
     name = fetch_name(name_given, name_family; title=name_title, suffix=name_suffix, nickname=name_preferred)
     codename = !isempty(name_initials) ? uppercase2symbol(name_initials) : fetch_codename(name_given, name_family; nickname=name_preferred)
-    return Student(name_given, name_family, name_title, name_suffix, name_preferred, codename, email, phone, organization, discipline, id, name, codename)
+    return Student(name_given, name_family, name_title, name_suffix, isempty(name_preferred) ? name_given : name_preferred, codename, email, phone, organization, discipline, id, name, codename)
+end
+
+function modify_info(person::T, keyvaluepairs) where {T<:AbstractPerson}
+    props = propertynames(person)
+    vals = map(property->getproperty(person, property), props)
+    nt = NamedTuple{props}(vals)
+    for (key, value) in pairs(keyvaluepairs)
+        nt = merge(nt, eval(:( ($key=$value,) )))
+    end
+    return T(nt...)
+end
+
+function modify_roster!(roster, student, info)
+    roster[findfirst(x->x == student, roster)] = modify_info(student, info)
 end
