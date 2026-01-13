@@ -7,6 +7,53 @@ const Indictable = Union{Class,Submission,Grade}
 
 convert(::Type{Dict}, x::Dictable) = (fns = fieldnames(x); Dict(zip(fns, getproperty.(x, fns))))
 convert(::Type{DataFrame}, x::Dictable) = DataFrame(Dict(x))
+function +(a::DataFrame, b::DataFrame)
+    if allequal(names, [a, b])
+        c = deepcopy(a)
+        for name in names(a)
+            c[!, name] .= a[!, name] + b[!, name]
+        end
+        return c
+    else
+        @error "Not all names of `a` occur in `b`" names(a) names(b)
+    end
+end
+
+function -(a::DataFrame, b::DataFrame)
+    if allequal(names, [a, b])
+        c = deepcopy(a)
+        for name in names(a)
+            c[!, name] .= a[!, name] - b[!, name]
+        end
+        return c
+    else
+        @error "Not all names of `a` occur in `b`" names(a) names(b)
+    end
+end
+
+function *(a::DataFrame, b::DataFrame)
+    if allequal(names, [a, b])
+        c = deepcopy(a)
+        for name in names(a)
+            c[!, name] .= a[!, name] * b[!, name]
+        end
+        return c
+    else
+        @error "Not all names of `a` occur in `b`" names(a) names(b)
+    end
+end
+
+function /(a::DataFrame, b::DataFrame)
+    if allequal(names, [a, b])
+        c = deepcopy(a)
+        for name in names(a)
+            c[!, name] .= a[!, name] / b[!, name]
+        end
+        return c
+    else
+        @error "Not all names of `a` occur in `b`" names(a) names(b)
+    end
+end
 
 
 
