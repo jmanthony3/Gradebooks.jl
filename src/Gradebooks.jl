@@ -21,10 +21,10 @@ struct Course
     credits::Integer
     codename::Symbol
     function Course(code, number, name, credits, codename)
-        return new(uppercase2symbol("$code")), Int(number), name, credits, uppercase2symbol("$codename")
+        return new(uppercase2symbol("$code"), Int(number), name, credits, uppercase2symbol("$codename"))
     end
 end
-Course(code, number, name, credits=3) = Course(code, number, name, credits, "$code$number")
+Course(code, number, name, credits=3) = Course(code, number, name, credits, uppercase2symbol("$code$number"))
 
 struct Class
     course::Course
@@ -41,7 +41,7 @@ struct Class
     primary_instructor::Instructor
     students::Vector{Student}
     roster::Vector{Student}
-    function Class(course, section, semester, year, frequency, time_start, time_finish, time_duration, codename_short, codename_long, primary_instructor, instructors, students, roster)
+    function Class(course, section, semester, year, frequency, time_start, time_finish, time_duration, codename_short, codename_long, instructors, primary_instructor, students, roster)
         time_start, time_finish = map(parse_time, [time_start, time_finish])
         return new(course, section, uppercase2symbol(semester), year, dayname2codename(frequency), time_start, time_finish, canonicalize(time_finish - time_start),
             uppercase2symbol("$codename_short"), uppercase2symbol("$codename_long"),
@@ -52,7 +52,7 @@ end
 function Class(course, section, semester, year, frequency, time_start, time_finish, time_duration, roster, instructors::Vararg{Instructor})
     return Class(course, section, semester, year, frequency, time_start, time_finish, time_duration,
         course.codename, uppercase2symbol(join(["$(course.codename)", @sprintf("%03d", section), first(uppercase("$semester")) * (uppercase("$semester")[1:2] == "SU" ? "u" : "") * last("$year", 2)], "-")),
-        [instructors...], first(instructors), roster, roster
+        [instructors...], first([instructors...]), roster, roster
     )
 end
 function Class(course, section, semester, year, frequency, time_start, time_duration::Dates.CompoundPeriod, roster, instructors::Vararg{Instructor})
