@@ -212,7 +212,7 @@ promote_rule(::Type{Grade}, ::Type{Float64}) = Float64
 promote_rule(::Type{Grade}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
 
 
-*(a::Submission, b::Percentage) = Submission(a.assignment, a.submitted, a.score * b)
+*(a::Submission, b::Percentage) = Submission(a.submitted, a.score * b)
 *(a::Percentage, b::Submission) = b * a
 *(a::Grade, b::Percentage) = Grade(a.student, a.assignment, a.submission * b)
 *(a::Percentage, b::Grade) = b * a
