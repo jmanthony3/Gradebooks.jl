@@ -196,12 +196,12 @@ promote_rule(::Type{Submission}, ::Type{T}) where {T<:Real} = promote_rule(Float
 Base.float(x::Grade) = x.submission.score.value.val
 convert(::Type{Float64}, x::Grade) = x.submission.score.value.val
 function convert(::Type{Dict}, x::Grade)
-    dict_student = Dict(data.student)
-    dict_assignment = Dict(data.assignment)
+    dict_student = Dict(x.student)
+    dict_assignment = Dict(x.assignment)
     dict_submission = Dict()
     dict_submission["assignment"] = dict_assignment
-    dict_submission["datetime"] = data.submission.datetime
-    dict_submission["score"] = Dict(data.submission.score)
+    dict_submission["datetime"] = x.submission.datetime
+    dict_submission["score"] = Dict(x.submission.score)
     return Dict(
         "student"       => dict_student,
         "assignment"    => dict_assignment,
