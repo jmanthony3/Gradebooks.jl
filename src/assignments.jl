@@ -1,7 +1,37 @@
+export Question
 export AssignmentType, Group, Individual
 export AbstractAssignment, AbstractAttendance, AbstractExam, AbstractHomework, AbstractPaper, AbstractPresentation, AbstractProject, AbstractQuiz
 export Assignment, Exam, Homework, Paper, Presentation, Project, Quiz
 export Submission, Grade
+export islate, late_penalty
+
+
+struct Question{T<:AbstractScore}
+    name::String
+    value::T
+    codename::Symbol
+    function Question{T}(name, value, codename) where {T<:AbstractScore}
+        codename = if isa(codename, Symbol)
+            codename
+        elseif isa(codename, String)
+            articles = ["a", "an", "the"]
+            conjuctions = ["for", "and", "nor", "but", "or", "yet", "so"]
+            prepositions = ["of", "in", "for", "with", "on", "at", "from", "into", "during", "through", "without", "under", "over", "above", "below", "to"]
+            forbidden = vcat(articles, conjuctions, prepositions)
+            tokens = filter(s->lowercase(s) ∉ forbidden, split(filter(cn->!ispunct(cn) || cn ∈ ['{', '}'], codename), " "))
+            firstword_idx = findfirst(t->(first(t) == '{' ? true : isletter(first(t))), tokens)
+            if isnothing(firstword_idx)
+                @error "After sanitization, no remaining tokens begin with a letter." codename tokens
+            end
+            uppercase2symbol(mapreduce(t->(first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : (isdigit(first(t)) ? t : first(filter(!ispunct, t))), *, tokens[firstword_idx:end]))
+        else
+            @error "`codename` must be of type Symbol or String."
+        end
+        return new{T}(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), Points(value), uppercase2symbol(codename))
+    end
+end
+Question(name, value) = Question{typeof(value)}(name, value, name)
+
 
 abstract type AbstractAssignment end
 abstract type AssignmentType end
@@ -19,9 +49,13 @@ struct Assignment{T<:AbstractAssignment, Y<:AssignmentType}
     name::String
     value::Points
     due::DateTime
+    questions::Vector{Question}
     # class::Class
     codename::Symbol
-    function Assignment{T,Y}(name, value, due_date, codename) where {T<:AbstractAssignment, Y<:AssignmentType}
+    function Assignment{T,Y}(name, value, due_date, questions, codename) where {T<:AbstractAssignment, Y<:AssignmentType}
+        if mapreduce(x->x.value, +, questions) ∉ [value, Percentage(1.0)]
+            @error "Value distribution of questions does not equal assignment" Σq=mapreduce(x->x.value, +, questions) assignment=(name, value)
+        end
         codename = if isa(codename, Symbol)
             codename
         elseif isa(codename, String)
@@ -38,31 +72,33 @@ struct Assignment{T<:AbstractAssignment, Y<:AssignmentType}
         else
             @error "`codename` must be of type Symbol or String."
         end
-        return new{T,Y}(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), Points(value), parse_datetime(due_date), uppercase2symbol(codename))
+        return new{T,Y}(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), Points(value), parse_datetime(due_date), questions, uppercase2symbol(codename))
     end
 end
-Attendance(::Type{Y}, name, value, due_date, codename) where {Y<:Individual}        = Assignment{AbstractAttendance, Y}(name, value, due_date, codename)
-Exam(::Type{Y}, name, value, due_date, codename) where {Y<:AssignmentType}          = Assignment{AbstractExam, Y}(name, value, due_date, codename)
-Homework(::Type{Y}, name, value, due_date, codename) where {Y<:AssignmentType}      = Assignment{AbstractHomework, Y}(name, value, due_date, codename)
-Paper(::Type{Y}, name, value, due_date, codename) where {Y<:AssignmentType}         = Assignment{AbstractPaper, Y}(name, value, due_date, codename)
-Presentation(::Type{Y}, name, value, due_date, codename) where {Y<:AssignmentType}  = Assignment{AbstractPresentation, Y}(name, value, due_date, codename)
-Project(::Type{Y}, name, value, due_date, codename) where {Y<:AssignmentType}       = Assignment{AbstractProject, Y}(name, value, due_date, codename)
-Quiz(::Type{Y}, name, value, due_date, codename) where {Y<:AssignmentType}          = Assignment{AbstractQuiz, Y}(name, value, due_date, codename)
-Attendance(Y, name, value, due_date)                                                = Attendance(Y, name, value, due_date, name)
-Exam(Y, name, value, due_date)                                                      = Exam(Y, name, value, due_date, name)
-Homework(Y, name, value, due_date)                                                  = Homework(Y, name, value, due_date, name)
-Paper(Y, name, value, due_date)                                                     = Paper(Y, name, value, due_date, name)
-Presentation(Y, name, value, due_date)                                              = Presentation(Y, name, value, due_date, name)
-Project(Y, name, value, due_date)                                                   = Project(Y, name, value, due_date, name)
-Quiz(Y, name, value, due_date)                                                      = Quiz(Y, name, value, due_date, name)
+Attendance(::Type{Y}, name, value, due_date, questions, codename) where {Y<:Individual}         = Assignment{AbstractAttendance, Y}(name, value, due_date, questions, codename)
+Exam(::Type{Y}, name, value, due_date, questions, codename) where {Y<:AssignmentType}           = Assignment{AbstractExam, Y}(name, value, due_date, questions, codename)
+Homework(::Type{Y}, name, value, due_date, questions, codename) where {Y<:AssignmentType}       = Assignment{AbstractHomework, Y}(name, value, due_date, questions, codename)
+Paper(::Type{Y}, name, value, due_date, questions, codename) where {Y<:AssignmentType}          = Assignment{AbstractPaper, Y}(name, value, due_date, questions, codename)
+Presentation(::Type{Y}, name, value, due_date, questions, codename) where {Y<:AssignmentType}   = Assignment{AbstractPresentation, Y}(name, value, due_date, questions, codename)
+Project(::Type{Y}, name, value, due_date, questions, codename) where {Y<:AssignmentType}        = Assignment{AbstractProject, Y}(name, value, due_date, questions, codename)
+Quiz(::Type{Y}, name, value, due_date, questions, codename) where {Y<:AssignmentType}           = Assignment{AbstractQuiz, Y}(name, value, due_date, questions, codename)
+Attendance(Y, name, value, due_date, questions)                                                 = Attendance(Y, name, value, due_date, questions, name)
+Exam(Y, name, value, due_date, questions)                                                       = Exam(Y, name, value, due_date, questions, name)
+Homework(Y, name, value, due_date, questions)                                                   = Homework(Y, name, value, due_date, questions, name)
+Paper(Y, name, value, due_date, questions)                                                      = Paper(Y, name, value, due_date, questions, name)
+Presentation(Y, name, value, due_date, questions)                                               = Presentation(Y, name, value, due_date, questions, name)
+Project(Y, name, value, due_date, questions)                                                    = Project(Y, name, value, due_date, questions, name)
+Quiz(Y, name, value, due_date, questions)                                                       = Quiz(Y, name, value, due_date, questions, name)
+
 
 struct Submission # {T<:Assignment}
-    assignment::Assignment
+    # assignment::Assignment
     submitted::Union{DateTime, Dates.CompoundPeriod, Millisecond}
     score::Score
-    Submission(assignment, submitted, score) = new(assignment, parse_datetime(submitted), score)
+    # Submission(assignment, submitted, score) = new(assignment, parse_datetime(submitted), score)
+    Submission(submitted, score) = new(parse_datetime(submitted), score)
 end
-# Submission{T<:Assignment{<:AbstractAssignment, Group}} = map_students_from_group;
+
 
 struct Grade # {T<:Assignment}
     # class::Class
@@ -71,7 +107,8 @@ struct Grade # {T<:Assignment}
     assignment::Assignment
     submission::Submission
 end
-Grade(student, submission) = Grade(student, submission.assignment, submission)
+# Grade(student, submission) = Grade(student, submission.assignment, submission)
+Grade(student, assignment::Assignment, submitted, tallies::Vararg{Tally{T,M,V}}) where {T<:AbstractScore,M<:AbstractMark,V<:AbstractScore} = Grade(student, assignment, Submission(submitted, Score(assignment.value, map(tally, tallies))))
 
 
 islate(x::Millisecond) = x > Millisecond(0)
