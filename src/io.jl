@@ -115,11 +115,11 @@ function save(data::Submission, path="submission")
     dir, base, name, ext = dirbasenameextname(path)
     name_parts = split(name, "+")
     if length(name_parts) == 2
-        save(data.assignment,   joinpath([dir, join([join([name_parts[1], join(["assignment", name_parts[2]], ".")], "+"), ext])]))
+        # save(data.assignment,   joinpath([dir, join([join([name_parts[1], join(["assignment", name_parts[2]], ".")], "+"), ext])]))
         save(data.submitted,    joinpath([dir, join([join([name_parts[1], join(["datetime", name_parts[2]], ".")], "+"), ext])]))
         save(data.score,        joinpath([dir, join([join([name_parts[1], join(["score", name_parts[2]], ".")], "+"), ext])]))
     else
-        save(data.assignment,   joinpath([dir, join([join([name_parts[1], "assignment"], "+"), ext])]))
+        # save(data.assignment,   joinpath([dir, join([join([name_parts[1], "assignment"], "+"), ext])]))
         save(data.submitted,    joinpath([dir, join([join([name_parts[1], "datetime"], "+"), ext])]))
         save(data.score,        joinpath([dir, join([join([name_parts[1], "score"], "+"), ext])]))
     end
