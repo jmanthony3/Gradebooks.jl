@@ -165,11 +165,11 @@ function parse_datetime(d)
                         parse = parse_datetime_g(datetimeformats[i])
                     end
                     d = parse
-                    d = if Dates.value(Time(d)) == 0
-                        DateTime(d, MIDNIGHT)
-                    else
-                        d
-                    end
+                    # d = if Dates.value(Time(d)) == 0
+                    #     DateTime(Date(d), MIDNIGHT)
+                    # else
+                    #     d
+                    # end
                     return if year(d) == 1
                         DateTime(Date(year(now()), month(d), day(d)), Time(d))
                     else
