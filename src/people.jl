@@ -1,5 +1,5 @@
 export fetch_name, fetch_codename
-export AbstractPerson, Instructor, Student
+export AbstractPerson, Instructor, Student, Team
 export modify_info, modify_roster!
 
 using JSON
@@ -24,7 +24,10 @@ struct Instructor <: AbstractPerson
     name::String
     codename::Symbol
     function Instructor(name_given, name_family, name_title, name_suffix, name_preferred, name_initials, email, phone, organization, job_title, id, name, codename)
-        new(name_given, name_family, name_title, name_suffix, name_preferred, uppercase2symbol(name_initials),
+        organization = isempty(organization) ? ORGANIZATION : organization
+        name = fetch_name(name_given, name_family; title=name_title, suffix=name_suffix, nickname=name_preferred)
+        codename = name_initials != "" ? uppercase2symbol(name_initials) : fetch_codename(name_given, name_family; nickname=name_preferred)
+        new(name_given, name_family, name_title, name_suffix, name_preferred, uppercase2symbol(codename),
             email, phone, organization, job_title, id, name, uppercase2symbol(codename))
     end
 end
@@ -32,7 +35,7 @@ function Instructor(name_given, name_family; name_title="", name_suffix="", name
     organization = isempty(organization) ? ORGANIZATION : organization
     name = fetch_name(name_given, name_family; title=name_title, suffix=name_suffix, nickname=name_preferred)
     codename = !isempty(name_initials) ? uppercase2symbol(name_initials) : fetch_codename(name_given, name_family; nickname=name_preferred)
-    return Instructor(name_given, name_family, name_title, name_suffix, isempty(name_preferred) ? name_given : name_preferred, codename, email, phone, organization, job_title, id, name, codename)
+    return Instructor(name_given, name_family, name_title, name_suffix, name_preferred, "$codename", email, phone, organization, job_title, id, name, codename)
 end
 
 struct Student <: AbstractPerson
@@ -50,7 +53,10 @@ struct Student <: AbstractPerson
     name::String
     codename::Symbol
     function Student(name_given, name_family, name_title, name_suffix, name_preferred, name_initials, email, phone, organization, discipline, id, name, codename)
-        new(name_given, name_family, name_title, name_suffix, name_preferred, uppercase2symbol(name_initials),
+        organization = isempty(organization) ? ORGANIZATION : organization
+        name = fetch_name(name_given, name_family; title=name_title, suffix=name_suffix, nickname=name_preferred)
+        codename = name_initials != "" ? uppercase2symbol(name_initials) : fetch_codename(name_given, name_family; nickname=name_preferred)
+        new(name_given, name_family, name_title, name_suffix, name_preferred, uppercase2symbol(codename),
             email, phone, organization, discipline, id, name, uppercase2symbol(codename))
     end
 end
@@ -58,8 +64,34 @@ function Student(name_given, name_family; name_title="", name_suffix="", name_pr
     organization = isempty(organization) ? ORGANIZATION : organization
     name = fetch_name(name_given, name_family; title=name_title, suffix=name_suffix, nickname=name_preferred)
     codename = !isempty(name_initials) ? uppercase2symbol(name_initials) : fetch_codename(name_given, name_family; nickname=name_preferred)
-    return Student(name_given, name_family, name_title, name_suffix, isempty(name_preferred) ? name_given : name_preferred, codename, email, phone, organization, discipline, id, name, codename)
+    return Student(name_given, name_family, name_title, name_suffix, name_preferred, "$codename", email, phone, organization, discipline, id, name, codename)
 end
+
+struct Team
+    name::String
+    students::Vector{Student}
+    codename::Symbol
+    function Team(name, students, codename)
+        codename = if isa(codename, Symbol)
+            codename
+        elseif isa(codename, String)
+            articles = ["a", "an", "the"]
+            conjuctions = ["for", "and", "nor", "but", "or", "yet", "so"]
+            prepositions = ["of", "in", "for", "with", "on", "at", "from", "into", "during", "through", "without", "under", "over", "above", "below", "to"]
+            forbidden = vcat(articles, conjuctions, prepositions)
+            tokens = filter(s->lowercase(s) ∉ forbidden, split(filter(cn->!ispunct(cn) || cn ∈ ['{', '}'], codename), " "))
+            firstword_idx = findfirst(t->(first(t) == '{' ? true : isletter(first(t))), tokens)
+            if isnothing(firstword_idx)
+                @error "After sanitization, no remaining tokens begin with a letter." codename tokens
+            end
+            uppercase2symbol(mapreduce(t->(first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : (isdigit(first(t)) ? t : first(filter(!ispunct, t))), *, tokens[firstword_idx:end]))
+        else
+            @error "`codename` must be of type Symbol or String."
+        end
+        return new(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), students, uppercase2symbol(codename))
+    end
+end
+Team(name, students) = Team(name, students, name)
 
 function modify_info(person::T, keyvaluepairs) where {T<:AbstractPerson}
     props = propertynames(person)

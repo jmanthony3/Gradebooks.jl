@@ -2,6 +2,7 @@ module Gradebooks
 
 export uppercase2symbol
 export Course, Class
+export withdraw
 
 import Printf: @sprintf
 
@@ -61,6 +62,29 @@ end
 
 include("assignments.jl")
 include("gradebook.jl")
+
+
+function withdraw(roster, class, gb, student)
+    deleteat!(gb.raw_score, findfirst(x->x.name_family == student.name_family, roster))
+    deleteat!(gb.penalty, findfirst(x->x.name_family == student.name_family, roster))
+    deleteat!(gb.total, findfirst(x->x.name_family == student.name_family, roster))
+    deleteat!(roster, findfirst(x->x.name_family == student.name_family, roster))
+    class = Class(class.course, class.section, class.semester, class.year, class.frequency, class.time_start, class.time_duration, roster, class.instructors...)
+    return roster, class, gb
+end
+
+function withdraw(roster, class, gb, teams, student)
+    for (i, team) in enumerate(teams)
+        if student ∈ team.students
+            team_students = team.students
+            deleteat!(team_students, findfirst(x->x == student, team_students))
+            teams[i] = Team(team.name, team_students, team.codename)
+        end
+    end
+    return withdraw(roster, class, gb, student)..., teams
+end
+
+
 include("base.jl")
 include("io.jl")
 include("plots.jl")
