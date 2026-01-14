@@ -9,9 +9,9 @@ import Printf: @sprintf
 
 # configuration preferences for environment/workspace
 include("preferences.jl")
-# # types and overloads
-# include("score.jl")
-# include("datetime.jl")
+# types and overloads
+include("score.jl")
+include("datetime.jl")
 include("people.jl")
 
 uppercase2symbol(s) = Symbol(uppercase("$s"))
@@ -61,8 +61,8 @@ function Class(course, section, semester, year, frequency, time_start, time_dura
     return Class(course, section, semester, year, frequency, time_start, time_start + time_duration, time_duration, roster, instructors...)
 end
 
-# include("assignments.jl")
-# include("gradebook.jl")
+include("assignments.jl")
+include("gradebook.jl")
 
 
 function withdraw(roster, class, gb, student)
@@ -86,9 +86,9 @@ function withdraw(roster, class, gb, teams, student)
 end
 
 
-# include("base.jl")
-# include("io.jl")
-# include("plots.jl")
-# include("reports.jl")
+include("base.jl")
+include("io.jl")
+include("plots.jl")
+include("reports.jl")
 
 end # end of module
