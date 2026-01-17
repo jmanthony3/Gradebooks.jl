@@ -113,7 +113,7 @@ promote_rule(::Type{Percentage}, ::Type{T}) where {T<:Real} = promote_rule(Float
 <=(a::Grant, b::Grant) = a.mark <= b.mark
 >(a::Grant, b::Grant) = a.mark > b.mark
 >=(a::Grant, b::Grant) = a.mark >= b.mark
-show(io::IO, x::Grant) = print(io, x.mark, " / ", x.value)
+show(io::IO, x::Grant) = print(io, x.mark) # , " / ", x.value)
 Base.float(x::Grant) = x.mark
 convert(::Type{Float64}, x::Grant) = x.mark
 promote_rule(::Type{Grant}, ::Type{Float64}) = Float64
@@ -133,7 +133,7 @@ promote_rule(::Type{Grant}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T
 <=(a::Subtract, b::Subtract) = a.mark <= b.mark
 >(a::Subtract, b::Subtract) = a.mark > b.mark
 >=(a::Subtract, b::Subtract) = a.mark >= b.mark
-show(io::IO, x::Subtract) = print(io, x.mark, " / ", x.value)
+show(io::IO, x::Subtract) = print(io, x.mark) # , " / ", x.value)
 Base.float(x::Subtract) = x.mark
 convert(::Type{Float64}, x::Subtract) = x.mark
 promote_rule(::Type{Subtract}, ::Type{Float64}) = Float64

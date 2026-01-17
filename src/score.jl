@@ -61,7 +61,7 @@ struct Tally{T<:AbstractScore,M<:AbstractMark,V<:AbstractScore}
     mark::M # {V}
 end
 
-Tally(question::Question{T1}, mark::T2) where {T1<:AbstractScore,T2<:AbstractMark} = Tally{T1,T2,eltype(mark)}(question, mark)
+Tally(question::Question{T1}, mark::T2) where {T1<:AbstractScore,T2<:AbstractMark} = Tally{T1,T2,typeof(mark.mark)}(question, mark)
 
 function tally(tallies::Vararg{Tally{T,M,T}}) where {T<:Points,M<:AbstractMark}
     grant = mapreduce(y->y.mark, +, filter(x->isa(x.mark, Grant{T}), tallies); init=zero(T))

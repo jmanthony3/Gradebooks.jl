@@ -62,7 +62,7 @@ Presentation(Y, name, value, due_date, questions)                               
 Project(Y, name, value, due_date, questions)                                                    = Project(Y, name, value, due_date, questions, name)
 Quiz(Y, name, value, due_date, questions)                                                       = Quiz(Y, name, value, due_date, questions, name)
 
-Score(assignment::Assignment, tallies::Vararg{Tally{T,M,V}}) where {T<:AbstractScore,M<:AbstractMark,V<:AbstractScore} = Score(assignment.value, map(tally, tallies))
+Score(assignment::Assignment, tallies::Vararg{Tally{T,M,V}}) where {T<:AbstractScore,M<:AbstractMark,V<:AbstractScore} = Score(assignment.value, mapreduce(tally, +, tallies))
 
 
 struct Submission # {T<:Assignment}
