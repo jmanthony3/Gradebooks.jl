@@ -49,12 +49,12 @@ struct Grant{T<:AbstractScore} <: AbstractMark # ,V<:AbstractScore} <: AbstractM
     mark::T
     # value::V
 end
-# Grant(mark::T) where {T<:AbstractScore} = Grant{T}(mark)
+Grant(::T, mark::T) where {T<:AbstractScore} = Grant{T}(mark)
 struct Subtract{T<:AbstractScore} <: AbstractMark # ,V<:AbstractScore} <: AbstractMark
     mark::T
     # value::V
 end
-# Subtract(mark::T) where {T<:AbstractScore} = Subtract{T}(mark)
+Subtract(::T, mark::T) where {T<:AbstractScore} = Subtract{T}(mark)
 
 struct Tally{T<:AbstractScore,M<:AbstractMark,V<:AbstractScore}
     question::Question{T}
