@@ -1,36 +1,8 @@
-export Question
 export AssignmentType, Group, Individual
 export AbstractAssignment, AbstractAttendance, AbstractExam, AbstractHomework, AbstractPaper, AbstractPresentation, AbstractProject, AbstractQuiz
 export Assignment, Exam, Homework, Paper, Presentation, Project, Quiz
 export Submission, Grade
 export islate, late_penalty
-
-
-struct Question{T<:AbstractScore}
-    name::String
-    value::T
-    codename::Symbol
-    function Question{T}(name, value, codename) where {T<:AbstractScore}
-        codename = if isa(codename, Symbol)
-            codename
-        elseif isa(codename, String)
-            articles = ["a", "an", "the"]
-            conjuctions = ["for", "and", "nor", "but", "or", "yet", "so"]
-            prepositions = ["of", "in", "for", "with", "on", "at", "from", "into", "during", "through", "without", "under", "over", "above", "below", "to"]
-            forbidden = vcat(articles, conjuctions, prepositions)
-            tokens = filter(s->lowercase(s) ∉ forbidden, split(filter(cn->!ispunct(cn) || cn ∈ ['{', '}'], codename), " "))
-            firstword_idx = findfirst(t->(first(t) == '{' ? true : isletter(first(t))), tokens)
-            if isnothing(firstword_idx)
-                @error "After sanitization, no remaining tokens begin with a letter." codename tokens
-            end
-            uppercase2symbol(mapreduce(t->(first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : (isdigit(first(t)) ? t : first(filter(!ispunct, t))), *, tokens[firstword_idx:end]))
-        else
-            @error "`codename` must be of type Symbol or String."
-        end
-        return new{T}(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), Points(value), uppercase2symbol(codename))
-    end
-end
-Question(name, value) = Question{typeof(value)}(name, value, name)
 
 
 abstract type AbstractAssignment end
@@ -89,6 +61,8 @@ Paper(Y, name, value, due_date, questions)                                      
 Presentation(Y, name, value, due_date, questions)                                               = Presentation(Y, name, value, due_date, questions, name)
 Project(Y, name, value, due_date, questions)                                                    = Project(Y, name, value, due_date, questions, name)
 Quiz(Y, name, value, due_date, questions)                                                       = Quiz(Y, name, value, due_date, questions, name)
+
+Score(assignment::Assignment, tallies::Vararg{Tally{T,M,V}}) where {T<:AbstractScore,M<:AbstractMark,V<:AbstractScore} = Score(assignment.value, map(tally, tallies))
 
 
 struct Submission # {T<:Assignment}
