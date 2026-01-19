@@ -59,9 +59,10 @@ Subtract(::T, mark::T) where {T<:AbstractScore} = Subtract{T}(mark)
 struct Tally{T<:AbstractScore,M<:AbstractMark,V<:AbstractScore}
     question::Question{T}
     mark::M # {V}
+    comment::String
 end
 
-Tally(question::Question{T1}, mark::T2) where {T1<:AbstractScore,T2<:AbstractMark} = Tally{T1,T2,typeof(mark.mark)}(question, mark)
+Tally(question::Question{T1}, mark::T2, comment="") where {T1<:AbstractScore,T2<:AbstractMark} = Tally{T1,T2,typeof(mark.mark)}(question, mark, comment)
 
 function tally(tallies::Vararg{Tally{T,M,T}}) where {T<:Points,M<:AbstractMark}
     grant = mapreduce(y->y.mark.mark, +, filter(x->isa(x.mark, Grant{T}), tallies); init=zero(T))
@@ -96,7 +97,8 @@ struct Score
     value::Points
     percent::Percentage
     letter::Char
+    comment::String
 end
-Score(percent::Percentage, value::Points) = Score(percent*value, value, percent, percent)
-Score(value::Points, percent::Percentage) = Score(percent, value)
-Score(score::T, value::T) where {T<:Real} = ((s, v) = Points.([score, value]); p = s/v; Score(s, v, p, p))
+Score(percent::Percentage, value::Points; comment="") = Score(percent*value, value, percent, percent, comment)
+Score(value::Points, percent::Percentage; comment="") = Score(percent, value; comment=comment)
+Score(score::T, value::T; comment="") where {T<:Real} = ((s, v) = Points.([score, value]); p = s/v; Score(s, v, p, p, comment))

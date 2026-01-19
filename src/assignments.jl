@@ -63,7 +63,7 @@ Project(Y, name, value, due_date, questions)                                    
 Quiz(Y, name, value, due_date, questions)                                                       = Quiz(Y, name, value, due_date, questions, name)
 
 # Score(assignment::Assignment, tallies::Vararg{Tally{T,M,V}}) where {T<:AbstractScore,M<:AbstractMark,V<:AbstractScore} = Score(assignment.value, tally(tallies...)) # mapreduce(tally, +, [tallies...]))
-Score(assignment::Assignment, tallies::Vararg{Tally{T,M,V}}) where {T<:AbstractScore,M<:AbstractMark,V<:AbstractScore} = Score(assignment.value, mapreduce(z->tally(z...), +, filter(!isempty, map(y->filter(x->isa(x.mark, y), tallies), [Grant, Subtract]))))
+Score(assignment::Assignment, tallies::Vararg{Tally{T,M,V}}; comment="") where {T<:AbstractScore,M<:AbstractMark,V<:AbstractScore} = Score(assignment.value, mapreduce(z->tally(z...), +, filter(!isempty, map(y->filter(x->isa(x.mark, y), tallies), [Grant, Subtract]))), comment=comment)
 
 
 struct Submission # {T<:Assignment}
