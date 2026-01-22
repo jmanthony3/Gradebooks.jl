@@ -142,9 +142,9 @@ promote_rule(::Type{Subtract}, ::Type{T}) where {T<:Real} = promote_rule(Float64
 # *(a::Subtract, b::Percentage) = a.val * b.val
 # *(a::Percentage, b::Subtract) = b * a
 
-+(a::Score, b::Score) = ((s, v) = (a.score + b.score, a.value + b.value); p = s / v; Score(s, v, p, p))
++(a::Score, b::Score) = ((s, v) = (a.score + b.score, a.value + b.value); p = s / v; Score(s, v, p, p, join(map(x->x.comment, [a, b]), "\n")))
 +(a::Score, b::Score...) = a + reduce(+, b)
--(a::Score, b::Score) = ((s, v) = (a.score - b.score, a.value - b.value); p = s / v; Score(s, v, p, p))
+-(a::Score, b::Score) = ((s, v) = (a.score - b.score, a.value - b.value); p = s / v; Score(s, v, p, p, join(map(x->x.comment, [a, b]), "\n")))
 -(a::Score, b::Score...) = a + reduce(-, b)
 # *(a::Score, b::Score) = Score(a.x * b.x)
 # /(a::Score, b::Score) = Score(a.x / b.x)

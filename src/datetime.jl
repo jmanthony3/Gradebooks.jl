@@ -122,7 +122,7 @@ function parse_date(d)
 end
 
 function parse_datetime(d)
-    if isa(d, DateTime)
+    if isa(d, DateTime) || isa(d, Millisecond)
         return d
     elseif isa(d, Date)
         d = if year(d) == 1
