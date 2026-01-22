@@ -1,6 +1,6 @@
 export AssignmentType, Group, Individual
 export AbstractAssignment, AbstractAttendance, AbstractExam, AbstractHomework, AbstractPaper, AbstractPresentation, AbstractProject, AbstractQuiz
-export Assignment, Exam, Homework, Paper, Presentation, Project, Quiz
+export Assignment, Attendance, Exam, Homework, Paper, Presentation, Project, Quiz
 export Submission, Grade
 export islate, late_penalty
 

@@ -31,9 +31,9 @@ function Gradebook(who::T, assignments::Vector{Assignment}, roster::Vector{Stude
         gb.total[!, ["ID", "Preferred", "Last", "Team", "Email"]] .= vcat(map(x->[x.id x.name_preferred x.name_family 0 x.email], roster)...)
         # gb.total[!, Not(["ID", "Preferred", "Last", "Team", "Email"])] .= gb.raw_score[!, Not(["ID", "Preferred", "Last", "Team", "Email"])] - gb.penalty[!, Not(["ID", "Preferred", "Last", "Team", "Email"])]
     else
-        gb.raw_score[!, ["ID", "Preferred", "Last", "Email"]] .= vcat(map(x->[x.id x.name_preferred x.name_family x.email], eachrow(roster))...)
-        gb.penalty[!, ["ID", "Preferred", "Last", "Email"]] .= vcat(map(x->[x.id x.name_preferred x.name_family x.email], eachrow(roster))...)
-        gb.total[!, ["ID", "Preferred", "Last", "Email"]] .= vcat(map(x->[x.id x.name_preferred x.name_family x.email], eachrow(roster))...)
+        gb.raw_score[!, ["ID", "Preferred", "Last", "Email"]] .= vcat(map(x->[x.id x.name_preferred x.name_family x.email], roster)...)
+        gb.penalty[!, ["ID", "Preferred", "Last", "Email"]] .= vcat(map(x->[x.id x.name_preferred x.name_family x.email], roster)...)
+        gb.total[!, ["ID", "Preferred", "Last", "Email"]] .= vcat(map(x->[x.id x.name_preferred x.name_family x.email], roster)...)
         # gb.total[!, Not(["ID", "Preferred", "Last", "Email"])] .= gb.raw_score[!, Not(["ID", "Preferred", "Last", "Email"])] - gb.penalty[!, Not(["ID", "Preferred", "Last", "Email"])]
     end
     return gb
