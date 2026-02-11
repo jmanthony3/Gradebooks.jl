@@ -1,6 +1,6 @@
 export fetch_name, fetch_codename
 export AbstractPerson, Instructor, Student, Team
-export modify_info, modify_roster!
+export modify_info, get_student, modify_roster!, fetch_emails
 
 using JSON
 
@@ -94,6 +94,35 @@ function modify_info(person::T, keyvaluepairs) where {T<:AbstractPerson}
     return T(nt...)
 end
 
+function get_student(roster::Vector{Student}, identifier::String)
+    a, b, c = string.(split(identifier, ", "))..., :name
+    if isempty(b) && !isempty(split(a, "@")[2])
+        a, b, c = string.(split(a, "@"))..., :email
+    end
+    return if c == :name
+        roster[findfirst(x->(x.name_family == a) && (x.name_given == b || x.name_preferred == b), roster)]
+    elseif c == :email
+        roster[findfirst(x->string(split(x.email, "@")[1]) == a, roster)]
+    end
+end
+
 function modify_roster!(roster, student, info)
     roster[findfirst(x->x == student, roster)] = modify_info(student, info)
+end
+
+function fetch_emails(roster::Vector{Student}; search=nothing)
+    emails = []
+    for student in roster
+        email = student.email
+        # username, domain = split(email, "@")
+        # if domain != ORG_EMAILDOMAIN
+        #     email = username * "@" * ORG_EMAILDOMAIN
+        # end
+        push!(emails, email)
+    end
+    return if search == :outlook
+        join(map(e->"from:$e", emails), " OR ")
+    else
+        emails
+    end
 end
