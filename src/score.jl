@@ -81,7 +81,8 @@ function tally(tallies::Vector{<:Tally{T,M,V}}) where {T<:Points,M<:AbstractMark
     grant = mapreduce(tally, +, filter(x->isa(x.mark, Grant{T}), tallies); init=zero(V))
     subtract = mapreduce(tally, +, filter(x->isa(x.mark, Subtract{T}), tallies); init=zero(V))
     value = mapreduce(x->x.question.value, +, tallies)
-    return (grant - subtract) / value
+    # return (grant - subtract) / value
+    return grant - subtract
 end
 function tally(tallies::Vector{<:Tally{T,M,V}}) where {T<:Percentage,M<:AbstractMark,V<:Points}
     grant = mapreduce(tally, +, filter(x->isa(x.mark, Grant{V}), tallies); init=zero(T))
