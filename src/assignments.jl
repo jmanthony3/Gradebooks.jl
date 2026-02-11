@@ -1,3 +1,4 @@
+export string2codename
 export AssignmentType, Group, Individual
 export AbstractAssignment, AbstractAttendance, AbstractExam, AbstractHomework, AbstractPaper, AbstractPresentation, AbstractProject, AbstractQuiz
 export Assignment, Attendance, Exam, Homework, Paper, Presentation, Project, Quiz
@@ -17,6 +18,19 @@ abstract type AbstractPresentation{T<:AssignmentType} <: AbstractAssignment end
 abstract type AbstractProject{T<:AssignmentType} <: AbstractAssignment end
 abstract type AbstractQuiz{T<:AssignmentType} <: AbstractAssignment end
 
+function string2codename(s)
+    articles = ["a", "an", "the"]
+    conjuctions = ["for", "and", "nor", "but", "or", "yet", "so"]
+    prepositions = ["of", "in", "for", "with", "on", "at", "from", "into", "during", "through", "without", "under", "over", "above", "below", "to"]
+    forbidden = vcat(articles, conjuctions, prepositions)
+    tokens = filter(!isempty, filter(s->lowercase(s) ∉ forbidden, split(filter(cn->!ispunct(cn) || cn ∈ ['{', '}'], s), " ")))
+    firstword_idx = findfirst(t->(first(t) == '{' ? true : isletter(first(t))), tokens)
+    if isnothing(firstword_idx)
+        @error "After sanitization, no remaining tokens begin with a letter." s tokens
+    end
+    return uppercase2symbol(mapreduce(t->(first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : (isdigit(first(t)) ? t : first(filter(!ispunct, t))), *, tokens[firstword_idx:end]))
+end
+
 struct Assignment{T<:AbstractAssignment, Y<:AssignmentType}
     name::String
     value::Points
@@ -31,16 +45,7 @@ struct Assignment{T<:AbstractAssignment, Y<:AssignmentType}
         codename = if isa(codename, Symbol)
             codename
         elseif isa(codename, String)
-            articles = ["a", "an", "the"]
-            conjuctions = ["for", "and", "nor", "but", "or", "yet", "so"]
-            prepositions = ["of", "in", "for", "with", "on", "at", "from", "into", "during", "through", "without", "under", "over", "above", "below", "to"]
-            forbidden = vcat(articles, conjuctions, prepositions)
-            tokens = filter(s->lowercase(s) ∉ forbidden, split(filter(cn->!ispunct(cn) || cn ∈ ['{', '}'], codename), " "))
-            firstword_idx = findfirst(t->(first(t) == '{' ? true : isletter(first(t))), tokens)
-            if isnothing(firstword_idx)
-                @error "After sanitization, no remaining tokens begin with a letter." codename tokens
-            end
-            uppercase2symbol(mapreduce(t->(first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : (isdigit(first(t)) ? t : first(filter(!ispunct, t))), *, tokens[firstword_idx:end]))
+            string2codename(codename)
         else
             @error "`codename` must be of type Symbol or String."
         end
