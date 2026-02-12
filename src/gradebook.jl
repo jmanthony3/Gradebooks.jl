@@ -49,7 +49,12 @@ function fill_grades!(gb::Gradebook{Class}, src, assignments::Vararg{Assignment}
 
         submissions_dict = Dict{String, Submission}()
         for row in eachrow(submissions_df′)
-            submissions_dict[row[1]] = Submission(assignment.due, Score(Points(row[2]), assignment.value))
+            try
+                get_student(gb.who.roster, row[1])
+            catch
+            else
+                submissions_dict[row[1]] = Submission(assignment.due, Score(Points(row[2]), assignment.value))
+            end
         end
 
         grades = Dict(map(x->x[1]=>Grade(get_student(gb.who.roster, x[1]), assignment, x[2]), collect(pairs(submissions_dict))))
