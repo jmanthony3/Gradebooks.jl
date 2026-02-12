@@ -95,14 +95,23 @@ function modify_info(person::T, keyvaluepairs) where {T<:AbstractPerson}
 end
 
 function get_student(roster::Vector{Student}, identifier::String)
-    a, b, c = string.(split(identifier, ", "))..., :name
-    if isempty(b) && !isempty(split(a, "@")[2])
-        a, b, c = string.(split(a, "@"))..., :email
+    x = string.(split(identifier, ", "))
+    a, b, c = if length(x) == 2
+        x..., :name
+    else
+        y = string.(split(identifier, "@"))
+        if length(y) == 2
+            y..., :email
+        else
+            only(y), "", :any
+        end
     end
     return if c == :name
         roster[findfirst(x->(x.name_family == a) && (x.name_given == b || x.name_preferred == b), roster)]
     elseif c == :email
         roster[findfirst(x->string(split(x.email, "@")[1]) == a, roster)]
+    elseif c == :any
+        roster[findfirst(x->any(y->occursin(a, repr(getproperty(x, y))), propertynames(x)), roster)]
     end
 end
 

@@ -26,14 +26,14 @@ end
 function Gradebook(who::T, assignments::Vector{Assignment}, roster::Vector{Student}) where {T<:Union{Class,Student}}
     gb = Gradebook(who, assignments)
     if any(isa.(assignments, Assignment{<:AbstractAssignment, Group}))
-        gb.raw_score[!, ["ID", "Preferred", "Last", "Team", "Email"]] .= vcat(map(x->[x.id x.name_preferred x.name_family 0 x.email], roster)...)
-        gb.penalty[!, ["ID", "Preferred", "Last", "Team", "Email"]] .= vcat(map(x->[x.id x.name_preferred x.name_family 0 x.email], roster)...)
-        gb.total[!, ["ID", "Preferred", "Last", "Team", "Email"]] .= vcat(map(x->[x.id x.name_preferred x.name_family 0 x.email], roster)...)
+        gb.raw_score[!, ["ID", "Preferred", "Last", "Team", "Email"]] .= vcat(map(x->[x.id (!isempty(x.name_preferred) ? x.name_preferred : x.name_given) x.name_family 0 x.email], roster)...)
+        gb.penalty[!, ["ID", "Preferred", "Last", "Team", "Email"]] .= vcat(map(x->[x.id (!isempty(x.name_preferred) ? x.name_preferred : x.name_given) x.name_family 0 x.email], roster)...)
+        gb.total[!, ["ID", "Preferred", "Last", "Team", "Email"]] .= vcat(map(x->[x.id (!isempty(x.name_preferred) ? x.name_preferred : x.name_given) x.name_family 0 x.email], roster)...)
         # gb.total[!, Not(["ID", "Preferred", "Last", "Team", "Email"])] .= gb.raw_score[!, Not(["ID", "Preferred", "Last", "Team", "Email"])] - gb.penalty[!, Not(["ID", "Preferred", "Last", "Team", "Email"])]
     else
-        gb.raw_score[!, ["ID", "Preferred", "Last", "Email"]] .= vcat(map(x->[x.id x.name_preferred x.name_family x.email], roster)...)
-        gb.penalty[!, ["ID", "Preferred", "Last", "Email"]] .= vcat(map(x->[x.id x.name_preferred x.name_family x.email], roster)...)
-        gb.total[!, ["ID", "Preferred", "Last", "Email"]] .= vcat(map(x->[x.id x.name_preferred x.name_family x.email], roster)...)
+        gb.raw_score[!, ["ID", "Preferred", "Last", "Email"]] .= vcat(map(x->[x.id (!isempty(x.name_preferred) ? x.name_preferred : x.name_given) x.name_family x.email], roster)...)
+        gb.penalty[!, ["ID", "Preferred", "Last", "Email"]] .= vcat(map(x->[x.id (!isempty(x.name_preferred) ? x.name_preferred : x.name_given) x.name_family x.email], roster)...)
+        gb.total[!, ["ID", "Preferred", "Last", "Email"]] .= vcat(map(x->[x.id (!isempty(x.name_preferred) ? x.name_preferred : x.name_given) x.name_family x.email], roster)...)
         # gb.total[!, Not(["ID", "Preferred", "Last", "Email"])] .= gb.raw_score[!, Not(["ID", "Preferred", "Last", "Email"])] - gb.penalty[!, Not(["ID", "Preferred", "Last", "Email"])]
     end
     return gb
@@ -43,7 +43,7 @@ function fill_grades!(gb::Gradebook{Class}, src, assignments::Vararg{Assignment}
     submissions_df = CSV.read(src, DataFrame)
     for assignment in collect(assignments)
         submissions_df′ = submissions_df[!, Cols("SIS Login ID", occursin.("$(string2codename(assignment.name))", map(x->"$x", string2codename.(names(submissions_df)))))]
-        submissions_df′ = DataFrame(Matrix(submissions_df′)[findfirst(!ismissing, submissions_df′[!, "SIS Login ID"]):end-1, :], names(submissions_df′))
+        submissions_df′ = DataFrame(Matrix(submissions_df′)[findfirst(!ismissing, submissions_df′[!, "SIS Login ID"]):end, :], names(submissions_df′))
         submissions_df′[!, 1] = convert.(String, submissions_df′[!, 1])
         submissions_df′[!, 2] = convert.(Points, (map(x->ismissing(x) ? 0.0 : x, submissions_df′[!, 2])))
 
