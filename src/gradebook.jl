@@ -52,7 +52,7 @@ function fill_grades!(gb::Gradebook{Class}, src, assignments::Vararg{Assignment}
             submissions_dict[row[1]] = Submission(assignment.due, Score(Points(row[2]), assignment.value))
         end
 
-        grades = Dict(map(x->x[1]=>Grade(only(gb.who.roster[map(s->x[1]==string(split(s.email, "@")[1]), gb.who.roster)]), assignment, x[2]), collect(pairs(submissions_dict))))
+        grades = Dict(map(x->x[1]=>Grade(get_student(gb.who.roster, x[1]), assignment, x[2]), collect(pairs(submissions_dict))))
 
         for (key, val) in grades
             gb.raw_score[occursin.(key, gb.raw_score[!, "Email"]), assignment.codename] .= val.submission.score.score
