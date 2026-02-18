@@ -76,7 +76,7 @@ end
 
 function fill_grades!(gb::Gradebook{Class}, assignment::Assignment, grades::Vararg{Grade})
     for grade in collect(grades)
-        gb.raw_score[occursin.(grade.student.email, gb.raw_score[!, "Email"]), assignment.codename] .= gradeval.submission.score.score
+        gb.raw_score[occursin.(grade.student.email, gb.raw_score[!, "Email"]), assignment.codename] .= grade.submission.score.score
         t = grade.submission.submitted - grade.assignment.due
         p = if t < Millisecond(1)
             0.0
