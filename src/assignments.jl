@@ -68,8 +68,8 @@ Project(Y, name, value, due_date, questions)                                    
 Quiz(Y, name, value, due_date, questions)                                                       = Quiz(Y, name, value, due_date, questions, name)
 
 # Score(assignment::Assignment, tallies::Vararg{Tally{T,M,V}}) where {T<:AbstractScore,M<:AbstractMark,V<:AbstractScore} = Score(assignment.value, tally(tallies...)) # mapreduce(tally, +, [tallies...]))
-Score(assignment::Assignment, tallies::Vector{<:Tally}; comment="") = Score(mapreduce(tally, +, filter(!isempty, map(y->filter(x->isa(x.mark, y), tallies), [Grant, Subtract]))), assignment.value; comment=comment)
-Score(assignment::Assignment, tallies::Vararg{<:Tally}; comment="") = Score(assignment, tallies; comment=comment)
+Score(assignment::Assignment, tallies::Vector{<:Tally}; comment="") = Score(Points(mapreduce(tally, +, filter(!isempty, map(y->filter(x->isa(x.mark, y), tallies), [Grant, Subtract]))...)), assignment.value; comment=comment)
+Score(assignment::Assignment, tallies::Vararg{<:Tally}; comment="") = Score(assignment, collect(tallies); comment=comment)
 # function tally(assignment::Assignment, tallies::Vector{<:Union{<:AbstractMark, Tuple{<:AbstractMark, String}}})
 Score(assignment::Assignment, marks::Vector{<:AbstractMark}; comment="") = Score(assignment, map(x->Tally(assignment.questions[x[1]], x[2]), enumerate(marks)); comment=comment)
 
