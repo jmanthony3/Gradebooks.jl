@@ -117,6 +117,7 @@ end
 
 function modify_roster!(roster, student, info)
     roster[findfirst(x->x == student, roster)] = modify_info(student, info)
+    return nothing
 end
 
 function fetch_emails(roster::Vector{Student}; search=nothing)
