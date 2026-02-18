@@ -66,10 +66,10 @@ include("gradebook.jl")
 
 
 function withdraw(roster, class, gb, student)
-    deleteat!(gb.raw_score, findfirst(x->x.name_family == student.name_family, roster))
-    deleteat!(gb.penalty, findfirst(x->x.name_family == student.name_family, roster))
-    deleteat!(gb.total, findfirst(x->x.name_family == student.name_family, roster))
-    deleteat!(roster, findfirst(x->x.name_family == student.name_family, roster))
+    deleteat!(gb.raw_score, findfirst(x->x == student, roster))
+    deleteat!(gb.penalty, findfirst(x->x == student, roster))
+    deleteat!(gb.total, findfirst(x->x == student, roster))
+    deleteat!(roster, findfirst(x->x == student, roster))
     class = Class(class.course, class.section, class.semester, class.year, class.frequency, class.time_start, class.time_duration, roster, class.instructors...)
     return roster, class, gb
 end
