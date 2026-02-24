@@ -56,42 +56,44 @@ end
 
 Tally(question::Question{T1}, mark::T2, comment="") where {T1<:AbstractScore,T2<:AbstractMark} = Tally{T1,T2,typeof(mark.mark)}(question, mark, comment)
 
-tally(tallies::Vararg{Tally{T,M,V}}) where {T<:Points,M<:Grant,V<:Points}           = mapreduce(x->x.mark.mark,                     +, tallies; init=zero(T))
-tally(tallies::Vararg{Tally{T,M,V}}) where {T<:Points,M<:Subtract,V<:Points}        = mapreduce(x->x.question.value - x.mark.mark,  +, tallies; init=zero(T))
-tally(tallies::Vararg{Tally{T,M,V}}) where {T<:Percentage,M<:Grant,V<:Percentage}   = mapreduce(x->x.mark.mark * x.question.value,  +, tallies; init=zero(T))
-tally(tallies::Vararg{Tally{T,M,V}}) where {T<:Percentage,M<:Subtract,V<:Percentage}= mapreduce(x->x.mark.mark * x.question.value,  +, tallies; init=zero(T))
-tally(tallies::Vararg{Tally{T,M,V}}) where {T<:Points,M<:Grant,V<:Percentage}       = mapreduce(x->x.mark.mark * x.question.value,  +, tallies; init=zero(T))
-tally(tallies::Vararg{Tally{T,M,V}}) where {T<:Points,M<:Subtract,V<:Percentage}    = mapreduce(x->x.mark.mark * x.question.value,  +, tallies; init=zero(T))
-tally(tallies::Vararg{Tally{T,M,V}}) where {T<:Percentage,M<:Grant,V<:Points}       = mapreduce(x->x.mark.mark * x.question.value,  +, tallies; init=zero(V))
-tally(tallies::Vararg{Tally{T,M,V}}) where {T<:Percentage,M<:Subtract,V<:Points}    = mapreduce(x->x.mark.mark * x.question.value,  +, tallies; init=zero(V))
+tally_f(tallies::Vector{Tally{T,M,V}}) where {T<:Points,M<:Grant,V<:Points}           = mapreduce(x->       x.mark.mark,                        +, tallies; init=zero(T))
+tally_f(tallies::Vector{Tally{T,M,V}}) where {T<:Points,M<:Subtract,V<:Points}        = mapreduce(x->x.question.value - x.mark.mark,            +, tallies; init=zero(T))
+tally_f(tallies::Vector{Tally{T,M,V}}) where {T<:Percentage,M<:Grant,V<:Percentage}   = mapreduce(x->       x.mark.mark  * x.question.value,    +, tallies; init=zero(T))
+tally_f(tallies::Vector{Tally{T,M,V}}) where {T<:Percentage,M<:Subtract,V<:Percentage}= mapreduce(x->(1.0 - x.mark.mark) * x.question.value,    +, tallies; init=zero(T))
+tally_f(tallies::Vector{Tally{T,M,V}}) where {T<:Points,M<:Grant,V<:Percentage}       = mapreduce(x->       x.mark.mark  * x.question.value,    +, tallies; init=zero(T))
+tally_f(tallies::Vector{Tally{T,M,V}}) where {T<:Points,M<:Subtract,V<:Percentage}    = mapreduce(x->(1.0 - x.mark.mark) * x.question.value,    +, tallies; init=zero(T))
+tally_f(tallies::Vector{Tally{T,M,V}}) where {T<:Percentage,M<:Grant,V<:Points}       = mapreduce(x->       x.mark.mark,                        +, tallies; init=zero(V))
+tally_f(tallies::Vector{Tally{T,M,V}}) where {T<:Percentage,M<:Subtract,V<:Points}    = mapreduce(x->       x.mark.mark,                        +, tallies; init=zero(V))
 
-function tally(tallies::Vector{<:Tally{T,M,T}}) where {T<:Points,M<:AbstractMark}
-    grant = mapreduce(tally, +, filter(x->isa(x.mark, Grant{T}), tallies); init=zero(T))
-    subtract = mapreduce(tally, +, filter(x->isa(x.mark, Subtract{T}), tallies); init=zero(T))
+function tally(tallies::Vector{<:Tally{<:T,<:M,<:T}})::Percentage where {T<:Points,M<:AbstractMark}
+    grant = tally_f(Vector{Tally{T, Grant{T}, T}}(filter(x->isa(x.mark, Grant{T}), tallies)))
+    subtract = tally_f(Vector{Tally{T, Subtract{T}, T}}(filter(x->isa(x.mark, Subtract{T}), tallies)))
     value = mapreduce(x->x.question.value, +, tallies)
     return (grant + subtract) / value
 end
-function tally(tallies::Vector{<:Tally{T,M,T}}) where {T<:Percentage,M<:AbstractMark}
-    grant = mapreduce(tally, +, filter(x->isa(x.mark, Grant{T}), tallies); init=zero(T))
-    subtract = mapreduce(tally, +, filter(x->isa(x.mark, Subtract{T}), tallies); init=zero(T))
+# function tally(tallies::Vector{<:Y} where {Y<:Tally{T,M,T} where {T<:Percentage,M<:AbstractMark}})
+# T = typeof(tallies[1]).parameters[1]
+function tally(tallies::Vector{<:Tally{<:T,<:M,<:T}})::Percentage where {T<:Percentage,M<:AbstractMark}
+    grant = tally_f(Vector{Tally{T, Grant{T}, T}}(filter(x->isa(x.mark, Grant{T}), tallies)))
+    subtract = tally_f(Vector{Tally{T, Subtract{T}, T}}(filter(x->isa(x.mark, Subtract{T}), tallies)))
     value = mapreduce(x->x.question.value, +, tallies)
-    return grant - subtract
+    return (grant + subtract) * value
 end
-function tally(tallies::Vector{<:Tally{T,M,V}}) where {T<:Points,M<:AbstractMark,V<:Percentage}
-    grant = mapreduce(tally, +, filter(x->isa(x.mark, Grant{T}), tallies); init=zero(V))
-    subtract = mapreduce(tally, +, filter(x->isa(x.mark, Subtract{T}), tallies); init=zero(V))
+function tally(tallies::Vector{<:Tally{<:T,<:M,<:V}})::Percentage where {T<:Points,M<:AbstractMark,V<:Percentage}
+    grant = tally_f(Vector{Tally{T, Grant{V}, V}}(filter(x->isa(x.mark, Grant{V}), tallies)))
+    subtract = tally_f(Vector{Tally{T, Subtract{V}, V}}(filter(x->isa(x.mark, Subtract{V}), tallies)))
     value = mapreduce(x->x.question.value, +, tallies)
-    # return (grant - subtract) / value
-    return grant - subtract
+    return (grant + subtract) / value
+    # return grant - subtract
 end
-function tally(tallies::Vector{<:Tally{T,M,V}}) where {T<:Percentage,M<:AbstractMark,V<:Points}
-    grant = mapreduce(tally, +, filter(x->isa(x.mark, Grant{V}), tallies); init=zero(T))
-    subtract = mapreduce(tally, +, filter(x->isa(x.mark, Subtract{V}), tallies); init=zero(T))
+function tally(tallies::Vector{<:Tally{<:T,<:M,<:V}})::Percentage where {T<:Percentage,M<:AbstractMark,V<:Points}
+    grant = tally_f(Vector{Tally{T, Grant{V}, V}}(filter(x->isa(x.mark, Grant{V}), tallies)))
+    subtract = tally_f(Vector{Tally{T, Subtract{V}, V}}(filter(x->isa(x.mark, Subtract{V}), tallies)))
     value = mapreduce(x->x.question.value, +, tallies)
-    return grant - subtract
+    return (grant + subtract) * value
 end
 function tally(tallies::Vector{<:AbstractTally})
-    mapreduce(tally, +, tallies)
+    return mapreduce(tally, +, tallies)
 end
 
 score2letter(p::Percentage) = convert(Char, p)
