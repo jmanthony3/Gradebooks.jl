@@ -143,10 +143,12 @@ function view_gradebook(gb::Gradebook, att::Gradebook, assignments::Vector{Assig
         backend         = :html,
         stand_alone     = true
     )
-    open("output.html", "w") do io
+    out = joinpath([pwd(), "gradebook", "build", "gradebook.html"])
+    mkpath(dirname(out))
+    open(out, "w") do io
         write(io, repr(p))
     end
-    run(`cmd /c start output.html`)
+    run(`cmd /c start $out`)
 end
 
 function view_gradebook(gb::Gradebook, att::Gradebook, identifier::String, assignments::Vector{Assignment})
@@ -271,10 +273,12 @@ function view_gradebook(gb::Gradebook, att::Gradebook, identifier::String, assig
         backend         = :html,
         stand_alone     = true
     )
-    open("output.html", "w") do io
+    out = joinpath([pwd(), "gradebook", "build", "gradebook.html"])
+    mkpath(dirname(out))
+    open(out, "w") do io
         write(io, repr(p))
     end
-    run(`cmd /c start output.html`)
+    run(`cmd /c start $out`)
 end
 
 function view_attendance(att::Gradebook, lectures::Vector{Assignment})
@@ -386,10 +390,12 @@ function view_attendance(att::Gradebook, lectures::Vector{Assignment})
         backend         = :html,
         stand_alone     = true
     )
-    open("output.html", "w") do io
+    out = joinpath([pwd(), "gradebook", "build", "attendance.html"])
+    mkpath(dirname(out))
+    open(out, "w") do io
         write(io, repr(p))
     end
-    run(`cmd /c start output.html`)
+    run(`cmd /c start $out`)
 end
 
 function view_attendance(att::Gradebook, identifier::String, lectures::Vector{Assignment})
@@ -501,8 +507,10 @@ function view_attendance(att::Gradebook, identifier::String, lectures::Vector{As
         backend         = :html,
         stand_alone     = true
     )
-    open("output.html", "w") do io
+    out = joinpath([pwd(), "gradebook", "build", "attendance.html"])
+    mkpath(dirname(out))
+    open(out, "w") do io
         write(io, repr(p))
     end
-    run(`cmd /c start output.html`)
+    run(`cmd /c start $out`)
 end
