@@ -90,7 +90,7 @@ function view_gradebook(gb::Gradebook, assignments::Vector{Assignment})
         summary_rows    = [
             (matrix, j)->j == ncol(data)-3 ? mapreduce(x->x.value, +, assignments) : ((5 < j <= length(assignments)+5) ? assignments[j - 5].value : ""),
             (matrix, j)->(5 < j <= length(assignments)+5) ? assignments[j - 5].due : "",
-            (matrix, j)->j == ncol(data)-3 ? mapreduce(x->x.value, +, assignments) : (
+            (matrix, j)->j == ncol(data)-3 ? Points.(sum(data[:, j])/length(data[:, j])) : (
                 j == ncol(data)-2 ? (Points.(sum(data[:, j-1])/length(data[:, j-1])) / mapreduce(x->x.value, +, assignments)) : (
                     j == ncol(data)-1 ? score2letter(Points.(sum(data[:, j-2])/length(data[:, j-2])) / mapreduce(x->x.value, +, assignments)) : (
                         j == ncol(data) ? Points.(sum(data[:, j])/length(data[:, j])) : (
@@ -220,7 +220,7 @@ function view_gradebook(gb::Gradebook, att::Gradebook, assignments::Vector{Assig
         summary_rows    = [
             (matrix, j)->j == ncol(data)-3 ? mapreduce(x->x.value, +, assignments) : ((5 < j <= length(assignments)+5) ? assignments[j - 5].value : ""),
             (matrix, j)->(5 < j <= length(assignments)+5) ? assignments[j - 5].due : "",
-            (matrix, j)->j == ncol(data)-3 ? mapreduce(x->x.value, +, assignments) : (
+            (matrix, j)->j == ncol(data)-3 ? Points.(sum(data[:, j])/length(data[:, j])) : (
                 j == ncol(data)-2 ? (Points.(sum(data[:, j-1])/length(data[:, j-1])) / mapreduce(x->x.value, +, assignments)) : (
                     j == ncol(data)-1 ? score2letter(Points.(sum(data[:, j-2])/length(data[:, j-2])) / mapreduce(x->x.value, +, assignments)) : (
                         j == ncol(data) ? Points.(sum(data[:, j])/length(data[:, j])) : (
@@ -350,7 +350,7 @@ function view_gradebook(gb::Gradebook, att::Gradebook, identifier::String, assig
         summary_rows    = [
             (matrix, j)->j == ncol(data)-3 ? mapreduce(x->x.value, +, assignments) : ((5 < j <= length(assignments)+5) ? assignments[j - 5].value : ""),
             (matrix, j)->(5 < j <= length(assignments)+5) ? assignments[j - 5].due : "",
-            (matrix, j)->j == ncol(data)-3 ? mapreduce(x->x.value, +, assignments) : (
+            (matrix, j)->j == ncol(data)-3 ? Points.(sum(data[:, j])/length(data[:, j])) : (
                 j == ncol(data)-2 ? (Points.(sum(data[:, j-1])/length(data[:, j-1])) / mapreduce(x->x.value, +, assignments)) : (
                     j == ncol(data)-1 ? score2letter(Points.(sum(data[:, j-2])/length(data[:, j-2])) / mapreduce(x->x.value, +, assignments)) : (
                         j == ncol(data) ? Points.(sum(data[:, j])/length(data[:, j])) : (
