@@ -344,7 +344,7 @@ function view_gradebook(gb::Gradebook, att::Gradebook, identifier::String, assig
         data[occursin.(get_student(gb.who.roster, identifier).email, data[!, "Email"]), :];
         title           = "$(gb.who.codename_long): $(gb.who.course.name)",
         subtitle        = "Class Gradebook",
-        row_labels      = row_labels,
+        row_labels      = [row_labels[findfirst(occursin.(get_student(gb.who.roster, identifier).email, data[!, "Email"]))]],
         column_labels   = column_labels,
         summary_row_labels=["Worth", "Due", "Average (Points)", "Average (Percentage)"], # , "S.Dev", "Running Average (Percentage)"],
         summary_rows    = [
@@ -582,7 +582,7 @@ function view_attendance(att::Gradebook, identifier::String, lectures::Vector{As
         data[occursin.(get_student(att.who.roster, identifier).email, data[!, "Email"]), :];
         title           = "$(att.who.codename_long): $(att.who.course.name)",
         subtitle        = "Class Attendance",
-        row_labels      = row_labels,
+        row_labels      = [row_labels[findfirst(occursin.(get_student(att.who.roster, identifier).email, data[!, "Email"]))]],
         column_labels   = column_labels,
         summary_row_labels=["Worth", "Due", "Average (Points)", "Average (Percentage)"], # , "S.Dev", "Running Average (Percentage)"],
         summary_rows    = [
