@@ -148,7 +148,7 @@ function view_gradebook(gb::Gradebook, assignments::Vector{Assignment})
     open(out, "w") do io
         write(io, repr(p))
     end
-    run(`cmd /c start $out`)
+    # run(`cmd /c start $out`)
 end
 
 function view_gradebook(gb::Gradebook, att::Gradebook, assignments::Vector{Assignment})
@@ -278,7 +278,7 @@ function view_gradebook(gb::Gradebook, att::Gradebook, assignments::Vector{Assig
     open(out, "w") do io
         write(io, repr(p))
     end
-    run(`cmd /c start $out`)
+    # run(`cmd /c start $out`)
 end
 
 function view_gradebook(gb::Gradebook, att::Gradebook, identifier::String, assignments::Vector{Assignment})
@@ -408,7 +408,7 @@ function view_gradebook(gb::Gradebook, att::Gradebook, identifier::String, assig
     open(out, "w") do io
         write(io, repr(p))
     end
-    run(`cmd /c start $out`)
+    # run(`cmd /c start $out`)
 end
 
 function view_attendance(att::Gradebook, lectures::Vector{Assignment})
@@ -525,7 +525,7 @@ function view_attendance(att::Gradebook, lectures::Vector{Assignment})
     open(out, "w") do io
         write(io, repr(p))
     end
-    run(`cmd /c start $out`)
+    # run(`cmd /c start $out`)
 end
 
 function view_attendance(att::Gradebook, identifier::String, lectures::Vector{Assignment})
@@ -642,5 +642,5 @@ function view_attendance(att::Gradebook, identifier::String, lectures::Vector{As
     open(out, "w") do io
         write(io, repr(p))
     end
-    run(`cmd /c start $out`)
+    # run(`cmd /c start $out`)
 end
