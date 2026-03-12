@@ -35,12 +35,20 @@ struct Assignment{T<:AbstractAssignment, Y<:AssignmentType}
     name::String
     value::Points
     due::DateTime
-    questions::Vector{Question}
+    questions::Vector{Union{Question,Rubric}}
     # class::Class
     codename::Symbol
     function Assignment{T,Y}(name, value, due_date, questions, codename) where {T<:AbstractAssignment, Y<:AssignmentType}
-        if mapreduce(x->x.value, +, questions) ∉ [value, Percentage(1.0)]
-            @error "Value distribution of questions does not equal assignment" Σq=mapreduce(x->x.value, +, questions) assignment=(name, value)
+        value_q, question_or_rubric = if any(q->isa(q, Question), questions)
+            mapreduce(x->x.value, +, filter(x->isa(x, Question), questions); init=zero(typeof(first(questions).value))), true
+        elseif any(q->isa(q, Rubric), questions)
+            mapreduce(x->x.source.value, +, filter(x->isa(x, Rubric), questions); init=zero(typeof(first(questions).value))), false
+        end
+        if question_or_rubric && any(q->isa(q, Rubric), questions)
+            value_q += mapreduce(x->x.source.value, +, filter(x->isa(x, Rubric), questions); init=zero(typeof(first(questions).value)))
+        end
+        if value_q ∉ [value, Percentage(1.0)]
+            @error "Value distribution of questions does not equal assignment" Σq=value_q assignment=(name, value)
         end
         codename = if isa(codename, Symbol)
             codename
