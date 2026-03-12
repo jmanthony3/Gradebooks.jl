@@ -62,11 +62,11 @@ function fill_grades!(gb::Gradebook{Class}, src, assignments::Vararg{Assignment}
         for (key, val) in grades
             gb.raw_score[occursin.(key, gb.raw_score[!, "Email"]), assignment.codename] .= val.submission.score.score
             t = val.submission.submitted - val.assignment.due
-            p = if t < Millisecond(1)
+            p = Points(if t < Millisecond(1)
                 0.0
             else
                 val.assignment.value * (t < Day(7) ? 0.1 : (t < Day(14) ? 0.2 : 1.0))
-            end
+            end)
             gb.penalty[occursin.(key, gb.penalty[!, "Email"]), assignment.codename] .= p
             gb.total[occursin.(key, gb.total[!, "Email"]), assignment.codename] .= gb.raw_score[occursin.(key, gb.raw_score[!, "Email"]), assignment.codename] - gb.penalty[occursin.(key, gb.penalty[!, "Email"]), assignment.codename]
         end
@@ -78,11 +78,11 @@ function fill_grades!(gb::Gradebook{Class}, assignment::Assignment, grades::Vara
     for grade in collect(grades)
         gb.raw_score[occursin.(grade.student.email, gb.raw_score[!, "Email"]), assignment.codename] .= grade.submission.score.score
         t = grade.submission.submitted - grade.assignment.due
-        p = if t < Millisecond(1)
+        p = Points(if t < Millisecond(1)
             0.0
         else
             grade.assignment.value * (t < Day(7) ? 0.1 : (t < Day(14) ? 0.2 : 1.0))
-        end
+        end)
         gb.penalty[occursin.(grade.student.email, gb.penalty[!, "Email"]), assignment.codename] .= p
         gb.total[occursin.(grade.student.email, gb.total[!, "Email"]), assignment.codename] .= gb.raw_score[occursin.(grade.student.email, gb.raw_score[!, "Email"]), assignment.codename] - gb.penalty[occursin.(grade.student.email, gb.penalty[!, "Email"]), assignment.codename]
     end
