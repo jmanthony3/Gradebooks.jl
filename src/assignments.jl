@@ -83,31 +83,14 @@ Score(assignment::Assignment, tallies::Vararg{<:Tally}; comment="") = Score(assi
 Score(assignment::Assignment, marks::Vector{<:AbstractMark}; comment="") = Score(assignment, map(x->Tally(assignment.questions[x[1]], x[2]), enumerate(marks)); comment=comment)
 function Score(assignment::Assignment, marks::Vector{Union{<:AbstractMark,<:Vector{<:AbstractMark}}}; comment="")
     score = Score(Points(0.0), assignment.value; comment=comment)
-    @show @__LINE__
     score_f(x) = Score(tally(map(i->Tally(assignment.questions[i], marks[i]), x)), mapreduce(i->assignment.questions[i].value, +, x); comment=comment)
-    score_g(x) = mapreduce(y->Score(tally(map(i->Tally(assignment.questions[i][y[1]], marks[i][y[2]]), x)), enumerate(y); comment=comment), +, marks[x])
+    score_g(x) = mapreduce(y->Score(tally(y[1]), y[2]; comment=comment), +, zip(map(i->map(y->Tally(y[1], y[2]), zip(assignment.questions[i].metrics, marks[i])), x), mapreduce(i->assignment.questions[i].source.value, +, x)))
     marks_idx = findall(x->isa(x, AbstractMark), marks)
     vectormarks_idx = findall(x->isa(x, Vector{<:AbstractMark}), marks)
-    @show vectormarks_idx
     if !isempty(marks_idx)
         score += score_f(marks_idx)
     end
-    @show @__LINE__
     if !isempty(vectormarks_idx)
-        x = vectormarks_idx
-        @show @__LINE__
-        @show tallies = map(i->Tally(assignment.questions[i], marks[i]), x)
-        @show @__LINE__
-        @show typeof(tallies)
-        @show @__LINE__
-        @show tallies
-        @show @__LINE__
-        @show tally(tallies)
-        @show @__LINE__
-        @show mapreduce(i->assignment.questions[i].value, +, x)
-        @show @__LINE__
-        # Score(tally(map(i->Tally(assignment.questions[i], marks[i]), x)), mapreduce(y->y.value, +, marks[x]); comment=comment)
-        @show score_f(marks_idx)
         score += score_g(vectormarks_idx)
     end
     return score
