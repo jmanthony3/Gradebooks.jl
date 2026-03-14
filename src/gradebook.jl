@@ -12,6 +12,7 @@ struct Gradebook{T<:Union{Class,Student}} <: AbstractGradebook
     assignments::Vector{Assignment}
     # Gradebook{T}(who, assignments, df) where {T<:Union{Class,Student}} = new{T}(who, assignments, df)
 end
+Gradebook() = new()
 # Gradebook{Class}(class::Class, assignments::Vector{Assignment}) = new{Class}(class, assignments, DataFrame(zeros((length(class.roster), length(assignments))), [a.name for a in assignments]))
 function Gradebook(who::T, assignments::Vector{Assignment}) where {T<:Union{Class,Student}}
     names = [string(a.codename) for a in assignments]
