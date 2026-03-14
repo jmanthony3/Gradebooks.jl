@@ -1,5 +1,5 @@
 export AbstractScore, Points, Percentage
-export Question
+export Question, Rubric
 export AbstractMark, Grant, Subtract
 export AbstractTally, Tally, tally
 export score2letter, Score
@@ -34,6 +34,25 @@ struct Question{T<:AbstractScore}
     end
 end
 Question(name, value) = Question{typeof(value)}(name, value, name)
+
+struct Rubric
+    name::String
+    source::Question
+    metrics::Vector{Question}
+    codename::Symbol
+    function Rubric(name, value, metrics, codename)
+        codename = if isa(codename, Symbol)
+            codename
+        elseif isa(codename, String)
+            string2codename(codename)
+        else
+            @error "`codename` must be of type Symbol or String."
+        end
+        return new(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), value, metrics, uppercase2symbol(codename))
+    end
+end
+Rubric(name, source, metrics) = Rubric(name, source, metrics, name)
+Rubric(source, metrics) = Rubric(source.name, source, metrics, source.name)
 
 abstract type AbstractMark end
 struct Grant{T<:AbstractScore} <: AbstractMark # ,V<:AbstractScore} <: AbstractMark
@@ -93,7 +112,7 @@ function tally(tallies::Vector{<:Tally{<:T,<:M,<:V}})::Percentage where {T<:Perc
     return (grant + subtract) * value
 end
 function tally(tallies::Vector{<:AbstractTally})
-    return mapreduce(tally, +, tallies)
+    return mapreduce(x->tally(collect(x)), +, map(x->Vector{x}(tallies[findall(y->isa(y, x), tallies)]), union(typeof.(tallies))))
 end
 
 score2letter(p::Percentage) = convert(Char, p)
