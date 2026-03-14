@@ -112,7 +112,7 @@ function tally(tallies::Vector{<:Tally{<:T,<:M,<:V}})::Percentage where {T<:Perc
     return (grant + subtract) * value
 end
 function tally(tallies::Vector{<:AbstractTally})
-    return mapreduce(tally, +, tallies)
+    return mapreduce(x->tally(collect(x)), +, map(x->Vector{x}(tallies[findall(y->isa(y, x), tallies)]), union(typeof.(tallies))))
 end
 
 score2letter(p::Percentage) = convert(Char, p)
