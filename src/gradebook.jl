@@ -53,7 +53,13 @@ function fill_grades!(gb::Gradebook{Class}, src, assignments::Vararg{Assignment}
                 get_student(gb.who.roster, row[1])
             catch
             else
-                submissions_dict[row[1]] = Submission(assignment.due, Score(Points(row[2]), assignment.value))
+                submissions_dict[row[1]] = Submission(assignment.due, Score(Points(row[2]), assignment.value), [Tally(try
+                    only(assignment.questions)
+                catch e
+                    if isa(e, ArgumentError)
+                        Question("{Completion}", assignment.value)
+                    end
+                end, Grant(Points(row[2])))])
             end
         end
 
