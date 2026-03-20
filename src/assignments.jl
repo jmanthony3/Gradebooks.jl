@@ -35,12 +35,20 @@ struct Assignment{T<:AbstractAssignment, Y<:AssignmentType}
     name::String
     value::Points
     due::DateTime
-    questions::Vector{Question}
+    questions::Vector{Union{Question,Rubric}}
     # class::Class
     codename::Symbol
     function Assignment{T,Y}(name, value, due_date, questions, codename) where {T<:AbstractAssignment, Y<:AssignmentType}
-        if mapreduce(x->x.value, +, questions) ∉ [value, Percentage(1.0)]
-            @error "Value distribution of questions does not equal assignment" Σq=mapreduce(x->x.value, +, questions) assignment=(name, value)
+        value_q, question_or_rubric = if any(q->isa(q, Question), questions)
+            mapreduce(x->x.value, +, filter(x->isa(x, Question), questions); init=zero(typeof(first(questions).value))), true
+        elseif any(q->isa(q, Rubric), questions)
+            mapreduce(x->x.source.value, +, filter(x->isa(x, Rubric), questions); init=zero(typeof(first(questions).value))), false
+        end
+        if question_or_rubric && any(q->isa(q, Rubric), questions)
+            value_q += mapreduce(x->x.source.value, +, filter(x->isa(x, Rubric), questions); init=zero(typeof(first(questions).value)))
+        end
+        if isa(value_q, Percentage) ? value_q != Percentage(1.0) : (typeof(value_q) == typeof(value) ? (value_q != value) : true)
+            @error "Value distribution of questions does not equal assignment" Σq=value_q assignment=(name, value)
         end
         codename = if isa(codename, Symbol)
             codename
@@ -73,14 +81,37 @@ Score(assignment::Assignment, tallies::Vector{<:Tally}; comment="") = Score(tall
 Score(assignment::Assignment, tallies::Vararg{<:Tally}; comment="") = Score(assignment, collect(tallies); comment=comment)
 # function tally(assignment::Assignment, tallies::Vector{<:Union{<:AbstractMark, Tuple{<:AbstractMark, String}}})
 Score(assignment::Assignment, marks::Vector{<:AbstractMark}; comment="") = Score(assignment, map(x->Tally(assignment.questions[x[1]], x[2]), enumerate(marks)); comment=comment)
+function Score(assignment::Assignment, marks::Vector{Union{<:AbstractMark,<:Vector{<:AbstractMark}}}; comment="")
+    score = Score(Points(0.0), zero(typeof(assignment.value)); comment=comment)
+    score_f(x) = mapreduce(z->Score(tally(map(i->Tally(assignment.questions[x][i], marks[x][i]), z)), mapreduce(i->assignment.questions[x][i].value, +, z); comment=comment), +, map(y->findall(typeof.(marks[x]) .== y), union(typeof.(marks[x]))))
+    score_g(x) = mapreduce(z->Score(tally(z[1]), z[2]; comment=comment), +, zip(map(i->map(y->Tally(y[1], y[2]), zip(assignment.questions[i].metrics, marks[i])), x), mapreduce(i->assignment.questions[i].source.value, +, x)))
+    score_h(x) = mapreduce(score_g, +, map(y->x[findall(typeof.(marks[x]) .== y)], union(typeof.(marks[x]))))
+    marks_idx = findall(x->isa(x, AbstractMark), marks)
+    vectormarks_idx = findall(x->isa(x, Vector{<:AbstractMark}), marks)
+    if !isempty(marks_idx)
+        score += score_f(marks_idx)
+    end
+    if !isempty(vectormarks_idx)
+        score += score_h(vectormarks_idx)
+    end
+    return score
+end
+function Score(assignment::Assignment, marks::Vector{Any}; comment="")
+    try
+        return Score(assignment, Vector{Union{<:AbstractMark,<:Vector{<:AbstractMark}}}(marks))
+    catch e
+        @error e
+    end
+end
 
 
 struct Submission # {T<:Assignment}
     # assignment::Assignment
     submitted::Union{DateTime, Dates.CompoundPeriod, Millisecond}
     score::Score
+    tallies::Vector{Tally}
     # Submission(assignment, submitted, score) = new(assignment, parse_datetime(submitted), score)
-    Submission(submitted, score) = new(parse_datetime(submitted), score)
+    Submission(submitted, score, tallies) = new(parse_datetime(submitted), score, tallies)
 end
 
 
@@ -92,7 +123,7 @@ struct Grade # {T<:Assignment}
     submission::Submission
 end
 # Grade(student, submission) = Grade(student, submission.assignment, submission)
-Grade(student, assignment::Assignment, submitted, tallies::Vararg{Tally{T,M,V}}) where {T<:AbstractScore,M<:AbstractMark,V<:AbstractScore} = Grade(student, assignment, Submission(submitted, Score(assignment.value, map(tally, tallies))))
+Grade(student, assignment::Assignment, submitted, tallies::Vararg{Tally{T,M,V}}) where {T<:AbstractScore,M<:AbstractMark,V<:AbstractScore} = Grade(student, assignment, Submission(submitted, Score(assignment.value, map(tally, tallies))), collect(tallies))
 
 
 islate(x::Millisecond) = x > Millisecond(0)
