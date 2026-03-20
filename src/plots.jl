@@ -92,7 +92,8 @@ function view_assignment(assignment::Assignment, grades::Vector{Grade})
         column_labels   = column_labels,
         summary_row_labels=["Worth", "Due", "Average (Points)", "Average (Percentage)"], # , "S.Dev", "Running Average (Percentage)"],
         summary_rows    = [
-            (matrix, j)->j == ncol(data)-3 ? mapreduce(x->(isa(x, Rubric) ? x.source.value : x.value), +, assignment.questions) : ((4 < j <= length(assignment.questions)+4) ? (isa(assignment.questions[j - 4], Rubric) ? assignment.questions[j - 4].source.value : assignment.questions[j - 4].value) : ""),
+            # (matrix, j)->j == ncol(data)-3 ? mapreduce(x->(isa(x, Rubric) ? x.source.value : x.value), +, assignment.questions) : ((4 < j <= length(assignment.questions)+4) ? (isa(assignment.questions[j - 4], Rubric) ? assignment.questions[j - 4].source.value : assignment.questions[j - 4].value) : ""),
+            (matrix, j)->j == ncol(data)-3 ? assignment.value : ((4 < j <= length(assignment.questions)+4) ? (isa(assignment.questions[j - 4], Rubric) ? assignment.questions[j - 4].source.value : assignment.questions[j - 4].value) : ""),
             (matrix, j)->(4 < j <= length(assignment.questions)+4) ? assignment.due : "",
             (matrix, j)->j == ncol(data)-3 ? Points.(sum(data[:, j])/length(data[:, j])) : (
                 j == ncol(data)-2 ? (Points.(sum(data[:, j-1])/length(data[:, j-1])) / mapreduce(x->(isa(x, Rubric) ? x.source.value : x.value), +, assignment.questions)) : (
