@@ -2,7 +2,7 @@ export string2codename
 export AssignmentType, Group, Individual
 export AbstractAssignment, AbstractAttendance, AbstractExam, AbstractHomework, AbstractPaper, AbstractPresentation, AbstractProject, AbstractQuiz
 export Assignment, Attendance, Exam, Homework, Paper, Presentation, Project, Quiz
-export Submission, Grade
+export Submission, Grade, grade
 export islate, late_penalty
 
 
@@ -124,6 +124,23 @@ struct Grade # {T<:Assignment}
 end
 # Grade(student, submission) = Grade(student, submission.assignment, submission)
 Grade(student, assignment::Assignment, submitted, tallies::Vararg{Tally{T,M,V}}) where {T<:AbstractScore,M<:AbstractMark,V<:AbstractScore} = Grade(student, assignment, Submission(submitted, Score(assignment.value, map(tally, tallies))), collect(tallies))
+grade_f(identifier, roster, assignment, submitted, score, tallies) = Grade(get_student(roster, identifier), assignment, Submission(submitted, score, tallies))
+function grade(identifier, roster, assignment, submitted, marks)
+    tallies = map(x->begin
+        # @show x
+        if isa(assignment.questions[x[1]], Rubric)
+            # @show x[1]
+            # @show x[2]
+            _assignment = Exam(Individual, "{$(assignment.questions[x[1]].source.name)}", assignment.questions[x[1]].source.value, assignment.due, map(y->Question(y.name, y.value), assignment.questions[x[1]].metrics))
+            Tally(assignment.questions[x[1]].source, Grant(Points(Score(_assignment, x[2]).score)))
+        else
+            # Tally(assignment.questions[x[1]], x[2])
+            _assignment = Exam(Individual, "{$(assignment.questions[x[1]].name)}", assignment.questions[x[1]].value, assignment.due, [assignment.questions[x[1]]])
+            Tally(assignment.questions[x[1]], Grant(Points(Score(_assignment, [x[2]]).score)))
+        end
+    end, enumerate(marks))
+    return grade_f(identifier, roster, assignment, submitted, Score(assignment, tallies), tallies)
+end
 
 
 islate(x::Millisecond) = x > Millisecond(0)
