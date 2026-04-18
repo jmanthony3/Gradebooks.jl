@@ -162,7 +162,7 @@ function view_gradebook(gb::Gradebook, assignments::Vector{Assignment}; includes
         final_grades[i] = (collect(select(DataFrame(row), Not(["ID", "Preferred", "Last", "Team", "Email"]))[1, :]) |> sum)
     end
 
-    assignment_total = use_coursevalue ? COURSE_GRADESCALE : mapreduce(x->x.value, +, collect(assignments)[begin:end-(includes_bonus ? 1 : 0)])
+    assignment_total = Points(use_coursevalue ? COURSE_GRADESCALE : mapreduce(x->x.value, +, collect(assignments)[begin:end-(includes_bonus ? 1 : 0)]))
 
     data = gb.total[!, Cols(["ID", "Preferred", "Last", "Team", "Email"], map(x->x.codename, assignments))]
     insertcols!(data, "Total"=>Points.(vec(final_grades)))
@@ -294,7 +294,7 @@ function view_gradebook(gb::Gradebook, att::Gradebook, assignments::Vector{Assig
         final_grades[i] = (collect(select(DataFrame(row), Not(["ID", "Preferred", "Last", "Team", "Email"]))[1, :]) |> sum) - att.penalty[i, end]
     end
 
-    assignment_total = use_coursevalue ? COURSE_GRADESCALE : mapreduce(x->x.value, +, collect(assignments)[begin:end-(includes_bonus ? 1 : 0)])
+    assignment_total = Points(use_coursevalue ? COURSE_GRADESCALE : mapreduce(x->x.value, +, collect(assignments)[begin:end-(includes_bonus ? 1 : 0)]))
 
     data = gb.total[!, Cols(["ID", "Preferred", "Last", "Team", "Email"], map(x->x.codename, assignments))]
     insertcols!(data, "Total"=>Points.(vec(final_grades)))
@@ -426,7 +426,7 @@ function view_gradebook(gb::Gradebook, att::Gradebook, identifier::String, assig
         final_grades[i] = (collect(select(DataFrame(row), Not(["ID", "Preferred", "Last", "Team", "Email"]))[1, :]) |> sum) - att.penalty[i, end]
     end
 
-    assignment_total = use_coursevalue ? COURSE_GRADESCALE : mapreduce(x->x.value, +, collect(assignments)[begin:end-(includes_bonus ? 1 : 0)])
+    assignment_total = Points(use_coursevalue ? COURSE_GRADESCALE : mapreduce(x->x.value, +, collect(assignments)[begin:end-(includes_bonus ? 1 : 0)]))
 
     data = gb.total[!, Cols(["ID", "Preferred", "Last", "Team", "Email"], map(x->x.codename, assignments))]
     insertcols!(data, "Total"=>Points.(vec(final_grades)))
