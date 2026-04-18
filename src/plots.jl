@@ -162,13 +162,13 @@ function view_gradebook(gb::Gradebook, assignments::Vector{Assignment}; includes
         final_grades[i] = (collect(select(DataFrame(row), Not(["ID", "Preferred", "Last", "Team", "Email"]))[1, :]) |> sum)
     end
 
-    assignment_total = use_coursevalue ? COURSE_GRADESCALE : collect(assignments)[begin:end-(includes_bonus ? 1 : 0)]
+    assignment_total = use_coursevalue ? COURSE_GRADESCALE : mapreduce(x->x.value, +, collect(assignments)[begin:end-(includes_bonus ? 1 : 0)])
 
     data = gb.total[!, Cols(["ID", "Preferred", "Last", "Team", "Email"], map(x->x.codename, assignments))]
     insertcols!(data, "Total"=>Points.(vec(final_grades)))
-    insertcols!(data, "Percent"=>Percentage.(vec(final_grades ./ sum(map(x->x.value, assignment_total)))))
-    insertcols!(data, "Letter"=>score2letter.(Percentage.(vec(final_grades ./ sum(map(x->x.value, assignment_total))))))
-    insertcols!(data, "Missing"=>Points.(abs.(vec(final_grades) .- mapreduce(x->x.value, +, assignment_total))))
+    insertcols!(data, "Percent"=>Percentage.(vec(final_grades ./ assignment_total)))
+    insertcols!(data, "Letter"=>score2letter.(Percentage.(vec(final_grades ./ assignment_total))))
+    insertcols!(data, "Missing"=>Points.(abs.(vec(final_grades) .- assignment_total)))
     row_labels = [join(collect(row[1:5]), " ") for row in eachrow(data)]
     column_labels = [
         names(data),
@@ -225,11 +225,11 @@ function view_gradebook(gb::Gradebook, assignments::Vector{Assignment}; includes
         column_labels   = column_labels,
         summary_row_labels=["Worth", "Due", "Average (Points)", "Average (Percentage)"], # , "S.Dev", "Running Average (Percentage)"],
         summary_rows    = [
-            (matrix, j)->j == ncol(data)-3 ? mapreduce(x->x.value, +, assignment_total) : ((5 < j <= length(assignments)+5) ? assignments[j - 5].value : ""),
+            (matrix, j)->j == ncol(data)-3 ? assignment_total : ((5 < j <= length(assignments)+5) ? assignments[j - 5].value : ""),
             (matrix, j)->(5 < j <= length(assignments)+5) ? assignments[j - 5].due : "",
             (matrix, j)->j == ncol(data)-3 ? Points.(sum(data[:, j])/length(data[:, j])) : (
-                j == ncol(data)-2 ? (Points.(sum(data[:, j-1])/length(data[:, j-1])) / mapreduce(x->x.value, +, assignment_total)) : (
-                    j == ncol(data)-1 ? score2letter(Points.(sum(data[:, j-2])/length(data[:, j-2])) / mapreduce(x->x.value, +, assignment_total)) : (
+                j == ncol(data)-2 ? (Points.(sum(data[:, j-1])/length(data[:, j-1])) / assignment_total) : (
+                    j == ncol(data)-1 ? score2letter(Points.(sum(data[:, j-2])/length(data[:, j-2])) / assignment_total) : (
                         j == ncol(data) ? Points.(sum(data[:, j])/length(data[:, j])) : (
                             (5 < j <= length(assignments)+5) ? Points.(sum(data[:, j])/length(data[:, j])) : "")))),
             (matrix, j)->(5 < j <= length(assignments)+5) ? Percentage.(Points.(sum(data[:, j])/length(data[:, j]))/assignments[j - 5].value) : "",
@@ -294,13 +294,13 @@ function view_gradebook(gb::Gradebook, att::Gradebook, assignments::Vector{Assig
         final_grades[i] = (collect(select(DataFrame(row), Not(["ID", "Preferred", "Last", "Team", "Email"]))[1, :]) |> sum) - att.penalty[i, end]
     end
 
-    assignment_total = use_coursevalue ? COURSE_GRADESCALE : collect(assignments)[begin:end-(includes_bonus ? 1 : 0)]
+    assignment_total = use_coursevalue ? COURSE_GRADESCALE : mapreduce(x->x.value, +, collect(assignments)[begin:end-(includes_bonus ? 1 : 0)])
 
     data = gb.total[!, Cols(["ID", "Preferred", "Last", "Team", "Email"], map(x->x.codename, assignments))]
     insertcols!(data, "Total"=>Points.(vec(final_grades)))
-    insertcols!(data, "Percent"=>Percentage.(vec(final_grades ./ sum(map(x->x.value, assignment_total)))))
-    insertcols!(data, "Letter"=>score2letter.(Percentage.(vec(final_grades ./ sum(map(x->x.value, assignment_total))))))
-    insertcols!(data, "Missing"=>Points.(abs.(vec(final_grades) .- mapreduce(x->x.value, +, assignment_total))))
+    insertcols!(data, "Percent"=>Percentage.(vec(final_grades ./ assignment_total)))
+    insertcols!(data, "Letter"=>score2letter.(Percentage.(vec(final_grades ./ assignment_total))))
+    insertcols!(data, "Missing"=>Points.(abs.(vec(final_grades) .- assignment_total)))
     row_labels = [join(collect(row[1:5]), " ") for row in eachrow(data)]
     column_labels = [
         names(data),
@@ -357,11 +357,11 @@ function view_gradebook(gb::Gradebook, att::Gradebook, assignments::Vector{Assig
         column_labels   = column_labels,
         summary_row_labels=["Worth", "Due", "Average (Points)", "Average (Percentage)"], # , "S.Dev", "Running Average (Percentage)"],
         summary_rows    = [
-            (matrix, j)->j == ncol(data)-3 ? mapreduce(x->x.value, +, assignment_total) : ((5 < j <= length(assignments)+5) ? assignments[j - 5].value : ""),
+            (matrix, j)->j == ncol(data)-3 ? assignment_total : ((5 < j <= length(assignments)+5) ? assignments[j - 5].value : ""),
             (matrix, j)->(5 < j <= length(assignments)+5) ? assignments[j - 5].due : "",
             (matrix, j)->j == ncol(data)-3 ? Points.(sum(data[:, j])/length(data[:, j])) : (
-                j == ncol(data)-2 ? (Points.(sum(data[:, j-1])/length(data[:, j-1])) / mapreduce(x->x.value, +, assignment_total)) : (
-                    j == ncol(data)-1 ? score2letter(Points.(sum(data[:, j-2])/length(data[:, j-2])) / mapreduce(x->x.value, +, assignment_total)) : (
+                j == ncol(data)-2 ? (Points.(sum(data[:, j-1])/length(data[:, j-1])) / assignment_total) : (
+                    j == ncol(data)-1 ? score2letter(Points.(sum(data[:, j-2])/length(data[:, j-2])) / assignment_total) : (
                         j == ncol(data) ? Points.(sum(data[:, j])/length(data[:, j])) : (
                             (5 < j <= length(assignments)+5) ? Points.(sum(data[:, j])/length(data[:, j])) : "")))),
             (matrix, j)->(5 < j <= length(assignments)+5) ? Percentage.(Points.(sum(data[:, j])/length(data[:, j]))/assignments[j - 5].value) : "",
@@ -426,13 +426,13 @@ function view_gradebook(gb::Gradebook, att::Gradebook, identifier::String, assig
         final_grades[i] = (collect(select(DataFrame(row), Not(["ID", "Preferred", "Last", "Team", "Email"]))[1, :]) |> sum) - att.penalty[i, end]
     end
 
-    assignment_total = use_coursevalue ? COURSE_GRADESCALE : collect(assignments)[begin:end-(includes_bonus ? 1 : 0)]
+    assignment_total = use_coursevalue ? COURSE_GRADESCALE : mapreduce(x->x.value, +, collect(assignments)[begin:end-(includes_bonus ? 1 : 0)])
 
     data = gb.total[!, Cols(["ID", "Preferred", "Last", "Team", "Email"], map(x->x.codename, assignments))]
     insertcols!(data, "Total"=>Points.(vec(final_grades)))
-    insertcols!(data, "Percent"=>Percentage.(vec(final_grades ./ sum(map(x->x.value, assignment_total)))))
-    insertcols!(data, "Letter"=>score2letter.(Percentage.(vec(final_grades ./ sum(map(x->x.value, assignment_total))))))
-    insertcols!(data, "Missing"=>Points.(abs.(vec(final_grades) .- mapreduce(x->x.value, +, assignment_total))))
+    insertcols!(data, "Percent"=>Percentage.(vec(final_grades ./ assignment_total)))
+    insertcols!(data, "Letter"=>score2letter.(Percentage.(vec(final_grades ./ assignment_total))))
+    insertcols!(data, "Missing"=>Points.(abs.(vec(final_grades) .- assignment_total)))
     row_labels = [join(collect(row[1:5]), " ") for row in eachrow(data)]
     column_labels = [
         names(data),
@@ -489,11 +489,11 @@ function view_gradebook(gb::Gradebook, att::Gradebook, identifier::String, assig
         column_labels   = column_labels,
         summary_row_labels=["Worth", "Due", "Average (Points)", "Average (Percentage)"], # , "S.Dev", "Running Average (Percentage)"],
         summary_rows    = [
-            (matrix, j)->j == ncol(data)-3 ? mapreduce(x->x.value, +, assignment_total) : ((5 < j <= length(assignments)+5) ? assignments[j - 5].value : ""),
+            (matrix, j)->j == ncol(data)-3 ? assignment_total : ((5 < j <= length(assignments)+5) ? assignments[j - 5].value : ""),
             (matrix, j)->(5 < j <= length(assignments)+5) ? assignments[j - 5].due : "",
             (matrix, j)->j == ncol(data)-3 ? Points.(sum(data[:, j])/length(data[:, j])) : (
-                j == ncol(data)-2 ? (Points.(sum(data[:, j-1])/length(data[:, j-1])) / mapreduce(x->x.value, +, assignment_total)) : (
-                    j == ncol(data)-1 ? score2letter(Points.(sum(data[:, j-2])/length(data[:, j-2])) / mapreduce(x->x.value, +, assignment_total)) : (
+                j == ncol(data)-2 ? (Points.(sum(data[:, j-1])/length(data[:, j-1])) / assignment_total) : (
+                    j == ncol(data)-1 ? score2letter(Points.(sum(data[:, j-2])/length(data[:, j-2])) / assignment_total) : (
                         j == ncol(data) ? Points.(sum(data[:, j])/length(data[:, j])) : (
                             (5 < j <= length(assignments)+5) ? Points.(sum(data[:, j])/length(data[:, j])) : "")))),
             (matrix, j)->(5 < j <= length(assignments)+5) ? Percentage.(Points.(sum(data[:, j])/length(data[:, j]))/assignments[j - 5].value) : "",
