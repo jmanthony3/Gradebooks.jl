@@ -40,9 +40,9 @@ struct Assignment{T<:AbstractAssignment, Y<:AssignmentType}
     codename::Symbol
     function Assignment{T,Y}(name, value, due_date, questions, codename) where {T<:AbstractAssignment, Y<:AssignmentType}
         value_q, question_or_rubric = if any(q->isa(q, Question), questions)
-            mapreduce(x->x.value, +, filter(x->isa(x, Question), questions); init=zero(typeof(first(questions).value))), true
+            mapreduce(x->x.value, +, filter(x->isa(x, Question), questions); init=zero(typeof(first(filter(x->isa(x, Question), questions)).value))), true
         elseif any(q->isa(q, Rubric), questions)
-            mapreduce(x->x.source.value, +, filter(x->isa(x, Rubric), questions); init=zero(typeof(first(questions).value))), false
+            mapreduce(x->x.source.value, +, filter(x->isa(x, Rubric), questions); init=zero(typeof(first(filter(x->isa(x, Rubric), questions)).value))), false
         end
         if question_or_rubric && any(q->isa(q, Rubric), questions)
             value_q += mapreduce(x->x.source.value, +, filter(x->isa(x, Rubric), questions); init=zero(typeof(first(questions).value)))
