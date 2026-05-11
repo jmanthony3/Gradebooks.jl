@@ -47,7 +47,7 @@ struct Assignment{T<:AbstractAssignment, Y<:AssignmentType}
         if question_or_rubric && any(q->isa(q, Rubric), questions)
             value_q += mapreduce(x->x.source.value, +, filter(x->isa(x, Rubric), questions); init=zero(typeof(first(filter(x->isa(x, Rubric), questions)).source.value)))
         end
-        if isa(value_q, Percentage) ? value_q != Percentage(1.0) : (typeof(value_q) == typeof(value) ? (value_q != value) : true)
+        if isa(value_q, Percentage) ? isapprox(value_q.val, 1.0; atol=1e-7) : (typeof(value_q) == typeof(value) ? (value_q != value) : true)
             @error "Value distribution of questions does not equal assignment" Σq=value_q assignment=(name, value)
         end
         codename = if isa(codename, Symbol)
