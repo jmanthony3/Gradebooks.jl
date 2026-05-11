@@ -156,6 +156,8 @@ promote_rule(::Type{Subtract}, ::Type{T}) where {T<:Real} = promote_rule(Float64
 Base.float(x::Score) = x.score.val
 convert(::Type{Float64}, x::Score) = x.score.val
 
++(a::Score, b::Points) = Score(a.score + b, a.value)
+-(a::Score, b::Points) = Score(a.score - b, a.value)
 *(a::Score, b::Percentage) = Score(a.score * b, a.value)
 *(a::Percentage, b::Score) = b * a
 
@@ -212,8 +214,12 @@ promote_rule(::Type{Grade}, ::Type{Float64}) = Float64
 promote_rule(::Type{Grade}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
 
 
-*(a::Submission, b::Percentage) = Submission(a.submitted, a.score * b)
++(a::Submission, b::Points) = Submission(a.submitted, a.score + b, a.tallies)
+-(a::Submission, b::Points) = Submission(a.submitted, a.score - b, a.tallies)
+*(a::Submission, b::Percentage) = Submission(a.submitted, a.score * b, a.tallies)
 *(a::Percentage, b::Submission) = b * a
++(a::Grade, b::Points) = Grade(a.student, a.assignment, a.submission + b)
+-(a::Grade, b::Points) = Grade(a.student, a.assignment, a.submission - b)
 *(a::Grade, b::Percentage) = Grade(a.student, a.assignment, a.submission * b)
 *(a::Percentage, b::Grade) = b * a
 
