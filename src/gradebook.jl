@@ -42,7 +42,19 @@ end
 function fill_grades!(gb::Gradebook{Class}, src, assignments::Vararg{Assignment})
     submissions_df = CSV.read(src, DataFrame)
     for assignment in collect(assignments)
-        submissions_df′ = submissions_df[!, Cols("SIS Login ID", occursin.("$(string2codename(assignment.name))", map(x->"$x", string2codename.(names(submissions_df)))))]
+        # submissions_df′ = submissions_df[!, Cols("SIS Login ID", occursin.("$(string2codename(assignment.name))", map(x->"$x", string2codename.(names(submissions_df)))))]
+        submissions_codenames = map(x->"$x", string2codename.(names(submissions_df)))
+        cols = occursin.("$(string2codename(assignment.name))", submissions_codenames)
+        if length(findall(cols)) > 1
+            for (i, j) in enumerate(findall(cols))
+                submissions_codenames_firstdigit = findfirst(x->isdigit(x), ["$(submissions_codenames[j])"...])
+                if isnothing(submissions_codenames_firstdigit)
+                    submissions_codenames_firstdigit = length("$(submissions_codenames[j])") + 1
+                end
+                cols[j] = "$(string2codename(assignment.name))" == join(["$(submissions_codenames[j])"...][begin:submissions_codenames_firstdigit-1])
+            end
+        end
+        submissions_df′ = submissions_df[!, Cols("SIS Login ID", cols)]
         submissions_df′ = DataFrame(Matrix(submissions_df′)[findfirst(!ismissing, submissions_df′[!, "SIS Login ID"]):end, :], names(submissions_df′))
         submissions_df′[!, 1] = convert.(String, submissions_df′[!, 1])
         submissions_df′[!, 2] = convert.(Points, (map(x->ismissing(x) ? 0.0 : x, submissions_df′[!, 2])))
@@ -74,7 +86,7 @@ function fill_grades!(gb::Gradebook{Class}, src, assignments::Vararg{Assignment}
                 val.assignment.value * (t < Day(7) ? 0.1 : (t < Day(14) ? 0.2 : 1.0))
             end)
             gb.penalty[occursin.(key, gb.penalty[!, "Email"]), assignment.codename] .= p
-            gb.total[occursin.(key, gb.total[!, "Email"]), assignment.codename] .= gb.raw_score[occursin.(key, gb.raw_score[!, "Email"]), assignment.codename] - gb.penalty[occursin.(key, gb.penalty[!, "Email"]), assignment.codename]
+            gb.total[occursin.(key, gb.total[!, "Email"]), assignment.codename] .= Points(max(Points(0.0), val.submission.score.score - p))
         end
     end
     return nothing
@@ -90,7 +102,7 @@ function fill_grades!(gb::Gradebook{Class}, assignment::Assignment, grades::Vara
             grade.assignment.value * (t < Day(7) ? 0.1 : (t < Day(14) ? 0.2 : 1.0))
         end)
         gb.penalty[occursin.(grade.student.email, gb.penalty[!, "Email"]), assignment.codename] .= p
-        gb.total[occursin.(grade.student.email, gb.total[!, "Email"]), assignment.codename] .= gb.raw_score[occursin.(grade.student.email, gb.raw_score[!, "Email"]), assignment.codename] - gb.penalty[occursin.(grade.student.email, gb.penalty[!, "Email"]), assignment.codename]
+        gb.total[occursin.(grade.student.email, gb.total[!, "Email"]), assignment.codename] .= Points(max(Points(0.0), grade.submission.score.score - p))
     end
     return nothing
 end
@@ -218,10 +230,10 @@ function attendance!(att::Gradebook, roster, lectures::Vector{Assignment}, date:
     for (key, val) in grades
         att.raw_score[occursin.(key, att.raw_score[!, "Email"]), lecture.codename] .= val.submission.score.score
         t = count(==(-1), Matrix(att.raw_score[occursin.(key, att.raw_score[!, "Email"]), :])) + count(==(0), Matrix(att.raw_score[occursin.(key, att.raw_score[!, "Email"]), :]))
-        p = if t <= 4
+        p = if t <= ATTENDANCE_LIMIT
             0.0
         else
-            (t - 4) * Points(50)
+            (t - ATTENDANCE_LIMIT) * Points(ATTENDANCE_PENALTY)
         end
         att.penalty[occursin.(key, att.penalty[!, "Email"]), lecture.codename] .= p
         att.total[occursin.(key, att.total[!, "Email"]), lecture.codename] .= att.penalty[occursin.(key, att.penalty[!, "Email"]), lecture.codename]
@@ -233,10 +245,10 @@ function update_attendance!(att::Gradebook{Class}, lectures)
     for (i, row) in enumerate(eachrow(att.raw_score))
         for j in 5:1:ncol(att.raw_score)
             t = count(==(-1), collect(row)[5:j]) + count(==(0), collect(row)[5:j])
-            p = if t <= 4
+            p = if t <= ATTENDANCE_LIMIT
                 0.0
             else
-                (t - 4) * Points(50)
+                (t - ATTENDANCE_LIMIT) * Points(ATTENDANCE_PENALTY)
             end
             # @show i, j, p
             att.penalty[occursin.(row["Email"], att.raw_score[!, "Email"]), lectures[j - 4].codename] .= p

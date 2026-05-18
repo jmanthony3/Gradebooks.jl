@@ -158,7 +158,7 @@ convert(::Type{Float64}, x::Score) = x.score.val
 
 +(a::Score, b::Points) = Score(a.score + b, a.value)
 -(a::Score, b::Points) = Score(a.score - b, a.value)
-*(a::Score, b::Percentage) = Score(a.score * b, a.value)
+*(a::Score, b::Percentage) = Score(b, a.value)
 *(a::Percentage, b::Score) = b * a
 
 

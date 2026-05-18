@@ -5,6 +5,8 @@ export ORG_IDPREFIX, set_orgidprefix, get_orgidprefix
 export ORG_EMAILDOMAIN, set_orgemaildomain, get_orgemaildomain
 export ORG_GRADESCALE, set_orggradescale, get_orggradescale
 export COURSE_GRADESCALE, set_coursegradescale, get_coursegradescale
+export ATTENDANCE_LIMIT, set_attendancelimit, get_attendancelimit
+export ATTENDANCE_PENALTY, set_attendancepenalty, get_attendancepenalty
 
 # TODO: can define Course or Class as preferences?
 const ORGANIZATION = @load_preference("ORGANIZATION")
@@ -12,6 +14,8 @@ const ORG_IDPREFIX = @load_preference("ORG_IDPREFIX")
 const ORG_EMAILDOMAIN = @load_preference("ORG_EMAILDOMAIN")
 const ORG_GRADESCALE = @load_preference("ORG_GRADESCALE", 4)
 const COURSE_GRADESCALE = @load_preference("COURSE_GRADESCALE", 1000)
+const ATTENDANCE_LIMIT = @load_preference("ATTENDANCE_LIMIT", 4)
+const ATTENDANCE_PENALTY = @load_preference("ATTENDANCE_PENALTY", 50)
 
 function set_organization(org::String)
     @set_preferences!("ORGANIZATION" => org)
@@ -47,3 +51,17 @@ function set_coursegradescale(scale::Integer)
 end
 
 get_coursegradescale() = @load_preference("COURSE_GRADESCALE")
+
+function set_attendancelimit(limit::Integer)
+    @set_preferences!("ATTENDANCE_LIMIT" => limit)
+    @info("New `ATTENDANCE_LIMIT` set; restart your Julia session for this change to take effect!")
+end
+
+get_attendancelimit() = @load_preference("ATTENDANCE_LIMIT")
+
+function set_attendancepenalty(penalty::Integer)
+    @set_preferences!("ATTENDANCE_PENALTY" => penalty)
+    @info("New `ATTENDANCE_PENALTY` set; restart your Julia session for this change to take effect!")
+end
+
+get_attendancepenalty() = @load_preference("ATTENDANCE_PENALTY")

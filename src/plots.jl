@@ -169,19 +169,20 @@ function view_gradebook(gb::Gradebook, assignments::Vector{Assignment}; includes
     insertcols!(data, "Percent"=>Percentage.(vec(final_grades ./ assignment_total)))
     insertcols!(data, "Letter"=>score2letter.(Percentage.(vec(final_grades ./ assignment_total))))
     insertcols!(data, "Missing"=>Points.(abs.(vec(final_grades) .- assignment_total)))
+    insertcols!(data, "GPA"=>map(x->(x=='A' ? 4 : (x=='B' ? 3 : (x=='C' ? 2 : (x=='D' ? 1 : 0)))), score2letter.(Percentage.(vec(final_grades ./ assignment_total)))))
     row_labels = [join(collect(row[1:5]), " ") for row in eachrow(data)]
     column_labels = [
         names(data),
-        vcat(fill("", 5), map(x->repr(typeof(x).parameters[1])[9:end], assignments)..., ["Course", "Course", "Course", "Course"]),
-        vcat(fill("", 5), map(x->typeof(x).parameters[2], assignments)..., ["Individual", "Individual", "Individual", "Individual"]),
-        vcat(fill("", 5), map(x->typeof(x).types[2], assignments)..., ["Points", "Percentage", "Letter", "Points"]),
+        vcat(fill("", 5), map(x->repr(typeof(x).parameters[1])[9:end], assignments)..., ["Course", "Course", "Course", "Course", "Course"]),
+        vcat(fill("", 5), map(x->typeof(x).parameters[2], assignments)..., ["Individual", "Individual", "Individual", "Individual", "Individual"]),
+        vcat(fill("", 5), map(x->typeof(x).types[2], assignments)..., ["Points", "Percentage", "Letter", "Points", "GPA"]),
     ]
     # Function to determine color based on value
     function gradient_highlighter(_, data, i, j)
         if 5 < j <= ncol(data)
-            val = if j < ncol(data) - 1
+            val = if j < ncol(data) - 2
                 (data[i, j] == 0.0 ? 0.0 : data[i, j] / maximum(data[:, j]))
-            elseif j == ncol(data)
+            elseif j == ncol(data) - 1
                 1.0 - (data[i, j] == 0.0 ? 0.0 : data[i, j] / maximum(data[:, j]))
             else
                 (data[i, j] == 0.0 ? 0.0 : data[i, j-1] / maximum(data[:, j-1]))
@@ -200,20 +201,25 @@ function view_gradebook(gb::Gradebook, assignments::Vector{Assignment}; includes
             # ["color"=>"blue", "font-weight"=>"bold"]
         )
     hl_total = HtmlHighlighter(
-            (data, i, j) -> (j == ncol(data)-3),
+            (data, i, j) -> (j == ncol(data)-4),
             ["font-weight"=>"bold"]
         )
     hl_percent = HtmlHighlighter(
-            (data, i, j) -> (j == ncol(data)-2),
+            (data, i, j) -> (j == ncol(data)-3),
             ["font-weight"=>"italic"]
         )
     hl_letter = HtmlHighlighter(
-            (data, i, j) -> (j == ncol(data)-1), # && (data[i, j] > 0.0),
+            (data, i, j) -> (j == ncol(data)-2), # && (data[i, j] > 0.0),
             gradient_highlighter
             # ["color"=>"blue", "font-weight"=>"bold"]
         )
     hl_missing = HtmlHighlighter(
-            (data, i, j) -> (j == ncol(data)), # && (data[i, j] > 0.0),
+            (data, i, j) -> (j == ncol(data)-1), # && (data[i, j] > 0.0),
+            gradient_highlighter
+            # ["color"=>"blue", "font-weight"=>"bold"]
+        )
+    hl_gpa = HtmlHighlighter(
+            (data, i, j) -> (j == ncol(data)-1), # && (data[i, j] > 0.0),
             gradient_highlighter
             # ["color"=>"blue", "font-weight"=>"bold"]
         )
@@ -225,13 +231,14 @@ function view_gradebook(gb::Gradebook, assignments::Vector{Assignment}; includes
         column_labels   = column_labels,
         summary_row_labels=["Worth", "Due", "Average (Points)", "Average (Percentage)"], # , "S.Dev", "Running Average (Percentage)"],
         summary_rows    = [
-            (matrix, j)->j == ncol(data)-3 ? assignment_total : ((5 < j <= length(assignments)+5) ? assignments[j - 5].value : ""),
+            (matrix, j)->j == ncol(data)-4 ? assignment_total : ((5 < j <= length(assignments)+5) ? assignments[j - 5].value : ""),
             (matrix, j)->(5 < j <= length(assignments)+5) ? assignments[j - 5].due : "",
-            (matrix, j)->j == ncol(data)-3 ? Points.(sum(data[:, j])/length(data[:, j])) : (
-                j == ncol(data)-2 ? (Points.(sum(data[:, j-1])/length(data[:, j-1])) / assignment_total) : (
-                    j == ncol(data)-1 ? score2letter(Points.(sum(data[:, j-2])/length(data[:, j-2])) / assignment_total) : (
-                        j == ncol(data) ? Points.(sum(data[:, j])/length(data[:, j])) : (
-                            (5 < j <= length(assignments)+5) ? Points.(sum(data[:, j])/length(data[:, j])) : "")))),
+            (matrix, j)->j == ncol(data)-4 ? Points.(sum(data[:, j])/length(data[:, j])) : (
+                j == ncol(data)-3 ? (Points.(sum(data[:, j-1])/length(data[:, j-1])) / assignment_total) : (
+                    j == ncol(data)-2 ? score2letter(Points.(sum(data[:, j-2])/length(data[:, j-2])) / assignment_total) : (
+                        j == ncol(data)-1 ? Points.(sum(data[:, j])/length(data[:, j])) : (
+                            j == ncol(data) ? (sum(data[:, j])/length(data[:, j])) : (
+                                (5 < j <= length(assignments)+5) ? Points.(sum(data[:, j])/length(data[:, j])) : ""))))),
             (matrix, j)->(5 < j <= length(assignments)+5) ? Percentage.(Points.(sum(data[:, j])/length(data[:, j]))/assignments[j - 5].value) : "",
             # (data, i, j)->,
             # (data, i, j)->
@@ -291,7 +298,7 @@ end
 function view_gradebook(gb::Gradebook, att::Gradebook, assignments::Vector{Assignment}; includes_bonus=false, use_coursevalue=false)
     final_grades = zeros((nrow(gb.total), 1))
     for (i, row) in enumerate(eachrow(gb.total))
-        final_grades[i] = (collect(select(DataFrame(row), Not(["ID", "Preferred", "Last", "Team", "Email"]))[1, :]) |> sum) - att.penalty[i, end]
+        final_grades[i] = Points(max(Points(0.0), (collect(select(DataFrame(row), Not(["ID", "Preferred", "Last", "Team", "Email"]))[1, :]) |> sum) - att.penalty[i, end]))
     end
 
     assignment_total = Points(use_coursevalue ? COURSE_GRADESCALE : mapreduce(x->x.value, +, collect(assignments)[begin:end-(includes_bonus ? 1 : 0)]))
@@ -423,7 +430,7 @@ end
 function view_gradebook(gb::Gradebook, att::Gradebook, identifier::String, assignments::Vector{Assignment}; includes_bonus=false, use_coursevalue=false)
     final_grades = zeros((nrow(gb.total), 1))
     for (i, row) in enumerate(eachrow(gb.total))
-        final_grades[i] = (collect(select(DataFrame(row), Not(["ID", "Preferred", "Last", "Team", "Email"]))[1, :]) |> sum) - att.penalty[i, end]
+        final_grades[i] = Points(max(Points(0.0), (collect(select(DataFrame(row), Not(["ID", "Preferred", "Last", "Team", "Email"]))[1, :]) |> sum) - att.penalty[i, end]))
     end
 
     assignment_total = Points(use_coursevalue ? COURSE_GRADESCALE : mapreduce(x->x.value, +, collect(assignments)[begin:end-(includes_bonus ? 1 : 0)]))
