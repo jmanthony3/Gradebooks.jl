@@ -1,91 +1,123 @@
 module Gradebooks
 
-export uppercase2symbol
-export Course, Class
-export withdraw
+public uppercase2symbol, sanitize_string, sanitize2codify
+export update
+export Course, AcademicCalendarType, Term
+public make_attendance, make_lectures
+export Class
 
 using Dates
 import Printf: @sprintf
 
-# configuration preferences for environment/workspace
+uppercase2symbol(s::AbstractString) = Symbol(uppercase("$s"))
+sanitize_string(s::AbstractString) = lowercase(replace(string(s), r"[^[:alnum:]]+" => ""))
+function sanitize2codify(s::AbstractString)
+    articles = ["a", "an", "the"]
+    conjuctions = ["for", "and", "nor", "but", "or", "yet", "so"]
+    prepositions = ["of", "in", "for", "with", "on", "at", "from", "into", "during", "through", "without", "under", "over", "above", "below", "to"]
+    forbidden = vcat(articles, conjuctions, prepositions)
+    tokens = filter(!isempty, filter(s->lowercase(s) ∉ forbidden, split(filter(cn->!ispunct(cn) || cn ∈ ['{', '}'], s), " ")))
+    firstword_idx = findfirst(t->(first(t) == '{' ? true : isletter(first(t))), tokens)
+    if isnothing(firstword_idx)
+        @error "After sanitization, no remaining tokens begin with a letter." s tokens
+    end
+    return map(t->(first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : (isdigit(first(t)) ? t : first(filter(!ispunct, t))), tokens[firstword_idx:end])
+end
+function update(x; kwargs...)
+    T = typeof(x)
+    fields = fieldnames(T)
+    vals = map(f -> getproperty(x, f), fields)
+    nt = NamedTuple{fields}(vals)
+    return T((merge(nt, kwargs))...)
+end
+
 include("preferences.jl")
-# # types and overloads
-include("score.jl")
 include("datetime.jl")
+include("credit.jl")
+include("letter_grades.jl")
 include("people.jl")
+include("assignments.jl")
 
-uppercase2symbol(s) = Symbol(uppercase("$s"))
-
-struct Course
+@kwdef struct Course
     code::Symbol
     number::Integer
     name::String
-    credits::Integer
-    codename::Symbol
-    function Course(code, number, name, credits, codename)
-        return new(uppercase2symbol("$code"), Int(number), name, credits, uppercase2symbol("$codename"))
+    credits::Integer                = 3
+    assignments::Vector{Assignment} = Assignment[]
+    codename::Symbol                = Symbol("")
+    function Course(code, number, name, credits, assignments, codename)
+        return new(uppercase2symbol("$code"), Int(number), name, credits, assignments, uppercase2symbol("$codename"))
     end
 end
-Course(code, number, name, credits=3) = Course(code, number, name, credits, uppercase2symbol("$code$number"))
+Course(code, number, name; credits=3, assignments=Assignment[]) = Course(code, number, name, credits, assignments, uppercase2symbol("$code$number"))
+
+@enum AcademicCalendarType begin
+    Semester
+    Quarter
+    Trimester
+    Block          # e.g., 4-week intensive blocks
+    Session
+    Module
+    Other
+end
+
+@kwdef struct Term
+    name::String                    # "Fall 2026", "Spring Quarter 2025-26", "Michaelmas 2026", etc.
+    calendar_type::AcademicCalendarType
+    year::Int                       # or academic_year::String e.g. "2025-2026"
+    start::Date
+    finish::Date
+    holidays::Vector{Date}
+    code::String                    # e.g. "FA26", "SP25", institutional code
+    metadata::Dict{Symbol,Any} = Dict()  # for extra institution-specific info
+end
+
+make_attendance(name::AbstractString, points::Real, date::Date) = Attendance(name, Point(points), date)
+
+function make_lectures(start::Date, finish::Date, holidays::Vector{Date}, frequency::Vector{Symbol}, points::Real=1.0)
+    lecture_dates = filter(parse_date(start):Day(1):parse_date(finish)) do x
+        occursin("$(DAYSYMBOLMAP(dayname(x)))", "$frequency") && (Date(x) ∉ vcat(holidays))
+    end
+    return map(x->make_attendance(x[1], points, x[2]), enumerate(lecture_dates))
+end
+function make_lectures(term::Term, frequency::Vector{Symbol}, points::Real=1.0)
+    return make_lectures(term.start, term.finish, term.holidays, frequency, points)
+end
 
 struct Class
     course::Course
+    term::Term
     section::Integer
-    semester::Symbol
-    year::Integer
-    frequency::Symbol
+    frequency::Vector{Symbol}
     time_start::Time
     time_finish::Time
     time_duration::Dates.CompoundPeriod
+    lectures::Vector{Assignment}
     codename_short::Symbol
     codename_long::Symbol
     instructors::Vector{Instructor}
     primary_instructor::Instructor
-    students::Vector{Student}
-    roster::Vector{Student}
-    function Class(course, section, semester, year, frequency, time_start, time_finish, time_duration, codename_short, codename_long, instructors, primary_instructor, students, roster)
-        time_start, time_finish = map(parse_time, [time_start, time_finish])
-        return new(course, section, uppercase2symbol(semester), year, dayname2codename(frequency), time_start, time_finish, canonicalize(time_finish - time_start),
+    roster::Roster
+    function Class(course, term, section, frequency, time_start, time_finish, time_duration, lectures, codename_short, codename_long, instructors, primary_instructor, roster)
+        return new(course, term, section, frequency2symbols(frequency), time_start, time_finish, canonicalize(time_finish - time_start), lectures,
             uppercase2symbol("$codename_short"), uppercase2symbol("$codename_long"),
-            instructors, primary_instructor, students, roster
+            instructors, primary_instructor, roster
         )
     end
 end
-function Class(course, section, semester, year, frequency, time_start, time_finish, time_duration, roster, instructors::Vararg{Instructor})
-    return Class(course, section, semester, year, frequency, time_start, time_finish, time_duration,
-        course.codename, uppercase2symbol(join(["$(course.codename)", @sprintf("%03d", section), first(uppercase("$semester")) * (uppercase("$semester")[1:2] == "SU" ? "u" : "") * last("$year", 2)], "-")),
-        [instructors...], first([instructors...]), roster, roster
+function Class(course, term, section, frequency, time_start, time_finish, instructors::Vector{Instructor}, students::Vector{Student}, points::Real=1.0)
+    return Class(course, term, section, frequency, time_start, time_finish, canonicalize(time_finish - time_start), make_lectures(term.start, term.finish, term.holidays, frequency, points),
+        course.codename, uppercase2symbol(join(["$(course.codename)", first(uppercase("$term")) * (uppercase("$term")[1:2] == "SU" ? "u" : "") * last("$year", 2), @sprintf("%03d", section)], "-")),
+        instructors, first(instructors), Roster(students)
     )
 end
-function Class(course, section, semester, year, frequency, time_start, time_duration::Dates.CompoundPeriod, roster, instructors::Vararg{Instructor})
-    return Class(course, section, semester, year, frequency, time_start, time_start + time_duration, time_duration, roster, instructors...)
+
+function update(class::Class; kwargs...)
+    return update(class; kwargs...)
 end
 
-include("assignments.jl")
+include("grades.jl")
 include("gradebook.jl")
-
-
-function withdraw(roster, class, gb, student)
-    deleteat!(gb.raw_score, findfirst(x->x == student, roster))
-    deleteat!(gb.penalty, findfirst(x->x == student, roster))
-    deleteat!(gb.total, findfirst(x->x == student, roster))
-    deleteat!(roster, findfirst(x->x == student, roster))
-    class = Class(class.course, class.section, class.semester, class.year, class.frequency, class.time_start, class.time_duration, roster, class.instructors...)
-    return roster, class, gb
-end
-
-function withdraw(roster, class, gb, teams, student)
-    for (i, team) in enumerate(teams)
-        if student ∈ team.students
-            team_students = team.students
-            deleteat!(team_students, findfirst(x->x == student, team_students))
-            teams[i] = Team(team.name, team_students, team.codename)
-        end
-    end
-    return withdraw(roster, class, gb, student)..., teams
-end
-
-
 include("base.jl")
 include("io.jl")
 include("plots.jl")

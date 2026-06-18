@@ -1,12 +1,60 @@
-export MIDNIGHT, safe_datetime_stamp
-export dayname_codes, dayabbr_codes, dayname2codename
-export parse_time, parse_date, parse_datetime
+public DAYSYMBOLMAP
+public MWF, TR
+export MIDNIGHT
+public frequency2symbols
+public safe_datetime_stamp, parse_time, parse_date, parse_datetime
 
 using Dates
 
+const DAYSYMBOLMAP = Dict(
+    :Sunday=>:U,        "Sunday"=>:U,       "U"=>:U,    'U'=>:U,
+    :Monday=>:M,        "Monday"=>:M,       "M"=>:M,    'M'=>:M,
+    :Tuesday=>:T,       "Tuesday"=>:T,      "T"=>:T,    'T'=>:T,
+    :Wednesday=>:W,     "Wednesday"=>:W,    "W"=>:W,    'W'=>:W,
+    :Thursday=>:R,      "Thursday"=>:R,     "R"=>:R,    'R'=>:R,
+    :Friday=>:F,        "Friday"=>:F,       "F"=>:F,    'F'=>:F,
+    :Saturday=>:S,      "Saturday"=>:S,     "S"=>:S,    'S'=>:S,
+)
+const MWF = [:M, :W, :F]
+const TR = [:T, :R]
 const MIDNIGHT = Time(23, 59, 59, 999)
-const MWF = :MWF
-const TR = :TR
+
+function frequency2symbols(input)::Vector{Symbol}
+    input === nothing && return Symbol[]
+
+    # Case 1: Single Symbol shorthand like :MWR, :MW, :TR
+    if input isa Symbol
+        if input == MWF || input == TR
+            return input
+        end
+        s = uppercase(string(input))
+        days = Symbol[]
+        for c in s
+            day = get(DAYSYMBOLMAP, Symbol(c), nothing)
+            day === nothing && error("Unknown day code: $c in :$s")
+            push!(days, day)
+        end
+        return unique(days)  # safety
+    end
+
+    # Case 2: Vector of anything
+    if input isa AbstractVector
+        days = Symbol[]
+        for item in input
+            if item isa Symbol || item isa AbstractString || item isa Char
+                key = item isa Char ? Symbol(uppercase(string(item))) : Symbol(uppercase(string(item)))
+                day = get(DAYSYMBOLMAP, key, nothing)
+                day === nothing && error("Unknown day: $item")
+                push!(days, day)
+            else
+                error("Unsupported meeting day type: $(typeof(item))")
+            end
+        end
+        return unique(days)
+    end
+
+    error("Cannot parse meeting frequency of type $(typeof(input)): $input")
+end
 
 safe_datetime_stamp(dt::DateTime)   = replace(string(dt), "-"=>"", ":"=>"", "."=>"")
 safe_datetime_stamp()               = safe_datetime_stamp(now())
@@ -16,23 +64,6 @@ function safe_datetime_stamp(path::String)
     datetimestamp = match(DATETIME_REGEX, string(split(name, "+")[end]))
     return name * "+" * (isnothing(datetimestamp) ? safe_datetime_stamp() : datetimestamp) * ext
 end
-
-dayname_codes = (Sunday=:U, Monday=:M, Tuesday=:T, Wednesday=:W, Thursday=:R, Friday=:F, Saturday=:S)
-dayabbr_codes = (Sun=dayname_codes[:Sunday], Mon=dayname_codes[:Monday], Tues=dayname_codes[:Tuesday], Wed=dayname_codes[:Wednesday], Thu=dayname_codes[:Thursday], Fri=dayname_codes[:Friday], Sat=dayname_codes[:Saturday])
-
-function dayname2codename(s::String)
-    articles = ["a", "an", "the"]
-    conjuctions = ["for", "and", "nor", "but", "or", "yet", "so"]
-    prepositions = ["of", "in", "for", "with", "on", "at", "from", "into", "during", "through", "without", "under", "over", "above", "below", "to"]
-    forbidden = vcat(articles, conjuctions, prepositions)
-    tokens = uppercasefirst.(lowercase.(filter(s->lowercase(s) ∉ forbidden, split(filter(!ispunct, s), " "))))
-    # tokens = uppercasefirst.(lowercase.(filter(s->any(.!(occursin.(lowercase(s), forbidden))), split(filter(!ispunct, s), " "))))
-    dayname_codes_str = [string.(keys(dayname_codes))...]
-    return uppercase2symbol(mapreduce(t->"$(dayname_codes[findfirst(occursin.(t, dayname_codes_str))])", *, tokens))
-end
-dayname2codename(s::Vector{String}) = uppercase2symbol(mapreduce(x->"$(dayname2codename(x))", *, s))
-dayname2codename(s::Symbol) = uppercase2symbol(s == MWF || s == TR ? s : dayname2codename("$s"))
-dayname2codename(s::Vector{Symbol}) = uppercase2symbol(mapreduce(x->"$(dayname2codename(x))", *, s))
 
 function parse_time(t)
     if isa(t, Time)
@@ -94,7 +125,13 @@ function parse_date(d)
                         nothing
                     end
                 end
-                date_variations = ["y-m-d", "m-d", "yyyymmdd", "m/d/y", "m/d", "U d, y", "U d", "u. d, y", "u. d", "u d, y", "u d"]
+                date_variations = if DATE_FORMAT == :MMDDYYYY
+                    ["y-m-d", "m-d", "yyyymmdd", "m/d/y", "m/d", "U d, y", "U d", "u. d, y", "u. d", "u d, y", "u d"]
+                elseif DATE_FORMAT == :DDMMYYYY
+                    ["y-m-d", "d-m", "yyyymmdd", "d/m/y", "d/m", "d U y", "d U", "d u. y", "d u.", "d u y", "d u"]
+                else
+                    @error "Invalid `DATE_FORMAT` preference. Please set to one of: $(join(VALID_DATE_FORMATS, ", "))"
+                end
                 dateformats = DateFormat.(date_variations)
                 i, parse, n = 0, nothing, length(dateformats)
                 while isnothing(parse)
@@ -150,7 +187,13 @@ function parse_datetime(d)
                             nothing
                         end
                     end
-                    date_variations = ["y-m-d", "m-d", "yyyymmdd", "m/d/y", "m/d", "U d, y", "U d", "u. d, y", "u. d", "u d, y", "u d"]
+                    date_variations = if DATE_FORMAT == :MMDDYYYY
+                        ["y-m-d", "m-d", "yyyymmdd", "m/d/y", "m/d", "U d, y", "U d", "u. d, y", "u. d", "u d, y", "u d"]
+                    elseif DATE_FORMAT == :DDMMYYYY
+                        ["y-m-d", "d-m", "yyyymmdd", "d/m/y", "d/m", "d U y", "d U", "d u. y", "d u.", "d u y", "d u"]
+                    else
+                        @error "Invalid `DATE_FORMAT` preference. Please set to one of: $(join(VALID_DATE_FORMATS, ", "))"
+                    end
                     time_variations = ["H:M:S.s", "H:M:S", "H:M", "H.M.S.s", "H.M.S", "H.M", "HHMMSSsss", "HHMMSS", "HHMM", "I:M p", "I.M p", "I:MMp", "I.MMp", "IIMM p", "IIMMp"]
                     datetimeformats = DateFormat.(vcat(
                         vcat(vcat(map(delim->map(ds->map(ts->join([ds, ts], delim), time_variations), date_variations[1:3]), ["T", " ", ""])...)...),

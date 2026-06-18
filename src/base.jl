@@ -2,7 +2,7 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, convert, promote_rule, sho
 
 
 
-const Dictable = Union{AbstractPerson,Course,AbstractAssignment,AbstractScore}
+const Dictable = Union{AbstractPerson,Course,Assignment,Credit}
 const Indictable = Union{Class,Submission,Grade}
 
 convert(::Type{Dict}, x::Dictable) = (fns = fieldnames(x); Dict(zip(fns, getproperty.(x, fns))))
@@ -58,89 +58,65 @@ end
 
 
 ## Instructor/Student
-show(io::IO, x::Instructor) = print(io, join(["Name: " * x.name, "Email: " * x.email, "Phone: " * x.phone, "Job Title: " * x.job_title, "Organization: " * x.organization, "ID: " * x.id], "\n"))
-show(io::IO, x::Student) = print(io, join(["Name: " * x.name * " (" * x.discipline * ")", "Email: " * x.email, "Phone: " * x.phone, "Organization: " * x.organization, "ID: " * x.id], "\n"))
+show(io::IO, x::Instructor) = print(io, join(["Name: " * x.name, "Email: " * x.email, "Phone: " * x.phone, "Job Title: " * x.job_title, "organization: " * x.INSTITUTION, "ID: " * x.id], "\n"))
+show(io::IO, x::Student) = print(io, join(["Name: " * x.name * " (" * x.discipline * ")", "Email: " * x.email, "Phone: " * x.phone, "INSTITUTION: " * x.INSTITUTION, "ID: " * x.id], "\n"))
 
 
 
 ## Points/Percentage/Grant/Subtract/Score
-+(a::Points, b::Points) = Points(a.val + b.val)
--(a::Points, b::Points) = Points(a.val - b.val)
++(a::Point, b::Point) = Point(a.val + b.val)
+-(a::Point, b::Point) = Point(a.val - b.val)
 # *(a::Points, b::Points) = Points(a.x * b.x)
-/(a::Points, b::Points) = Percentage(a.val / b.val)
-==(a::Points, b::Points) = a.val == b.val
-<(a::Points, b::Points) = a.val < b.val
-<=(a::Points, b::Points) = a.val <= b.val
->(a::Points, b::Points) = a.val > b.val
->=(a::Points, b::Points) = a.val >= b.val
-zero(::Type{Points}) = Points(0.0)
-one(::Type{Points}) = Points(1.0)
-show(io::IO, x::Points) = print(io, x.val)
-Base.float(x::Points) = x.val
-convert(::Type{Float64}, x::Points) = x.val
-promote_rule(::Type{Points}, ::Type{Float64}) = Float64
-promote_rule(::Type{Points}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
+/(a::Point, b::Point) = Percent(a.val / b.val)
+==(a::Point, b::Point) = a.val == b.val
+<(a::Point, b::Point) = a.val < b.val
+<=(a::Point, b::Point) = a.val <= b.val
+>(a::Point, b::Point) = a.val > b.val
+>=(a::Point, b::Point) = a.val >= b.val
+zero(::Type{Point}) = Point(0.0)
+one(::Type{Point}) = Point(1.0)
+show(io::IO, x::Point) = print(io, x.val)
+Base.float(x::Point) = x.val
+convert(::Type{Float64}, x::Point) = x.val
+promote_rule(::Type{Point}, ::Type{Float64}) = Float64
+promote_rule(::Type{Point}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
 
-+(a::Percentage, b::Percentage) = Percentage(a.val + b.val)
--(a::Percentage, b::Percentage) = Percentage(a.val - b.val)
-*(a::Percentage, b::Percentage) = Percentage(a.val * b.val)
-/(a::Percentage, b::Percentage) = Percentage(a.val / b.val)
-==(a::Percentage, b::Percentage) = a.val == b.val
-<(a::Percentage, b::Percentage) = a.val < b.val
-<=(a::Percentage, b::Percentage) = a.val <= b.val
->(a::Percentage, b::Percentage) = a.val > b.val
->=(a::Percentage, b::Percentage) = a.val >= b.val
-zero(::Type{Percentage}) = Percentage(0.0)
-one(::Type{Percentage}) = Percentage(1.0)
-show(io::IO, x::Percentage) = print(io, 100x.val, " %")
-Base.float(x::Percentage) = x.val
-convert(::Type{Float64}, x::Percentage) = x.val
-convert(::Type{Char}, x::Percentage) = (x >= 0.90 ? 'A' : (x >= 0.80 ? 'B' : (x >= 0.70 ? 'C' : (x >= 0.60 ? 'D' : 'F'))))
-promote_rule(::Type{Percentage}, ::Type{Float64}) = Float64
-promote_rule(::Type{Percentage}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
++(a::Percent, b::Percent) = Percent(a.val + b.val)
+-(a::Percent, b::Percent) = Percent(a.val - b.val)
+*(a::Percent, b::Percent) = Percent(a.val * b.val)
+/(a::Percent, b::Percent) = Percent(a.val / b.val)
+==(a::Percent, b::Percent) = a.val == b.val
+<(a::Percent, b::Percent) = a.val < b.val
+<=(a::Percent, b::Percent) = a.val <= b.val
+>(a::Percent, b::Percent) = a.val > b.val
+>=(a::Percent, b::Percent) = a.val >= b.val
+zero(::Type{Percent}) = Percent(0.0)
+show(io::IO, x::Percent) = print(io, x.val, " %")
+Base.float(x::Percent) = x.val
+convert(::Type{Float64}, x::Percent) = x.val
+convert(::Type{Char}, x::Percent) = (x >= 0.90 ? 'A' : (x >= 0.80 ? 'B' : (x >= 0.70 ? 'C' : (x >= 0.60 ? 'D' : 'F'))))
+promote_rule(::Type{Percent}, ::Type{Float64}) = Float64
+promote_rule(::Type{Percent}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
 
-*(a::Points, b::Percentage) = a.val * b.val
-*(a::Percentage, b::Points) = b * a
+*(a::Point, b::Percent) = Point(a.val * b.val)
+*(a::Percent, b::Point) = b * a
 
-+(a::Grant, b::Grant) = Grant(a.mark + b.mark) # , a.value + b.value)
--(a::Grant, b::Grant) = Grant(a.mark - b.mark) # , a.value - b.value)
++(a::T, b::T) where {T<:Mark} = Mark(a.delta + b.delta; comment=join([a.comment, b.comment], "\n")) # , a.value + b.value)
+-(a::T, b::T) where {T<:Mark} = Mark(a.delta - b.delta; comment=join([a.comment, b.comment], "\n")) # , a.value - b.value)
 # *(a::Grant, b::Grant) = Points(a.x * b.x)
 # *(a::Grant{Percentage}, b::Grant{Percentage}) = Grant(a.mark * b.mark, a.value + b.value)
 # /(a::Grant{Points}, b::Grant{Points}) = a.mark / b.mark
 # /(a::Grant{Percentage}, b::Grant{Percentage}) = Grant(a.mark / b.mark, a.value - b.value)
-==(a::Grant, b::Grant) = a.mark == b.mark
-<(a::Grant, b::Grant) = a.mark < b.mark
-<=(a::Grant, b::Grant) = a.mark <= b.mark
->(a::Grant, b::Grant) = a.mark > b.mark
->=(a::Grant, b::Grant) = a.mark >= b.mark
-show(io::IO, x::Grant) = print(io, x.mark) # , " / ", x.value)
-Base.float(x::Grant) = x.mark
-convert(::Type{Float64}, x::Grant) = x.mark
-promote_rule(::Type{Grant}, ::Type{Float64}) = Float64
-promote_rule(::Type{Grant}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
-
-# *(a::Grant, b::Percentage) = a.val * b.val
-# *(a::Percentage, b::Grant) = b * a
-
-+(a::Subtract, b::Subtract) = Subtract(a.mark + b.mark) # , a.value + b.value)
--(a::Subtract, b::Subtract) = Subtract(a.mark - b.mark) # , a.value - b.value)
-# *(a::Subtract, b::Subtract) = Points(a.x * b.x)
-# *(a::Subtract{Percentage}, b::Subtract{Percentage}) = Subtract(a.mark * b.mark, a.value + b.value)
-# /(a::Subtract{Points}, b::Subtract{Points}) = a.mark / b.mark
-# /(a::Subtract{Percentage}, b::Subtract{Percentage}) = Subtract(a.mark / b.mark, a.value - b.value)
-==(a::Subtract, b::Subtract) = a.mark == b.mark
-<(a::Subtract, b::Subtract) = a.mark < b.mark
-<=(a::Subtract, b::Subtract) = a.mark <= b.mark
->(a::Subtract, b::Subtract) = a.mark > b.mark
->=(a::Subtract, b::Subtract) = a.mark >= b.mark
-show(io::IO, x::Subtract) = print(io, x.mark) # , " / ", x.value)
-Base.float(x::Subtract) = x.mark
-convert(::Type{Float64}, x::Subtract) = x.mark
-promote_rule(::Type{Subtract}, ::Type{Float64}) = Float64
-promote_rule(::Type{Subtract}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
-
-# *(a::Subtract, b::Percentage) = a.val * b.val
-# *(a::Percentage, b::Subtract) = b * a
+==(a::T, b::T) where {T<:Mark} = a.mark == b.mark
+<(a::T, b::T) where {T<:Mark} = a.mark < b.mark
+<=(a::T, b::T) where {T<:Mark} = a.mark <= b.mark
+>(a::T, b::T) where {T<:Mark} = a.mark > b.mark
+>=(a::T, b::T) where {T<:Mark} = a.mark >= b.mark
+show(io::IO, x::Mark) = print(io, x.mark) # , " / ", x.value)
+Base.float(x::Mark) = x.delta.val
+convert(::Type{Float64}, x::Mark) = x.delta.val
+promote_rule(::Type{Mark}, ::Type{Float64}) = Float64
+promote_rule(::Type{Mark}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
 
 +(a::Score, b::Score) = ((s, v) = (a.score + b.score, a.value + b.value); p = s / v; Score(s, v, p, p, join(map(x->x.comment, [a, b]), "\n")))
 +(a::Score, b::Score...) = a + reduce(+, b)
@@ -156,10 +132,10 @@ promote_rule(::Type{Subtract}, ::Type{T}) where {T<:Real} = promote_rule(Float64
 Base.float(x::Score) = x.score.val
 convert(::Type{Float64}, x::Score) = x.score.val
 
-+(a::Score, b::Points) = Score(a.score + b, a.value)
--(a::Score, b::Points) = Score(a.score - b, a.value)
-*(a::Score, b::Percentage) = Score(b, a.value)
-*(a::Percentage, b::Score) = b * a
++(a::Score, b::Point) = Score(a.score + b, a.value)
+-(a::Score, b::Point) = Score(a.score - b, a.value)
+*(a::Score, b::Percent) = Score(b, a.value)
+*(a::Percent, b::Score) = b * a
 
 
 
@@ -188,6 +164,17 @@ convert(::Type{Float64}, x::Submission) = x.score
 promote_rule(::Type{Submission}, ::Type{Float64}) = Float64
 promote_rule(::Type{Submission}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
 
+# Nice show method
+Base.show(io::IO, g::LetterGrade) = print(io, g.value)
+
+# Conversion helpers
+Base.String(g::LetterGrade) = g.value
+Base.convert(::Type{String}, g::LetterGrade) = g.value
+Base.convert(::Type{LetterGrade}, s::AbstractString) = LetterGrade(s)
+
+# Comparison / sorting (important for gradebooks)
+Base.isless(a::LetterGrade, b::LetterGrade) = grade_value(a) < grade_value(b)
+
 +(a::Grade, b::Grade) = a.submission + b.submission
 -(a::Grade, b::Grade) = a.submission - b.submission
 ==(a::Grade, b::Grade) = a.submission == b.submission
@@ -214,18 +201,22 @@ promote_rule(::Type{Grade}, ::Type{Float64}) = Float64
 promote_rule(::Type{Grade}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
 
 
-+(a::Submission, b::Points) = Submission(a.submitted, a.score + b, a.tallies)
--(a::Submission, b::Points) = Submission(a.submitted, a.score - b, a.tallies)
-*(a::Submission, b::Percentage) = Submission(a.submitted, a.score * b, a.tallies)
-*(a::Percentage, b::Submission) = b * a
-+(a::Grade, b::Points) = Grade(a.student, a.assignment, a.submission + b)
--(a::Grade, b::Points) = Grade(a.student, a.assignment, a.submission - b)
-*(a::Grade, b::Percentage) = Grade(a.student, a.assignment, a.submission * b)
-*(a::Percentage, b::Grade) = b * a
++(a::Submission, b::Point) = Submission(a.submitted, a.score + b, a.tallies)
++(a::Point, b::Submission) = b + a
+-(a::Submission, b::Point) = Submission(a.submitted, a.score - b, a.tallies)
+-(a::Point, b::Submission) = b - a
+*(a::Submission, b::Percent) = Submission(a.submitted, a.score * b, a.tallies)
+*(a::Percent, b::Submission) = b * a
++(a::Grade, b::Point) = Grade(a.student, a.assignment, a.submission + b, a.team)
++(a::Point, b::Grade) = b + a
+-(a::Grade, b::Point) = Grade(a.student, a.assignment, a.submission - b, a.team)
+-(a::Point, b::Grade) = b - a
+*(a::Grade, b::Percent) = Grade(a.student, a.assignment, a.submission * b, a.team)
+*(a::Percent, b::Grade) = b * a
 
 
 
 ## Gradebook
-*(A::Matrix{Percentage}, b::Vector{Assignment}) = float.(A) * float.(b)
-/(A::Gradebook, b::Vector{Assignment}) = (A = Matrix(A.data); isa(eltype(A), Points) ? Percentage.(A ./ transpose(b)) : (@error "Cannot divide because eltype(A) ≠ Points" eltype(A)))
-*(A::Gradebook, b::Vector{Assignment}) = (A = Matrix(A.data); isa(eltype(A), Percentage) ? (A * b) : (isa(eltype(A), Points) ? ((A / b) * b) : (@error "Cannot multiply because eltype(A) is neither Points nor Percentage" eltype(A))))
+*(A::Matrix{Percent}, b::Vector{Assignment}) = float.(A) * float.(b)
+/(A::Gradebook, b::Vector{Assignment}) = (A = Matrix(A.data); isa(eltype(A), Point) ? Percent.(A ./ transpose(b)) : (@error "Cannot divide because eltype(A) ≠ Points" eltype(A)))
+*(A::Gradebook, b::Vector{Assignment}) = (A = Matrix(A.data); isa(eltype(A), Percent) ? (A * b) : (isa(eltype(A), Point) ? ((A / b) * b) : (@error "Cannot multiply because eltype(A) is neither Points nor Percentage" eltype(A))))

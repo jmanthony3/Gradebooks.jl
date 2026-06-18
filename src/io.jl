@@ -1,188 +1,327 @@
-export SEMVER_REGEX, DATETIME_REGEX, dirbasenameextname, safe_archive_namestamp
-export save, load
+export save_gradebook, load_gradebook, export_gradebook, import_gradebook
 
+using CSV, DataFrames, Dates, JLD2, JSON
 
+struct ChangeEvent
+    timestamp::DateTime
+    actor::String
+    kind::Symbol
+    target::String
+    before::Any
+    after::Any
+end
 
-using CSV, DataFrames, JSON
+struct GradebookArchive
+    schema_version::String
+    saved_at::DateTime
+    gradebook::Gradebook
+    history::Vector{ChangeEvent}
+end
 
+function save_archive(
+    gb::Gradebook,
+    path::AbstractString;
+    history::Vector{ChangeEvent}=ChangeEvent[]
+)
+    archive = GradebookArchive(
+        string(pkgversion(@__MODULE__)),
+        now(),
+        gb,
+        history
+    )
 
+    mkpath(dirname(path))
+    JLD2.jldsave(path; archive)
+    return path
+end
 
-# https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string
-# https://regex101.com/r/Ly7O1x/3/
-const SEMVER_REGEX = r"^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$"
-# const DATETIME_REGEX = r"\d{8}T\d{9}"
-const DATETIME_REGEX = r"^(?P<year>\d{4}})(?P<month>\d{2}})(?P<day>\d{2}})T(?P<hour>\d{2}})(?P<minute>\d{2}})(?P<second>\d{2}})(?P<millisecond>\d{3}})$"
-
-dirbasenameextname(path) = ((dir, base) = (dirname(path), basename(path)); (name, ext) = splitext(base); (dir=dir, base=base, name=name, ext=ext))
-
-function safe_archive_namestamp(path)
-    if !isascii(path)
-        @error "Path must be comprised of alphanumeric characters" path
+function load_archive(path::AbstractString)
+    JLD2.jldopen(path, "r") do f
+        read(f, "archive")
     end
-    dir, base, name, ext = dirbasenameextname(path)
-    name_semver = split(name, "-v")
-    semver = if length(name_semver) == 2
-        name_semver[2]
+end
+
+function save_gradebook(
+    gb::Gradebook,
+    path::AbstractString;
+    history::Vector{ChangeEvent}=ChangeEvent[]
+)
+    return save_archive(gb, path; history=history)
+end
+
+function load_gradebook(path::AbstractString)
+    arc = load_archive(path)
+    return arc.gradebook
+end
+
+# --- JSON archive round-trip -------------------------------------------------
+
+function import_gradebook(path::AbstractString)
+    data = JSON.parsefile(path)
+    return rebuild_gradebook_from_dict(data)
+end
+
+function rebuild_gradebook_from_dict(data::Dict)
+    # Rebuild lookup tables first
+    students_by_id = Dict{Any,Any}()
+    assignments_by_codename = Dict{String,Any}()
+
+    # Rebuild students
+    for sdata in data["students"]
+        s = rebuild_student_from_dict(sdata)
+        students_by_id[s.id] = s
+    end
+
+    # Rebuild assignments (questions/rubric trees)
+    for adata in data["assignments"]
+        a = rebuild_assignment_from_dict(adata)
+        assignments_by_codename[a.codename] = a
+    end
+
+    # Rebuild class / roster / course
+    course = rebuild_course_from_dict(data["course"])
+    roster = rebuild_roster_from_dict(data["roster"], students_by_id)
+    cls = rebuild_class_from_dict(data["class"], course, roster)
+
+    # Rebuild submissions
+    submissions = [
+        rebuild_submission_from_dict(sdata, students_by_id, assignments_by_codename)
+        for sdata in data["submissions"]
+    ]
+
+    # Replace the constructor call below with the exact constructor you use
+    return Gradebook(cls, submissions)
+end
+
+function rebuild_course_from_dict(d)
+    # Replace with your real constructor
+    return Course(
+        d["name"],
+        d["code"],
+        d["semester"],
+        d["section"]
+    )
+end
+
+function rebuild_student_from_dict(d)
+    # Replace with your real constructor
+    person = Person(
+        d["name_given"],
+        d["name_family"],
+        d["name_preferred"]
+    )
+
+    return Student(
+        id=d["id"],
+        email=d["email"],
+        person=person,
+        enrollment_status=Symbol(d["enrollment_status"]),
+        final_grade = d["final_grade"] === nothing ? nothing : LetterGrade(d["final_grade"])
+    )
+end
+
+function rebuild_roster_from_dict(d, students_by_id)
+    # Replace with your real constructor
+    students = [students_by_id[x] for x in d["student_ids"]]
+    return Roster(students)
+end
+
+function rebuild_class_from_dict(d, course, roster)
+    # Replace with your real constructor
+    return Class(course, roster)
+end
+
+function rebuild_item_from_dict(d)
+    # This recursively rebuilds any question/rubric tree.
+    # If your item types differ, update the constructor calls below.
+    if haskey(d, "parts") && !isempty(d["parts"])
+        parts = [rebuild_item_from_dict(p) for p in d["parts"]]
+        return Question(
+            d["codename"],
+            d["label"],
+            d["value"],
+            parts
+        )
     else
-        string(pkgversion(Gradebooks))
+        return Question(
+            d["codename"],
+            d["label"],
+            d["value"]
+        )
     end
-    version = VersionNumber(semver)
-    if isempty(version.build)
-        VersionNumber(version.major, version.minor, version.minor, version.patch, (safe_datetime_stamp(),))
+end
+
+function rebuild_assignment_from_dict(d)
+    questions = [rebuild_item_from_dict(q) for q in d["questions"]]
+    return Assignment(
+        d["codename"],
+        d["name"],
+        d["value"],
+        questions
+    )
+end
+
+function parse_json_mark(d)
+    kind = get(d, "kind", "Point")
+    value = get(d, "value", 0)
+
+    if kind == "Point"
+        return Point(value)
+    elseif kind == "Percent"
+        return Percent(value)
     else
-        dt = safe_datetime_stamp(match(DATETIME_REGEX, version.build[end]))
-        build = Tuple(version.build[1:(length(version.build)-1)]..., dt)
-        VersionNumber(version.major, version.minor, version.minor, version.patch, build)
+        error("Unsupported JSON mark kind: $kind")
     end
-    return joinpath([dir, name * "-v" * version * ext])
 end
 
-
-function save(data::Dict, path)
-    if lowercase(splitext(path)[2]) != ".json"
-        path *= ".json"
-    end
-    open(safe_archive_namestamp(path), "w") do file
-        write(file, JSON.json(data, 4))
-    end
-    return nothing
+function rebuild_evaluation_from_dict(d)
+    return Evaluation(
+        d["item"],
+        parse_json_mark(d["mark"]),
+        d["comment"]
+    )
 end
 
-function save(data::DataFrame, path)
-    if lowercase(splitext(path)[2]) != ".csv"
-        path *= ".csv"
+function rebuild_submission_from_dict(d, students_by_id, assignments_by_codename)
+    student = students_by_id[d["student_id"]]
+    assignment = assignments_by_codename[d["assignment"]]
+
+    evaluations = [
+        rebuild_evaluation_from_dict(e)
+        for e in d["evaluations"]
+    ]
+
+    score = Score(
+        d["score"]["earned"],
+        d["score"]["total"],
+        d["score"]["percent"],
+        d["score"]["letter"]
+    )
+
+    return Submission(
+        student,
+        assignment,
+        DateTime(d["submitted_at"]),
+        score,
+        evaluations
+    )
+end
+
+# --- JSON export helpers -----------------------------------------------------
+
+function flatten_class(c)
+    return Dict(
+        "course" => flatten_course(c.course),
+        "roster" => Dict(
+            "student_ids" => [s.id for s in c.roster.students]
+        )
+    )
+end
+
+function flatten_course(c)
+    return Dict(
+        "name" => c.name,
+        "code" => c.code,
+        "semester" => c.semester,
+        "section" => c.section
+    )
+end
+
+function flatten_student(s)
+    return Dict(
+        "id" => s.id,
+        "email" => s.email,
+        "name_given" => s.person.name_given,
+        "name_family" => s.person.name_family,
+        "name_preferred" => s.person.name_preferred,
+        "enrollment_status" => string(s.enrollment_status),
+        "final_grade" => s.final_grade === nothing ? nothing : string(s.final_grade)
+    )
+end
+
+function flatten_item(item; prefix="")
+    name = prefix == "" ? item.codename : "$(prefix).$(item.codename)"
+
+    out = Dict(
+        "codename" => item.codename,
+        "label" => item.name,
+        "value" => item.value
+    )
+
+    if hasproperty(item, :parts) && !isnothing(item.parts)
+        out["parts"] = [flatten_item(p; prefix=name) for p in item.parts]
     end
-    open(safe_archive_namestamp(path), "w") do file
-        # TODO: add metadata comments to output files?
-        CSV.write(file, data)
-    end
-    return nothing
+
+    return out
 end
 
-
-_save(data::Vector{<:Dictable}, path) = save(append!(DataFrame(first(data)), map(d->DataFrame(d), data[2:end])), path)
-save(data::Dictable, path) = save(Dict(data), path)
-save(data::Vector{Instructor}, path="instructors") = _save(data, path)
-save(data::Vector{Student}, path="students") = _save(data, path)
-save(data::Vector{Course}, path="courses") = _save(data, path)
-
-
-function save(data::Vector{<:AbstractAssignment}, path="assignments")
-    df = DataFrame(first(data))
-    append!(df, map(d->DataFrame(d), data[2:end]))
-    datatypes = typeof.(data)
-    assignment_categories = map(s->replace(repr(s), "Abstract"=>""), map(t->t.parameters[1], datatypes))
-    assignment_types = map(t->repr(t.parameters[2]), datatypes)
-    insertcols!(df, 1, ("Category"=>assignment_categories, "Type"=>assignment_types))
-    save(df, path)
-    return nothing
+function flatten_assignment(a)
+    return Dict(
+        "codename" => a.codename,
+        "name" => a.name,
+        "value" => a.value,
+        "questions" => [flatten_item(q) for q in a.questions]
+    )
 end
 
-save(data::Vector{Assignment{AbstractAttendance, Y}}, path="attendance") where {Y<:AssignmentType} = save(data, path)
-save(data::Vector{Assignment{AbstractExam, Y}}, path="exams") where {Y<:AssignmentType} = save(data, path)
-save(data::Vector{Assignment{AbstractHomework, Y}}, path="homeworks") where {Y<:AssignmentType} = save(data, path)
-save(data::Vector{Assignment{AbstractPaper, Y}}, path="papers") where {Y<:AssignmentType} = save(data, path)
-save(data::Vector{Assignment{AbstractPresentation, Y}}, path="presentations") where {Y<:AssignmentType} = save(data, path)
-save(data::Vector{Assignment{AbstractProject, Y}}, path="projects") where {Y<:AssignmentType} = save(data, path)
-save(data::Vector{Assignment{AbstractQuiz, Y}}, path="quizzes") where {Y<:AssignmentType} = save(data, path)
-save(data::Vector{Score}, path="scores") = _save(data, path)
-
-
-function save(data::Indictable, path, fieldnames::Vararg{String})
-    fieldnames = filter!(x->x ∉ fieldnames, fieldnames(data))
-    save(Dict(zip(fieldnames, getproperty.(data, fieldnames))), path)
-    return nothing
-end
-
-function save(data::Class, path="class")
-    dir, base, name, ext = dirbasenameextname(path)
-    name_parts = split(name, "+")
-    if length(name_parts) == 2
-        save(data.course,       joinpath([dir, join([join([name_parts[1], join(["course", name_parts[2]], ".")], "+"), ext])]))
-        save(data.instructors,  joinpath([dir, join([join([name_parts[1], join(["instructors", name_parts[2]], ".")], "+"), ext])]))
-        save(data.roster,       joinpath([dir, join([join([name_parts[1], join(["roster", name_parts[2]], ".")], "+"), ext])]))
-        save(data,              joinpath([dir, join([join([name_parts[1], name_parts[2]], "+"), ext])]), ["course", "instructors", "students", "roster"])
+function flatten_mark(m)
+    if m isa Point
+        return Dict("kind" => "Point", "value" => m.val)
+    elseif m isa Percent
+        return Dict("kind" => "Percent", "value" => m.val)
     else
-        save(data.course,       joinpath([dir, join([join([name_parts[1], "course"], "+"), ext])]))
-        save(data.instructors,  joinpath([dir, join([join([name_parts[1], "instructors"], "+"), ext])]))
-        save(data.roster,       joinpath([dir, join([join([name_parts[1], "roster"], "+"), ext])]))
-        save(data,              joinpath([dir, join([name_parts[1], ext])]), ["course", "instructors", "students", "roster"])
+        return Dict("kind" => string(typeof(m)), "value" => m)
     end
-    return nothing
 end
 
-function save(data::Submission, path="submission")
-    dir, base, name, ext = dirbasenameextname(path)
-    name_parts = split(name, "+")
-    if length(name_parts) == 2
-        # save(data.assignment,   joinpath([dir, join([join([name_parts[1], join(["assignment", name_parts[2]], ".")], "+"), ext])]))
-        save(data.submitted,    joinpath([dir, join([join([name_parts[1], join(["datetime", name_parts[2]], ".")], "+"), ext])]))
-        save(data.score,        joinpath([dir, join([join([name_parts[1], join(["score", name_parts[2]], ".")], "+"), ext])]))
+function flatten_evaluation(e)
+    return Dict(
+        "item" => e.item.codename,
+        "mark" => flatten_mark(e.mark),
+        "comment" => e.comment
+    )
+end
+
+function flatten_submission(g)
+    return Dict(
+        "student_id" => g.student.id,
+        "assignment" => g.assignment.codename,
+        "submitted_at" => string(g.submitted_at),
+        "score" => Dict(
+            "earned" => g.score.earned,
+            "total" => g.score.total,
+            "percent" => g.score.percent,
+            "letter" => string(g.score.letter)
+        ),
+        "evaluations" => [flatten_evaluation(e) for e in g.evaluations]
+    )
+end
+
+function flatten_gradebook(gb::Gradebook)
+    return Dict(
+        "schema_version" => string(pkgversion(@__MODULE__)),
+        "saved_at" => string(now()),
+        "course" => flatten_course(gb.class.course),
+        "class" => flatten_class(gb.class),
+        "students" => [flatten_student(s) for s in gb.class.roster.students],
+        "assignments" => [flatten_assignment(a) for a in gb.class.course.assignments],
+        "submissions" => [flatten_submission(g) for g in gb.grades]
+    )
+end
+
+function export_gradebook(gb::Gradebook, path::AbstractString; format::Symbol=:json)
+    if format == :json
+        data = flatten_gradebook(gb)
+        mkpath(dirname(path))
+        open(path, "w") do io
+            JSON.print(io, data, 2)
+        end
+        return path
+    elseif format == :csv
+        mkpath(dirname(path))
+        CSV.write(path, gb.total)
+        return path
     else
-        # save(data.assignment,   joinpath([dir, join([join([name_parts[1], "assignment"], "+"), ext])]))
-        save(data.submitted,    joinpath([dir, join([join([name_parts[1], "datetime"], "+"), ext])]))
-        save(data.score,        joinpath([dir, join([join([name_parts[1], "score"], "+"), ext])]))
+        error("Unsupported export format: $format")
     end
-    return nothing
 end
-
-function save(data::Grade, path="grade")
-    dir, base, name, ext = dirbasenameextname(path)
-    name_parts = split(name, "+")
-    if length(name_parts) == 2
-        save(data.student,      joinpath([dir, join([join([name_parts[1], join(["student", name_parts[2]], ".")], "+"), ext])]))
-        save(data.assignment,   joinpath([dir, join([join([name_parts[1], join(["assignment", name_parts[2]], ".")], "+"), ext])]))
-        save(data.submission,   joinpath([dir, join([join([name_parts[1], join(["submission", name_parts[2]], ".")], "+"), ext])]))
-    else
-        save(data.student,      joinpath([dir, join([join([name_parts[1], "student"], "+"), ext])]))
-        save(data.assignment,   joinpath([dir, join([join([name_parts[1], "assignment"], "+"), ext])]))
-        save(data.submission,   joinpath([dir, join([join([name_parts[1], "submission"], "+"), ext])]))
-    end
-    return nothing
-end
-
-function save(data::Gradebook{Class}, path="gradebook")
-    df = data.data
-    sort!(df, ["Last", "Preferred"])
-    dir, base, name, ext = dirbasenameextname(path)
-    name_parts = split(name, "+")
-    if length(name_parts) == 2
-        save(df, joinpath([dir, join([join([name_parts[1], join(["class", name_parts[2]], ".")], "+"), ext])]))
-    else
-        save(df, joinpath([dir, join([join([name_parts[1], "class"], "+"), ext])]))
-    end
-    return nothing
-end
-function save(data::Gradebook{Student}, path="gradebook")
-    df = data.data
-    sort!(df, ["Last", "Preferred"])
-    dir, base, name, ext = dirbasenameextname(path)
-    name_parts = split(name, "+")
-    if length(name_parts) == 2
-        save(df, joinpath([dir, join([join([name_parts[1], join(["student", name_parts[2]], ".")], "+"), ext])]))
-    else
-        save(df, joinpath([dir, join([join([name_parts[1], join(["student", data.who.name_family, data.who.name_given], ".")], "+"), ext])]))
-    end
-    return nothing
-end
-
-
-
-# TODO: below must be converse of above
-function load(class::Class, data::String="gradebook")
-    data_name = join([class.codename_long, data], "-")
-    data_names = filter(x->occursin(data_name, x), readdir(@__DIR__))
-    data_names_strings = [split(x, "-"; limit=2)[1] for x in data_names]
-    data_times_strings = [split(x, "-"; limit=2)[2] for x in data_names]
-    data_times = [DateTime(x, ISODateTimeFormat) for x in data_times_strings]
-    data_times_sorted = sortperm(data_times)
-    data_names_strings = data_names_strings[data_times_sorted]
-    data_times = data_times[data_times_sorted]
-    # df = CSV.read(joinpath[@__DIR__, data_names_strings[end]], DataFrame)
-    # return Gradebook{Class}(class, names(df), df)
-    return Gradebook{Class}(class, CSV.read(joinpath[@__DIR__, data_names_strings[end]], DataFrame))
-end
-# fetch_class_attendance(class::Class) = _fetch_class_data(class, "attendance")
-
-# function fetch_student_gradebook(student::Student, class::Class)
-# end

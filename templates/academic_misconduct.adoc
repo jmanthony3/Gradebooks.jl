@@ -1,0 +1,53 @@
+= Academic Misconduct Report: {{ course_code }} | {{ student_name }} ({{ student_id }})
+{{ instructor_name }}, {{ instructor_jobtitle }}, {{ instructor_organization }} <{{ instructor_email }}>
+:templateauthor: Dr. Joby M. Anthony III
+:templateauthorinitials: JMA3
+:templatedate: {{ report_date }}
+:revnumber: v1
+:revdate: {{ report_date }}
+:description: Summary of alleged academic misconduct and supporting evidence.
+:course_code: {{ course_code }}
+:course_name: {{ course_name }}
+:class_semester: {{ class_semester }}
+:class_section: {{ class_section }}
+:instructor_name: {{ instructor_name }}
+:instructor_email: {{ instructor_email }}
+:student_name: {{ student_name }}
+:student_id: {{ student_id }}
+:student_email: {{ student_email }}
+:report_date: {{ report_date }}
+
+.Abstract
+****
+Course:: {{ course_code }} — {{ course_name }}
+Section:: {{ class_section }}
+Semester:: {{ class_semester }}
+
+Instructor:: {{ instructor_name }}
+Student:: {{ student_name }} ({{ student_id }})
+Report Date:: {{ report_date }}
+****
+
+.Alleged Concern
+{{ misconduct_summary }}
+
+.Evidence Reviewed
+{% for e in evidence %}
+- {{ e.name }} ({{ e.kind }})
+{% endfor %}
+
+.Assignment(s) Involved
+{% for a in assignments %}
+- {{ a.assignment_name }} ({{ a.assignment_codename }})  
+  Score: {{ a.score_points }} / {{ a.assignment_value }}
+{% endfor %}
+
+.Student Response
+{{ student_response }}
+
+.Next Steps
+{{ next_steps }}
+
+.Signature
+Approved by: {{ instructor_name }}  
+Date: {{ report_date }}
