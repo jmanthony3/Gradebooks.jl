@@ -64,6 +64,7 @@ show(io::IO, x::Student) = print(io, join(["Name: " * x.name * " (" * x.discipli
 
 
 ## Points/Percentage/Grant/Subtract/Score
+*(x::Real, ::Type{Point}) = Point(Float64(x))
 +(a::Point, b::Point) = Point(a.val + b.val)
 -(a::Point, b::Point) = Point(a.val - b.val)
 # *(a::Points, b::Points) = Points(a.x * b.x)
@@ -81,6 +82,7 @@ convert(::Type{Float64}, x::Point) = x.val
 promote_rule(::Type{Point}, ::Type{Float64}) = Float64
 promote_rule(::Type{Point}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
 
+*(x::Real, ::Type{Percent}) = Percent(Float64(x))
 +(a::Percent, b::Percent) = Percent(a.val + b.val)
 -(a::Percent, b::Percent) = Percent(a.val - b.val)
 *(a::Percent, b::Percent) = Percent(a.val * b.val)
@@ -173,7 +175,7 @@ Base.convert(::Type{String}, g::LetterGrade) = g.value
 Base.convert(::Type{LetterGrade}, s::AbstractString) = LetterGrade(s)
 
 # Comparison / sorting (important for gradebooks)
-Base.isless(a::LetterGrade, b::LetterGrade) = grade_value(a) < grade_value(b)
+Base.isless(a::LetterGrade, b::LetterGrade) = quality_points(a) < quality_points(b)
 
 +(a::Grade, b::Grade) = a.submission + b.submission
 -(a::Grade, b::Grade) = a.submission - b.submission

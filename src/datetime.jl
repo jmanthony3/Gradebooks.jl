@@ -1,12 +1,20 @@
-public DAYSYMBOLMAP
-public MWF, TR
+public DAYSOFWEEKSYMBOLCODES, DAYSYMBOLCODEMAP
+export MWF, TR
 export MIDNIGHT
-public frequency2symbols
+public frequency2codesymbols
 public safe_datetime_stamp, parse_time, parse_date, parse_datetime
+
+
 
 using Dates
 
-const DAYSYMBOLMAP = Dict(
+
+
+"Codes for each day of week. (Helpful for internal sorting.)"
+const DAYSOFWEEKSYMBOLCODES = [:U, :M, :T, :W, :R, :F, :S]
+
+"Maps input to code representing day of the week."
+const DAYSYMBOLCODEMAP = Dict(
     :Sunday=>:U,        "Sunday"=>:U,       "U"=>:U,    'U'=>:U,
     :Monday=>:M,        "Monday"=>:M,       "M"=>:M,    'M'=>:M,
     :Tuesday=>:T,       "Tuesday"=>:T,      "T"=>:T,    'T'=>:T,
@@ -15,56 +23,82 @@ const DAYSYMBOLMAP = Dict(
     :Friday=>:F,        "Friday"=>:F,       "F"=>:F,    'F'=>:F,
     :Saturday=>:S,      "Saturday"=>:S,     "S"=>:S,    'S'=>:S,
 )
+
+"Shorthand for class frequency that meets Monday, Wednesday, and Friday."
 const MWF = [:M, :W, :F]
+
+"Shorthand for class frequency that meets Tuesday and Thursday."
 const TR = [:T, :R]
+
+"Shorthand for 23:59:59.999."
 const MIDNIGHT = Time(23, 59, 59, 999)
 
-function frequency2symbols(input)::Vector{Symbol}
-    input === nothing && return Symbol[]
-
-    # Case 1: Single Symbol shorthand like :MWR, :MW, :TR
-    if input isa Symbol
-        if input == MWF || input == TR
-            return input
+"Magically maps `input` to vector subset of `DAYSOFWEEKSYMBOLCODES`."
+function frequency2codesymbols(input)::Vector{Symbol}
+    if isnothing(input)
+        return Symbol[]
+    elseif isa(input, Symbol)
+        if string_2uppercase_symbol(input) == :MWF
+            return MWF
+        elseif string_2uppercase_symbol(input) == :TR
+            return TR
+        else
+            s = uppercase(string(input))
+            days = Symbol[]
+            for c in s
+                day = get(DAYSYMBOLCODEMAP, c, nothing)
+                if isnothing(day)
+                    error("Unknown day code: $c in :$s")
+                else
+                    push!(days, day)
+                end
+            end
+            unique!(days)
+            return days[filter(!isnothing, indexin(DAYSOFWEEKSYMBOLCODES, days))]
         end
-        s = uppercase(string(input))
-        days = Symbol[]
-        for c in s
-            day = get(DAYSYMBOLMAP, Symbol(c), nothing)
-            day === nothing && error("Unknown day code: $c in :$s")
-            push!(days, day)
-        end
-        return unique(days)  # safety
-    end
-
-    # Case 2: Vector of anything
-    if input isa AbstractVector
+    elseif input isa AbstractVector
         days = Symbol[]
         for item in input
-            if item isa Symbol || item isa AbstractString || item isa Char
-                key = item isa Char ? Symbol(uppercase(string(item))) : Symbol(uppercase(string(item)))
-                day = get(DAYSYMBOLMAP, key, nothing)
-                day === nothing && error("Unknown day: $item")
-                push!(days, day)
+            if isa(item, Symbol) || isa(item, Char) || isa(item, AbstractString)
+                key = Symbol(uppercasefirst(string(item)))
+                day = get(DAYSYMBOLCODEMAP, key, nothing)
+                if isnothing(day)
+                    error("Unknown day: $item")
+                else
+                    push!(days, day)
+                end
+            # elseif isa(item, Integer)
+            #     push!(days, DAYSOFWEEKSYMBOLCODES[item])
             else
                 error("Unsupported meeting day type: $(typeof(item))")
             end
         end
-        return unique(days)
+        unique!(days)
+        return days[filter(!isnothing, indexin(DAYSOFWEEKSYMBOLCODES, days))]
+    else
+        @error "Cannot parse meeting frequency of type $(typeof(input)): $input"
     end
-
-    error("Cannot parse meeting frequency of type $(typeof(input)): $input")
 end
 
+# const DATETIME_REGEX = r"\d{8}T\d{9}"
+const DATETIME_REGEX = r"^(?P<year>\d{4}})(?P<month>\d{2}})(?P<day>\d{2}})T(?P<hour>\d{2}})(?P<minute>\d{2}})(?P<second>\d{2}})(?P<millisecond>\d{3}})$"
+
+"""
+    safe_datetime_stamp(dt::DateTime) = replace(string(dt), "-"=>"", ":"=>"", "."=>"")
+
+Converts `Dates.DateTime` to a string safe for file paths.
+"""
 safe_datetime_stamp(dt::DateTime)   = replace(string(dt), "-"=>"", ":"=>"", "."=>"")
 safe_datetime_stamp()               = safe_datetime_stamp(now())
 safe_datetime_stamp(::Nothing)      = safe_datetime_stamp(now())
+"Safely append datetime stamp to file name."
 function safe_datetime_stamp(path::String)
     dir, base, name, ext = dirbasenameextname(path)
     datetimestamp = match(DATETIME_REGEX, string(split(name, "+")[end]))
     return name * "+" * (isnothing(datetimestamp) ? safe_datetime_stamp() : datetimestamp) * ext
 end
 
+"Magically converts `t` to `Dates.Time`. Defaults to ISO 8601."
 function parse_time(t)
     if isa(t, Time)
         return t
@@ -105,6 +139,7 @@ function parse_time(t)
     end
 end
 
+"Magically converts `d` to `Dates.Date`. Defaults to ISO 8601. (Uses `DATE_FORMAT` preference.)"
 function parse_date(d)
     if isa(d, Date)
         d = if year(d) == 1
@@ -125,9 +160,9 @@ function parse_date(d)
                         nothing
                     end
                 end
-                date_variations = if DATE_FORMAT == :MMDDYYYY
+                date_variations = if DATE_FORMAT == MMDDYYYY
                     ["y-m-d", "m-d", "yyyymmdd", "m/d/y", "m/d", "U d, y", "U d", "u. d, y", "u. d", "u d, y", "u d"]
-                elseif DATE_FORMAT == :DDMMYYYY
+                elseif DATE_FORMAT == DDMMYYYY
                     ["y-m-d", "d-m", "yyyymmdd", "d/m/y", "d/m", "d U y", "d U", "d u. y", "d u.", "d u y", "d u"]
                 else
                     @error "Invalid `DATE_FORMAT` preference. Please set to one of: $(join(VALID_DATE_FORMATS, ", "))"
@@ -158,38 +193,39 @@ function parse_date(d)
     end
 end
 
-function parse_datetime(d)
-    if isa(d, DateTime) || isa(d, Millisecond)
-        return d
-    elseif isa(d, Date)
-        d = if year(d) == 1
-            Date(year(now()), month(d), day(d))
+"Magically converts `dt` to `Dates.DateTime`. Defaults to ISO 8601. (Uses `DATE_FORMAT` preference.)"
+function parse_datetime(dt)
+    if isa(dt, DateTime) || isa(dt, Millisecond)
+        return dt
+    elseif isa(dt, Date)
+        d = if year(dt) == 1
+            Date(year(now()), month(dt), day(dt))
         else
-            d
+            dt
         end
         return DateTime(d, MIDNIGHT)
-    elseif isa(d, String)
+    elseif isa(dt, String)
         try
-            return DateTime(parse_date(d), MIDNIGHT)
+            return DateTime(parse_date(dt), MIDNIGHT)
         catch
             try
                 try
-                    return DateTime(Date(d, ISODateFormat), MIDNIGHT)
+                    return DateTime(Date(dt, ISODateFormat), MIDNIGHT)
                 catch
-                    return DateTime(d, ISODateTimeFormat)
+                    return DateTime(dt, ISODateTimeFormat)
                 end
             catch
                 try
                     function parse_datetime_g(df)
                         return try
-                            DateTime(d, df)
+                            DateTime(dt, df)
                         catch exc
                             nothing
                         end
                     end
-                    date_variations = if DATE_FORMAT == :MMDDYYYY
+                    date_variations = if DATE_FORMAT == MMDDYYYY
                         ["y-m-d", "m-d", "yyyymmdd", "m/d/y", "m/d", "U d, y", "U d", "u. d, y", "u. d", "u d, y", "u d"]
-                    elseif DATE_FORMAT == :DDMMYYYY
+                    elseif DATE_FORMAT == DDMMYYYY
                         ["y-m-d", "d-m", "yyyymmdd", "d/m/y", "d/m", "d U y", "d U", "d u. y", "d u.", "d u y", "d u"]
                     else
                         @error "Invalid `DATE_FORMAT` preference. Please set to one of: $(join(VALID_DATE_FORMATS, ", "))"
@@ -207,24 +243,24 @@ function parse_datetime(d)
                         end
                         parse = parse_datetime_g(datetimeformats[i])
                     end
-                    d = parse
+                    dt′ = parse
                     # d = if Dates.value(Time(d)) == 0
                     #     DateTime(Date(d), MIDNIGHT)
                     # else
                     #     d
                     # end
-                    return if year(d) == 1
-                        DateTime(Date(year(now()), month(d), day(d)), Time(d))
+                    return if year(dt′) == 1
+                        DateTime(Date(year(now()), month(dt′), day(dt′)), Time(dt′))
                     else
-                        d
+                        dt′
                     end
                 catch
-                    @error "I could not parse the datetime..." d
+                    @error "I could not parse the datetime..." dt
                 end
             end
         end
     else
-        @info "Must be `DateTime` or `String` but is" typeof(d)
-        @error "I could not parse the datetime..." d
+        @info "Must be `DateTime` or `String` but is" typeof(dt)
+        @error "I could not parse the datetime..." dt
     end
 end
