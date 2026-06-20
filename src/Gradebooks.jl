@@ -22,18 +22,24 @@ include("people.jl")
 include("assignments.jl")
 
 
-@kwdef struct Course
+"""
+
+An academic quest prescribing assignments to students to grow and evaluate their understanding and ability to think critically unto completing a degree.
+
+`credits` defaults to `COURSE_CREDITS` preference.
+"""
+struct Course
     code::Symbol
     number::Integer
     name::String
-    credits::Integer                = 3
-    assignments::Vector{Assignment} = Assignment[]
-    codename::Symbol                = Symbol("")
+    credits::Integer
+    assignments::Vector{Assignment}
+    codename::Symbol
     function Course(code, number, name, credits, assignments, codename)
-        return new(uppercase2symbol("$code"), Int(number), name, credits, assignments, uppercase2symbol("$codename"))
+        return new(string_2uppercase_symbol("$code"), Int(number), name, Int(credits), assignments, string_2uppercase_symbol("$codename"))
     end
 end
-Course(code, number, name; credits=3, assignments=Assignment[]) = Course(code, number, name, credits, assignments, uppercase2symbol("$code$number"))
+Course(code, number, name; credits=COURSE_CREDITS, assignments=Assignment[]) = Course(code, number, name, credits, assignments, string_2uppercase_symbol("$code$number"))
 
 @enum AcademicCalendarType begin
     Semester
@@ -45,16 +51,19 @@ Course(code, number, name; credits=3, assignments=Assignment[]) = Course(code, n
     Other
 end
 
-@kwdef struct Term
-    name::String                    # "Fall 2026", "Spring Quarter 2025-26", "Michaelmas 2026", etc.
+"Calendrical discretization of academic year."
+struct Term
+    name::String
     calendar_type::AcademicCalendarType
-    year::Int                       # or academic_year::String e.g. "2025-2026"
+    year::Integer
     start::Date
     finish::Date
     holidays::Vector{Date}
-    code::String                    # e.g. "FA26", "SP25", institutional code
-    metadata::Dict{Symbol,Any} = Dict()  # for extra institution-specific info
+    code::Symbol
+    metadata::Dict{Symbol,Any}
+    new(name, calendar_type, year, parse_date(start), parse_date(finish), map(parse_date, holidays), string_2uppercase_symbol(string_sanitize(string_2codename(code))), metadata)
 end
+Term(name, calendar_type, year, start, finish, holidays, code; metadata=Dict()) = Term(name, calendar_type, year, start, finish, holidays, code, metadata=metadata)
 
 make_attendance(name::AbstractString, points::Real, date::Date) = Attendance(name, Point(points), date)
 
@@ -68,6 +77,7 @@ function make_lectures(term::Term, frequency::Vector{Symbol}, points::Real=1.0)
     return make_lectures(term.start, term.finish, term.holidays, frequency, points)
 end
 
+"Couples course with prescribing assignments in term offered to attending student roster."
 struct Class
     course::Course
     term::Term
@@ -84,14 +94,14 @@ struct Class
     roster::Roster
     function Class(course, term, section, frequency, time_start, time_finish, time_duration, lectures, codename_short, codename_long, instructors, primary_instructor, roster)
         return new(course, term, section, frequency2codesymbols(frequency), time_start, time_finish, canonicalize(time_finish - time_start), lectures,
-            uppercase2symbol("$codename_short"), uppercase2symbol("$codename_long"),
+            string_2uppercase_symbol("$codename_short"), string_2uppercase_symbol("$codename_long"),
             instructors, primary_instructor, roster
         )
     end
 end
 function Class(course, term, section, frequency, time_start, time_finish, instructors::Vector{Instructor}, students::Vector{Student}, points::Real=1.0)
     return Class(course, term, section, frequency, time_start, time_finish, canonicalize(time_finish - time_start), make_lectures(term.start, term.finish, term.holidays, frequency, points),
-        course.codename, uppercase2symbol(join(["$(course.codename)", first(uppercase("$term")) * (uppercase("$term")[1:2] == "SU" ? "u" : "") * last("$year", 2), @sprintf("%03d", section)], "-")),
+        course.codename, string_2uppercase_symbol(join(["$(course.codename)", first(uppercase("$term")) * (uppercase("$term")[1:2] == "SU" ? "u" : "") * last("$year", 2), @sprintf("%03d", section)], "-")),
         instructors, first(instructors), Roster(students)
     )
 end

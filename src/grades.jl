@@ -1,8 +1,13 @@
 export Score, Submission, Grade, grade
 export is_late, late_penalty
 
+
+
 using Dates: AbstractDateTime
 
+
+
+"Compares `earned` points to `value` with `percent` and letter grade."
 struct Score
     earned::Point
     value::Point
@@ -10,8 +15,8 @@ struct Score
     letter::LetterGrade
     comment::String
 end
-Score(percentage::Percent, value::Point; comment="") = Score(percentage*value, value, percentage, credit2letter(percentage), comment)
-Score(points::T, value::T; comment="") where {T<:Real} = ((p, v) = Point.([points, value]); Score(p, v, p/v, credit2letter(p/v), comment))
+Score(percentage::Percent, value::Point; comment="") = Score(percentage*value, value, percentage, credit2lettergrade(percentage), comment)
+Score(points::T, value::T; comment="") where {T<:Real} = ((p, v) = Point.([points, value]); Score(p, v, p/v, credit2lettergrade(p/v), comment))
 
 # # Score(assignment::Assignment, tallies::Vararg{Tally{T,M,V}}) where {T<:AbstractScore,M<:AbstractMark,V<:AbstractScore} = Score(assignment.value, tally(tallies...)) # mapreduce(tally, +, [tallies...]))
 # # Score(assignment::Assignment, tallies::Vector{<:Tally}; comment="") = Score(mapreduce(tally, +, filter(!isempty, map(y->filter(x->isa(x.mark, y), tallies), [Grant, Subtract]))), assignment.value; comment=comment)
@@ -51,41 +56,50 @@ Score(points::T, value::T; comment="") where {T<:Real} = ((p, v) = Point.([point
 #     end
 #     return Score(item, Evaluation(question, isa(mark, Credit) ? Mark(mark) : mark, comment))
 # end
-function Score(assignment::Assignment, evals::Vector{Evaluation})
+"Resolves evaluations to total points earned which may be calculated from percent earned against assignment part value."
+function Score(assignment::Assignment, evaluations::Vector{Evaluation})
     earned = zero(Point)
-    for ev in evals
-        δ = ev.mark.delta
-        if isa(δ, Point)
-            earned += δ
-        elseif isa(δ, Percent)
-            if isa(ev.item, Question)
-                if isa(ev.item.value, Point)
-                    earned += δ * ev.item.value
-                elseif isa(ev.item.value, Percent)
-                    earned += δ * ev.item.value * assignment.value
+    for evaluation in evaluations
+        delta = evaluation.mark.delta
+        if isa(delta, Point)
+            earned += delta
+        elseif isa(delta, Percent)
+            if isa(evaluation.target, Question)
+                if isa(evaluation.target.value, Point)
+                    earned += delta * evaluation.target.value
+                elseif isa(evaluation.target.value, Percent)
+                    earned += delta * evaluation.target.value * assignment.value
                 else
-                    @error "Question values must be of type `Point` or `Percent`." question=ev.item
+                    @error "Question values must be of type `Point` or `Percent`" question=evaluation.target
+                    error("Unsupported type")
                 end
-            elseif isa(ev.item, Rubric)
-                for metric in ev.item.metrics
+            elseif isa(evaluation.target, Rubric)
+                for metric in evaluation.target.metrics
                     if isa(metric.value, Point)
-                        earned += δ * metric.value
+                        earned += delta * metric.value
                     elseif isa(metric.value, Percent)
-                        earned += δ * metric.value * assignment.value
+                        try
+                            earned += delta * metric.value * assignment.value
+                        catch
+                            @error "Unclear how combination resolves to points" assignment=assignment target=evaluation.target mark=evaluation.mark metric=metric
+                            error("Ambiguous evaluation")
+                        end
                     else
-                        @error "Rubric metrics must be of type `Point`." metric=metric
+                        @error "Rubric metrics must be of type `Point` or `Percent`" metric
+                        error("Unsupported type")
                     end
                 end
             end
         else
-            @error "Mark must be `Point` or `Percent`, got " typeof(δ)
+            @error "Mark must be of type `Point` or `Percent`" typeof(delta)
+            error("Unsupported type")
         end
     end
-
     percent = earned / assignment.value
-    return Score(earned, assignment.value, percent, credit2letter(percent), join(map(x->x.comment, evals), "\n"))
+    return Score(earned, assignment.value, percent, credit2lettergrade(percent), join(map(x->x.comment, evaluations), "\n"))
 end
 
+"Couples datetime stamp of submitted work to computed score from evaluations."
 struct Submission
     submitted::Union{DateTime, Dates.CompoundPeriod, Millisecond}
     score::Score
@@ -94,6 +108,7 @@ struct Submission
     Submission(submitted, score, evaluations) = new(parse_datetime(submitted), score, evaluations)
 end
 
+"Couples student to submitted work for assignment."
 struct Grade
     who::Student
     assignment::Assignment
@@ -105,6 +120,8 @@ end
 # function Grade(identifier, roster, assignment, submitted, marks::Vector{Union{Mark, Credit}})
 #     return Grade(identifier, roster, assignment, submitted, map(x->Evaluation(assignment.questions[x[1]], isa(x[2][1], Credit) ? Mark(x[2][1]) : x[2][1]; comment=x[2][2]), enumerate(marks)))
 # end
+
+# TODO: honestly, I get a little lost after this point.
 
 function absolute_question_points(q::Question, parent::Point)
     if isa(q.value, Point)

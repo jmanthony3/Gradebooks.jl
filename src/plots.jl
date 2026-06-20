@@ -109,7 +109,7 @@ function build_gradebook_display(gb::Gradebook, assignments::Vector{Assignment};
     end
 
     df.Letter = map(df.Percent) do p
-        credit2letter(p)
+        credit2lettergrade(p)
     end
 
     df.Missing = map(df.Total) do t

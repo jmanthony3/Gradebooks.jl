@@ -48,7 +48,7 @@ function frequency2codesymbols(input)::Vector{Symbol}
             for c in s
                 day = get(DAYSYMBOLCODEMAP, c, nothing)
                 if isnothing(day)
-                    error("Unknown day code: $c in :$s")
+                    error("Unknown day code $c in :$s")
                 else
                     push!(days, day)
                 end
@@ -76,7 +76,7 @@ function frequency2codesymbols(input)::Vector{Symbol}
         unique!(days)
         return days[filter(!isnothing, indexin(DAYSOFWEEKSYMBOLCODES, days))]
     else
-        @error "Cannot parse meeting frequency of type $(typeof(input)): $input"
+        error("Cannot parse meeting frequency of type $(typeof(input)): $input")
     end
 end
 
@@ -114,7 +114,7 @@ function parse_time(t)
                         if isa(exc, ArgumentError)
                             nothing
                         else
-                            @error "Could not parse..."
+                            error("Could not parse time=$t")
                         end
                     end
                 end
@@ -130,12 +130,12 @@ function parse_time(t)
                 end
                 return parse
             catch
-                @error "I could not parse the datetime..." d
+                error("Could not parse datetime=$d")
             end
         end
     else
-        @info "Must be `DateTime` or `String` but is" typeof(t)
-        @error "I could not parse the datetime..." t
+        @info "Must be of type `DateTime` or `String` but is" typeof(t)
+        error("Could not parse datetime=$t")
     end
 end
 
@@ -165,7 +165,7 @@ function parse_date(d)
                 elseif DATE_FORMAT == DDMMYYYY
                     ["y-m-d", "d-m", "yyyymmdd", "d/m/y", "d/m", "d U y", "d U", "d u. y", "d u.", "d u y", "d u"]
                 else
-                    @error "Invalid `DATE_FORMAT` preference. Please set to one of: $(join(VALID_DATE_FORMATS, ", "))"
+                    error("Invalid `DATE_FORMAT` preference. Please set to one of: $(join(VALID_DATE_FORMATS, ", "))")
                 end
                 dateformats = DateFormat.(date_variations)
                 i, parse, n = 0, nothing, length(dateformats)
@@ -184,12 +184,12 @@ function parse_date(d)
                 end
                 return d
             catch
-                @error "I could not parse the datetime..." d
+                error("Could not parse datetime", d)
             end
         end
     else
-        @info "Must be `Date` or `String` but is" typeof(d)
-        @error "I could not parse the datetime..." d
+        @info "Must be of type `Date` or `String` but is" typeof(d)
+        error("Could not parse datetime=$d")
     end
 end
 
@@ -228,7 +228,7 @@ function parse_datetime(dt)
                     elseif DATE_FORMAT == DDMMYYYY
                         ["y-m-d", "d-m", "yyyymmdd", "d/m/y", "d/m", "d U y", "d U", "d u. y", "d u.", "d u y", "d u"]
                     else
-                        @error "Invalid `DATE_FORMAT` preference. Please set to one of: $(join(VALID_DATE_FORMATS, ", "))"
+                        error("Invalid `DATE_FORMAT` preference. Please set to one of: $(join(VALID_DATE_FORMATS, ", "))")
                     end
                     time_variations = ["H:M:S.s", "H:M:S", "H:M", "H.M.S.s", "H.M.S", "H.M", "HHMMSSsss", "HHMMSS", "HHMM", "I:M p", "I.M p", "I:MMp", "I.MMp", "IIMM p", "IIMMp"]
                     datetimeformats = DateFormat.(vcat(
@@ -255,12 +255,12 @@ function parse_datetime(dt)
                         dt′
                     end
                 catch
-                    @error "I could not parse the datetime..." dt
+                    error("Could not parse datetime", dt)
                 end
             end
         end
     else
-        @info "Must be `DateTime` or `String` but is" typeof(dt)
-        @error "I could not parse the datetime..." dt
+        @info "Must be of type `DateTime` or `String` but is" typeof(dt)
+        error("Could not parse the datetime=$dt")
     end
 end

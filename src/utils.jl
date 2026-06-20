@@ -18,7 +18,8 @@ function string_2codename(s::AbstractString)
     tokens = filter(!isempty, filter(s->lowercase(s) ∉ forbidden, split(filter(cn->!ispunct(cn) || cn ∈ ['{', '}'], s), " ")))
     firstword_idx = findfirst(t->(first(t) == '{' ? true : isletter(first(t))), tokens)
     if isnothing(firstword_idx)
-        @error "After sanitization, no remaining tokens begin with a letter." s tokens
+        @error "After sanitization, no remaining tokens begin with a letter." tokens
+        error("Could not parse input, s=", s)
     end
     return map(t->(first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : (isdigit(first(t)) ? t : first(filter(!ispunct, t))), tokens[firstword_idx:end])
 end

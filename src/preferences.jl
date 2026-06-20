@@ -19,7 +19,7 @@ using Preferences
 
 "Regional preference for whether month (`MMDDYYYY`) or day (`DDMMYYYY`) is written first in a date string."
 const DATE_FORMAT = begin
-    @warn "Loading default `DATE_FORMAT` as `MMDDYYYY`..."
+    @info "Loading default `DATE_FORMAT` as `MMDDYYYY`"
     @load_preference("DATE_FORMAT", MMDDYYYY)
 end
 
@@ -61,7 +61,7 @@ const STRING_MATCH_THRESHOLD = @load_preference("STRING_MATCH_THRESHOLD", 0.2)
 
 function set_date_format(fmt::Symbol)
     if !(fmt in VALID_DATE_FORMATS)
-        @error("Invalid `DATE_FORMAT`. Please choose from: $(join(VALID_DATE_FORMATS, ", "))")
+        @error "Invalid `DATE_FORMAT`. Please choose from:" VALID_DATE_FORMATS
     end
     @set_preferences!("DATE_FORMAT" => fmt)
     @info("New `DATE_FORMAT` set; restart your Julia session for this change to take effect!")
