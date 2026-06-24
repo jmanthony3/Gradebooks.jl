@@ -1,8 +1,10 @@
 export AttendanceStatus, AttendanceRecord, is_present, is_absent, is_excused, is_late, is_tardy
-export attendance_status_map_from_string, attendance_update!, attendance_record!, attendance_sync!
+public record!
+export attendance_status_map_from_string, attendance_record!, attendance_update!, attendance_sync!
 
 
 
+"Semantic options for how much attended of a class lecture."
 @enum AttendanceStatus begin
     Present
     Absent
@@ -12,6 +14,7 @@ export attendance_status_map_from_string, attendance_update!, attendance_record!
     NoRecord
 end
 
+"Records datetime stamp of attendance status[ with comments]."
 @kwdef struct AttendanceRecord
     status::AttendanceStatus
     stamp::DateTime
@@ -31,10 +34,27 @@ function record!(gb, student, lecture, record)
         t = count(==(Absent), Matrix(gb.raw[rows_idx, :])) # + count(==(0), Matrix(att.raw_score[occursin.(key, att.raw_score[!, "Email"]), :]))
         p = Point(t <= ATTENDANCE_LIMIT ? 0 : ((t - ATTENDANCE_LIMIT) * ATTENDANCE_PENALTY))
         gb.penalty[rows_idx, lecture.codename] .= p
-        gb.total[rows_idx, lecture.codename] .= p
+        # gb.total[rows_idx, lecture.codename] .= p
     end
 end
 
+"""
+Records quality of attendance for a class lecture (`date_lecture`) entered on `date_stamp`.
+
+`marks` is magically parsed for combinations of `AttendanceStatus`, students, and comments.
+
+## Example
+```
+record_attendance!(gb, "Jun. 19, 2026", "Jun. 20, 2026", [NoRecord])
+record_attendance!(gb, "2026-06-22", Date(2026, 06, 15), [
+    (Excused, "Canceled due to snow")])
+record_attendance!(gb, Date("2026-06-24"), Date("2026-06-25"), [
+    ("alice@example.edu", Late, "Blew a tire"),
+    (Present, "bob@example.edu", "Forgot to entire attendance code"),
+    (Absent, "cole@example.edu"),
+])
+```
+"""
 function attendance_record!(gb::Gradebook, date_stamp::Union{Date, String}, date_lecture::Union{Date, String}, marks::Vector{Any}; threshold=STRING_MATCH_THRESHOLD)
     date_stamp = parse_date(date_stamp)
     date_lecture = parse_date(date_lecture)
@@ -90,6 +110,12 @@ end
 """
 attendance_status_map_from_string(x::AbstractString)::AttendanceStatus = error("Attendance status map not yet implemented for `AbstractString`")
 
+"""
+Records on date of entry (`date_stamp`) quality of attendance from a file matching `regex` within `dir`.
+
+## Warning
+If using this method, make sure to implement `attendance_status_map_from_string(x::AbstractString)`.
+"""
 function attendance_record!(gb::Gradebook, date_stamp::Union{Date, String}, regex::Regex, dir::String; threshold=STRING_MATCH_THRESHOLD)
     roster = gb.class.roster
     lectures = filter(x->x.category==CategoryAttendance, gb.class.course.assignments)
@@ -126,7 +152,7 @@ function attendance_record!(gb::Gradebook, date_stamp::Union{Date, String}, rege
 
         for (i, attendance_record) in zip(attendance_records_idx, attendance_records)
             if !isnothing(findfirst(attendance_record .== lecture_dates))
-                marks = map(x->(x[1], attendance_status_map_from_string[x[2]], "3rd Party"), submissions_df[!, i])
+                marks = map(x->(x[1], attendance_status_map_from_string(x[2]), "3rd Party"), submissions_df[!, i])
                 attendance_record!(gb, date_stamp, attendance_record, marks; threshold=threshold)
             else
                 error("Attendance record date ($attendance_record) not found among lecture dates: $lecture_dates")
@@ -136,6 +162,7 @@ function attendance_record!(gb::Gradebook, date_stamp::Union{Date, String}, rege
     return nothing
 end
 
+"Calculates number of `Absent` for each student and records penalties."
 function attendance_update!(gb::Gradebook)
     lectures = gb.class.lectures
     df = select(gb.raw, All()=>x->x.category==CategoryAttendance)
@@ -144,10 +171,11 @@ function attendance_update!(gb::Gradebook)
             t = count(==(Absent), collect(row)[begin:j]) # + count(==(0), collect(row)[begin:j])
             p = Point(t <= ATTENDANCE_LIMIT ? 0.0 : ATTENDANCE_PENALTY)
             gb.penalty[i, lectures[j].codename] .= p
-            gb.total[i, lectures[j].codename] .= p
+            # gb.total[i, lectures[j].codename] .= p
         end
     end
     return nothing
 end
 
+"Convenience function to ensure attendance penalties are current."
 attendance_sync!(gb::Gradebook) = attendance_update!(gb)
