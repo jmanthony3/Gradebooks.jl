@@ -1,4 +1,4 @@
-export Question, Evaluation, Rubric
+export Question, Rubric
 public AssignmentCategory
 export Assignment, Attendance, Exam, Homework, Paper, Presentation, Project, Quiz
 
@@ -40,22 +40,6 @@ struct Question
     end
 end
 Question(name, value, parts=nothing) = Question(name, value, parts, name)
-
-
-"Couples target question with redline mark."
-struct Evaluation
-    target::Question
-    mark::Mark
-    comment::String
-    function Evaluation(question, mark, comment)
-        if question.parts !== nothing
-            @warn "Evaluating question without specifying a part" question
-        end
-        return new(question, mark, comment)
-    end
-end
-Evaluation(question, mark::Credit; comment="") = Evaluation(question, Mark(mark), comment)
-
 
 "Weight distributions to calculate grade from evaluations."
 struct Rubric

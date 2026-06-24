@@ -1,4 +1,4 @@
-export Score, Submission, Grade, grade
+export Evaluation, Score, Submission, Grade, grade
 export is_late, late_penalty
 
 
@@ -6,6 +6,20 @@ export is_late, late_penalty
 using Dates: AbstractDateTime
 
 
+
+"Couples target question with redline mark."
+struct Evaluation
+    target::Question
+    mark::Mark
+    comment::String
+    function Evaluation(question, mark, comment)
+        if question.parts !== nothing
+            @warn "Evaluating question without specifying a part" question
+        end
+        return new(question, mark, comment)
+    end
+end
+Evaluation(question, mark::Credit; comment="") = Evaluation(question, Mark(mark), comment)
 
 "Compares `earned` points to `value` with `percent` and letter grade."
 struct Score
@@ -112,7 +126,7 @@ end
 
 "Couples student to submitted work for assignment."
 struct Grade
-    who::Student
+    student::Student
     assignment::Assignment
     submission::Submission
 end

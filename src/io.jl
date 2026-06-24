@@ -1,6 +1,12 @@
-export save_gradebook, load_gradebook, export_gradebook, import_gradebook
+export ChangeEvent, GradebookArchive
+export save_gradebook, load_gradebook
+export export_gradebook, import_gradebook
+
+
 
 using CSV, DataFrames, Dates, JLD2, JSON
+
+
 
 struct ChangeEvent
     timestamp::DateTime
@@ -18,18 +24,9 @@ struct GradebookArchive
     history::Vector{ChangeEvent}
 end
 
-function save_archive(
-    gb::Gradebook,
-    path::AbstractString;
-    history::Vector{ChangeEvent}=ChangeEvent[]
-)
-    archive = GradebookArchive(
-        string(pkgversion(@__MODULE__)),
-        now(),
-        gb,
-        history
-    )
 
+function save_archive(gb::Gradebook, path::AbstractString; history::Vector{ChangeEvent}=ChangeEvent[])
+    archive = GradebookArchive(string(pkgversion(@__MODULE__)), now(), gb, history)
     mkpath(dirname(path))
     JLD2.jldsave(path; archive)
     return path
@@ -41,57 +38,199 @@ function load_archive(path::AbstractString)
     end
 end
 
-function save_gradebook(
-    gb::Gradebook,
-    path::AbstractString;
-    history::Vector{ChangeEvent}=ChangeEvent[]
-)
-    return save_archive(gb, path; history=history)
+"Saves gradebook (`gb`) to `path` with JLD2-serialization of `GradebookArchive`."
+save_gradebook(gb::Gradebook, path::AbstractString; history::Vector{ChangeEvent}=ChangeEvent[]) = save_archive(gb, path; history=history)
+
+"Loads JLD2-serialized archive of `GradebookArchive` and returns `gradebook` field."
+load_gradebook(path::AbstractString) = ((archive = load_archive(path)); archive.gradebook)
+
+
+# --- JSON export helpers -----------------------------------------------------
+
+
+function flatten_question(q)
+    return Dict(
+        "name" => q.name,
+        "value" => q.value,
+        "parts" => isnothing(q.parts) ? q.parts : flatten_question.(q.parts),
+        "codename" => q.codename
+    )
 end
 
-function load_gradebook(path::AbstractString)
-    arc = load_archive(path)
-    return arc.gradebook
+function flatten_assignment(a)
+    return Dict(
+        "name" => a.name,
+        "value" => a.value,
+        "due" => a.due,
+        "category" => a.category,
+        "is_group" => a.is_group,
+        "questions" => flatten_question.(a.questions),
+        "codename" => a.codename
+    )
 end
+
+function flatten_course(c)
+    return Dict(
+        "code" => c.code,
+        "number" => c.number,
+        "name" => c.name,
+        "credits" => c.credits,
+        "assignments" => flatten_assignment(c.assignments),
+        "codename" => c.codename
+    )
+end
+
+function flatten_term(c)
+    return Dict(
+        "name" => c.name,
+        "calendar_type" => c.calendar_type,
+        "year" => c.year,
+        "start" => c.start,
+        "finish" => c.finish,
+        "holidays" => c.holidays,
+        "code" => c.code,
+        "metadata" => c.metadata
+    )
+end
+
+function flatten_person(p)
+    return Dict(
+        "name_given" => p.name_given,
+        "name_family" => p.name_family,
+        "name_title" => p.name_title,
+        "name_suffix" => p.name_suffix,
+        "name_preferred" => p.name_preferred,
+        "name_initials" => p.name_initials,
+        "name_aliases" => p.name_aliases,
+        "email" => p.email,
+        "phone" => p.phone,
+        "organization" => p.organization,
+        "id" => p.id,
+        "name" => p.name,
+        "codename" => p.codename
+    )
+end
+
+function flatten_instructor(s)
+    return Dict(
+        "person" => flatten_person(s.person),
+        "job_title" => s.job_title,
+        "notes" => flatten_dict(s.notes)
+    )
+end
+
+function flatten_lettergrade(lg)
+    return Dict(
+        "level" => lg.level,
+        "string" => lg.string,
+        "quality_points" => lg.quality_points
+    )
+end
+
+function flatten_student(s)
+    return Dict(
+        "person" => flatten_person(s.person),
+        "discipline" => s.discipline,
+        "enrollment_status" => string(s.enrollment_status),
+        "final_grade" => isnothing(s.final_grade) ? nothing : flatten_lettergrade(s.final_grade),
+        "withdrawal_date" => s.withdrawal_date,
+        "notes" => flatten_dict(s.notes)
+    )
+end
+
+function flatten_class(c)
+    return Dict(
+        "course" => flatten_course(c.course),
+        "term" => flatten_term(c.term),
+        "section" => c.section,
+        "frequency" => c.frequency,
+        "time_start" => c.time_start,
+        "time_finish" => c.time_finish,
+        "time_duration" => c.time_duration,
+        "lectures" => flatten_assignment(c.lectures),
+        "codename_short" => c.codename_short,
+        "codename_long" => c.codename_long,
+        "primary_instructor" => flatten_instructor(c.primary_instructor),
+        "instructors" => flatten_instructor.(c.instructors),
+        "roster" => flatten_student.(c.roster.students)
+    )
+end
+
+function flatten_score(s)
+    return Dict(
+        "earned" => s.earned,
+        "value" => s.value,
+        "percent" => s.percent,
+        "letter" => flatten_lettergrade(s.letter),
+        "comment" => s.comment
+    )
+end
+
+function flatten_mark(m)
+    return Dict(
+        "delta" => m.delta,
+        "delta_type" => typeof(m.delta),
+        "comment" => m.comment
+    )
+end
+
+function flatten_evaluation(e)
+    return Dict(
+        "target" => flatten_question(e.target),
+        "mark" => flatten_mark(e.mark),
+        "comment" => e.comment
+    )
+end
+
+function flatten_submission(g)
+    return Dict(
+        "submitted" => g.submitted,
+        "score" => flatten_score(g.score),
+        "evaluations" => flatten_evaluation.(g.evaluations)
+    )
+end
+
+function flatten_grade(g)
+    return Dict(
+        "student" => flatten_student(g.student),
+        "assignment" => flatten_assignment(g.assignment),
+        "submission" => flatten_submission(g.submission)
+    )
+end
+
+function flatten_gradebook(gb::Gradebook)
+    return Dict(
+        "schema_version" => string(pkgversion(@__MODULE__)),
+        "saved_at" => string(now()),
+        "class" => flatten_class(gb.class),
+        "grades" => flatten_grade.(gb.grades),
+        "raw" => gb.raw,
+        "penalty" => gb.penalty,
+        "total" => gb.total
+    )
+end
+
+"Exports gradebook (`gb`) to `path` in `format`: `:json` or `:csv`."
+function export_gradebook(gb::Gradebook, path::AbstractString; format::Union{Nothing, Symbol}=nothing)
+    if lowercase(splitext(path)[2]) == ".json" || format == :json
+        data = flatten_gradebook(gb)
+        mkpath(dirname(path))
+        open(path, "w") do io
+            JSON.print(io, data, 2)
+        end
+        return path
+    elseif lowercase(splitext(path)[2]) == ".csv" || format == :csv
+        mkpath(dirname(path))
+        CSV.write(path, gb.total)
+        return path
+    else
+        error("Unsupported export format: $format")
+    end
+end
+
 
 # --- JSON archive round-trip -------------------------------------------------
 
-function import_gradebook(path::AbstractString)
-    data = JSON.parsefile(path)
-    return rebuild_gradebook_from_dict(data)
-end
-
-function rebuild_gradebook_from_dict(data::Dict)
-    # Rebuild lookup tables first
-    students_by_id = Dict{Any,Any}()
-    assignments_by_codename = Dict{String,Any}()
-
-    # Rebuild students
-    for sdata in data["students"]
-        s = rebuild_student_from_dict(sdata)
-        students_by_id[s.id] = s
-    end
-
-    # Rebuild assignments (questions/rubric trees)
-    for adata in data["assignments"]
-        a = rebuild_assignment_from_dict(adata)
-        assignments_by_codename[a.codename] = a
-    end
-
-    # Rebuild class / roster / course
-    course = rebuild_course_from_dict(data["course"])
-    roster = rebuild_roster_from_dict(data["roster"], students_by_id)
-    cls = rebuild_class_from_dict(data["class"], course, roster)
-
-    # Rebuild submissions
-    submissions = [
-        rebuild_submission_from_dict(sdata, students_by_id, assignments_by_codename)
-        for sdata in data["submissions"]
-    ]
-
-    # Replace the constructor call below with the exact constructor you use
-    return Gradebook(cls, submissions)
-end
 
 function rebuild_course_from_dict(d)
     # Replace with your real constructor
@@ -207,121 +346,39 @@ function rebuild_submission_from_dict(d, students_by_id, assignments_by_codename
     )
 end
 
-# --- JSON export helpers -----------------------------------------------------
+function rebuild_gradebook_from_dict(data::Dict)
+    # Rebuild lookup tables first
+    students_by_id = Dict{Any,Any}()
+    assignments_by_codename = Dict{String,Any}()
 
-function flatten_class(c)
-    return Dict(
-        "course" => flatten_course(c.course),
-        "roster" => Dict(
-            "student_ids" => [s.id for s in c.roster.students]
-        )
-    )
-end
-
-function flatten_course(c)
-    return Dict(
-        "name" => c.name,
-        "code" => c.code,
-        "semester" => c.semester,
-        "section" => c.section
-    )
-end
-
-function flatten_student(s)
-    return Dict(
-        "id" => s.id,
-        "email" => s.email,
-        "name_given" => s.person.name_given,
-        "name_family" => s.person.name_family,
-        "name_preferred" => s.person.name_preferred,
-        "enrollment_status" => string(s.enrollment_status),
-        "final_grade" => s.final_grade === nothing ? nothing : string(s.final_grade)
-    )
-end
-
-function flatten_item(item; prefix="")
-    name = prefix == "" ? item.codename : "$(prefix).$(item.codename)"
-
-    out = Dict(
-        "codename" => item.codename,
-        "label" => item.name,
-        "value" => item.value
-    )
-
-    if hasproperty(item, :parts) && !isnothing(item.parts)
-        out["parts"] = [flatten_item(p; prefix=name) for p in item.parts]
+    # Rebuild students
+    for sdata in data["students"]
+        s = rebuild_student_from_dict(sdata)
+        students_by_id[s.id] = s
     end
 
-    return out
-end
-
-function flatten_assignment(a)
-    return Dict(
-        "codename" => a.codename,
-        "name" => a.name,
-        "value" => a.value,
-        "questions" => [flatten_item(q) for q in a.questions]
-    )
-end
-
-function flatten_mark(m)
-    if m isa Point
-        return Dict("kind" => "Point", "value" => m.val)
-    elseif m isa Percent
-        return Dict("kind" => "Percent", "value" => m.val)
-    else
-        return Dict("kind" => string(typeof(m)), "value" => m)
+    # Rebuild assignments (questions/rubric trees)
+    for adata in data["assignments"]
+        a = rebuild_assignment_from_dict(adata)
+        assignments_by_codename[a.codename] = a
     end
+
+    # Rebuild class / roster / course
+    course = rebuild_course_from_dict(data["course"])
+    roster = rebuild_roster_from_dict(data["roster"], students_by_id)
+    cls = rebuild_class_from_dict(data["class"], course, roster)
+
+    # Rebuild submissions
+    submissions = [
+        rebuild_submission_from_dict(sdata, students_by_id, assignments_by_codename)
+        for sdata in data["submissions"]
+    ]
+
+    # Replace the constructor call below with the exact constructor you use
+    return Gradebook(cls, submissions)
 end
 
-function flatten_evaluation(e)
-    return Dict(
-        "item" => e.item.codename,
-        "mark" => flatten_mark(e.mark),
-        "comment" => e.comment
-    )
-end
-
-function flatten_submission(g)
-    return Dict(
-        "student_id" => g.student.id,
-        "assignment" => g.assignment.codename,
-        "submitted_at" => string(g.submitted_at),
-        "score" => Dict(
-            "earned" => g.score.earned,
-            "total" => g.score.total,
-            "percent" => g.score.percent,
-            "letter" => string(g.score.letter)
-        ),
-        "evaluations" => [flatten_evaluation(e) for e in g.evaluations]
-    )
-end
-
-function flatten_gradebook(gb::Gradebook)
-    return Dict(
-        "schema_version" => string(pkgversion(@__MODULE__)),
-        "saved_at" => string(now()),
-        "course" => flatten_course(gb.class.course),
-        "class" => flatten_class(gb.class),
-        "students" => [flatten_student(s) for s in gb.class.roster.students],
-        "assignments" => [flatten_assignment(a) for a in gb.class.course.assignments],
-        "submissions" => [flatten_submission(g) for g in gb.grades]
-    )
-end
-
-function export_gradebook(gb::Gradebook, path::AbstractString; format::Symbol=:json)
-    if format == :json
-        data = flatten_gradebook(gb)
-        mkpath(dirname(path))
-        open(path, "w") do io
-            JSON.print(io, data, 2)
-        end
-        return path
-    elseif format == :csv
-        mkpath(dirname(path))
-        CSV.write(path, gb.total)
-        return path
-    else
-        error("Unsupported export format: $format")
-    end
+function import_gradebook(path::AbstractString)
+    data = JSON.parsefile(path)
+    return rebuild_gradebook_from_dict(data)
 end

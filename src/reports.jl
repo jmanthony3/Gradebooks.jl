@@ -1,14 +1,20 @@
 export get_reportdata
 export AbstractReport, DefendGrade, write_report
 
+
+
 using OteraEngine, Dates
+
+
 
 # @filter ensure_formattedpath(p) = join(string.(split(p, r"(\\|/)+")), "/")
 # @filter ensure_orgidprefix(id) = first(id) == ORG_IDPREFIX ? id : "$ORG_IDPREFIX$id"
 # @filter ensure_orgemailaddress(e) = occursin("@", e) ? e : "$e$organization_EMAILDOMAIN"
 # @filter ensure_assignment_name_sanitization(n) = lowercase(replace(n, " "=>"_"))
 
+
 const TEMPLATE_DIR = joinpath(@__DIR__, "..", "templates")
+
 
 @enum ReportType AcademicMisconduct GradeDefense LatePenalty
 
@@ -107,6 +113,7 @@ function report_context(
     return ctx
 end
 
+
 function generate_report(
     gb::Gradebook,
     student::Student,
@@ -139,11 +146,6 @@ function generate_report(
     return render_template(template_name, ctx; output_path=output_path)
 end
 
-generate_academic_misconduct(gb, student; kwargs...) =
-    generate_report(gb, student, AcademicMisconduct; kwargs...)
-
-generate_grade_defense(gb, student; kwargs...) =
-    generate_report(gb, student, GradeDefense; kwargs...)
-
-generate_late_penalty_appeal(gb, student; kwargs...) =
-    generate_report(gb, student, LatePenalty; kwargs...)
+generate_academic_misconduct(gb, student; kwargs...) = generate_report(gb, student, AcademicMisconduct; kwargs...)
+generate_grade_defense(gb, student; kwargs...) = generate_report(gb, student, GradeDefense; kwargs...)
+generate_late_penalty_appeal(gb, student; kwargs...) = generate_report(gb, student, LatePenalty; kwargs...)

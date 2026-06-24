@@ -48,9 +48,10 @@ abstract type AbstractPerson end
 end
 
 "Wrapper of `Person` with an academic job title."
-struct Instructor <: AbstractPerson
+@kwdef struct Instructor <: AbstractPerson
     person::Person
     job_title::String
+    notes::Dict{Symbol,Any} = Dict()
 end
 Instructor(name_given::String, name_family::String; kwargs...) = Instructor(Person(name_given, name_family, kwargs...), kwargs.job_title)
 
