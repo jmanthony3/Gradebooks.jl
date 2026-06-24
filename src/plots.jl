@@ -138,7 +138,7 @@ function leaf_score(item, evs, parent_value)
     elseif δ isa Percent
         # normalize percent to an absolute point value using the item's base
         base = if item isa Question
-            absolute_question_points(item, parent_value)
+            get_leafvalue(item, parent_value)
         else
             parent_value
         end

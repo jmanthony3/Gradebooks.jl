@@ -20,6 +20,7 @@ make_person_name(given, family; title="", suffix="", nickname="") = join(filter(
 "Helper function to construct codename: e.g., `make_person_codename(Joby, Anthony)` ⟶ \":JA\""
 make_person_codename(given, family; nickname="") = string_2uppercase_symbol(join(map(s->first(s, 1), [!isempty(nickname) ? nickname : given, family])))
 
+
 abstract type AbstractPerson end
 
 "Base structure for personal, contact, organizational, and metadata information."
@@ -65,12 +66,13 @@ end
     person::Person
     discipline::String
     enrollment_status::EnrollmentStatus = Active
-    final_grade::Union{Nothing, LetterGrade} = nothing
-    withdrawal_date::Union{Nothing, Date} = nothing
+    final_grade::Union{LetterGrade, Nothing} = nothing
+    withdrawal_date::Union{Date, Nothing} = nothing
     # reinstatement_date, notes, etc.
     notes::Dict{Symbol,Any} = Dict()
 end
 Student(name_given::String, name_family::String; kwargs...) = Student(Person(name_given, name_family, kwargs...), kwargs.discipline, kwargs.enrollment_status, kwargs.final_grade, kwargs.withdrawal_date, kwargs.notes)
+
 
 struct StudentIndex
     by_email::Dict{String, Int}
@@ -104,6 +106,7 @@ function Roster(students)
     return new(students, StudentIndex(students))
 end
 
+
 function student_candidates(s::Student)
     parts = String[
         s.person.email,
@@ -120,7 +123,6 @@ function student_candidates(s::Student)
 end
 
 """
-
 Find needle (`identifier`), according to any field of `Person`, in haystack (`roster`).
 
 `threshold` adjusts Levenshtein string matching criterion.
@@ -174,6 +176,7 @@ end
 #     return roster[findfirst(x->any(y->occursin(a, repr(getproperty(x, y))), propertynames(x)), roster)]
 # end
 
+
 function update(person::Person; kwargs...)
     return update(person; kwargs...)
 end
@@ -187,13 +190,14 @@ function update(student::Student; kwargs...)
     return Student(update(student.person; kwargs...), discipline, enrollment_status, final_grade, withdrawal_date, notes)
 end
 
-function update(roster::Roster, student::Union{String, Student}; threshold=STRING_MATCH_THRESHOLD, kwargs...)
+function update(roster::Roster, student::Union{Student, String}; threshold=STRING_MATCH_THRESHOLD, kwargs...)
     s = isa(student, String) ? get_student(student, roster; threshold=threshold) : student
     roster.students[roster.index.by_id[s.id]] = update(s; kwargs...)
     return Roster(roster.students)
 end
 
-@enum EmailClients outlook gmail apple thunderbird proton
+
+@enum EmailClients Outlook Gmail Apple Thunderbird Proton
 
 "Gets emails from all students in `roster`. If `search` is not nothing, then returns a search string for email clients."
 function get_emails(roster::Roster; search::Union{Nothing, EmailClients}=nothing)
@@ -208,6 +212,7 @@ function get_emails(roster::Roster; search::Union{Nothing, EmailClients}=nothing
     end
     return isa(search, EmailClients) ? join(map(e->"from:$e", emails), " OR ") : emails
 end
+
 
 "A group of students working as a team toward a common goal."
 struct Team
@@ -228,7 +233,9 @@ end
 Team(name, roster::Roster) = Team(name, roster, name)
 Team(name, students::Vector{Student}) = Team(name, Roster(students))
 
+
 get_student(identifier::String, team::Team; threshold=STRING_MATCH_THRESHOLD) = get_student(identifier, team.roster; threshold=threshold)
+
 
 function team_candidates(t::Team)
     parts = String[t.name, t.codename]

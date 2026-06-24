@@ -1,6 +1,6 @@
 export Question, Evaluation, Rubric
-export Assignment, Attendance, Exam, Homework, Paper, Presentation, Project, Quiz
 public AssignmentCategory
+export Assignment, Attendance, Exam, Homework, Paper, Presentation, Project, Quiz
 
 
 
@@ -41,6 +41,7 @@ struct Question
 end
 Question(name, value, parts=nothing) = Question(name, value, parts, name)
 
+
 "Couples target question with redline mark."
 struct Evaluation
     target::Question
@@ -54,6 +55,7 @@ struct Evaluation
     end
 end
 Evaluation(question, mark::Credit; comment="") = Evaluation(question, Mark(mark), comment)
+
 
 "Weight distributions to calculate grade from evaluations."
 struct Rubric
@@ -83,19 +85,19 @@ end
 Rubric(name::String, metrics::Vector{Question}) = Rubric(name, metrics, name)
 Rubric(source::Question, metrics::Vector{Question}) = Rubric(source.name, metrics)
 
+
 @enum AssignmentCategory begin
-    Category_Attendance
-    Category_Exam
-    Category_Homework
-    Category_Other
-    Category_Paper
-    Category_Presentation
-    Category_Project
-    Category_Quiz
+    CategoryAttendance
+    CategoryExam
+    CategoryHomework
+    CategoryOther
+    CategoryPaper
+    CategoryPresentation
+    CategoryProject
+    CategoryQuiz
 end
 
 """
-
 Is branch in course-assignment tree model always composed of at least one leaf question, even if not given.
 
 `is_group` switches whether assignment should be completed individually.
@@ -136,25 +138,25 @@ struct Assignment
 end
 
 "Convenience function constructing `Assignment` to track attendance."
-Attendance(     name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Category_Attendance,    is_group, questions, string_sanitize(string_2codename(name)))
+Attendance(     name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryAttendance,    is_group, questions, string_sanitize(string_2codename(name)))
 
 "Convenience function constructing `Assignment` for an exam."
-Exam(           name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Category_Exam,          is_group, questions, string_sanitize(string_2codename(name)))
+Exam(           name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryExam,          is_group, questions, string_sanitize(string_2codename(name)))
 
 "Convenience function constructing `Assignment` for homework."
-Homework(       name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Category_Homework,      is_group, questions, string_sanitize(string_2codename(name)))
+Homework(       name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryHomework,      is_group, questions, string_sanitize(string_2codename(name)))
 
 "Convenience function constructing `Assignment` for some other academic item: e.g., extra credit."
-Other(          name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Category_Other,         is_group, questions, string_sanitize(string_2codename(name)))
+Other(          name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryOther,         is_group, questions, string_sanitize(string_2codename(name)))
 
 "Convenience function constructing `Assignment` for a paper."
-Paper(          name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Category_Paper,         is_group, questions, string_sanitize(string_2codename(name)))
+Paper(          name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryPaper,         is_group, questions, string_sanitize(string_2codename(name)))
 
 "Convenience function constructing `Assignment` for a presentation."
-Presentation(   name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Category_Presentation,  is_group, questions, string_sanitize(string_2codename(name)))
+Presentation(   name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryPresentation,  is_group, questions, string_sanitize(string_2codename(name)))
 
 "Convenience function constructing `Assignment` for a project."
-Project(        name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Category_Project,       is_group, questions, string_sanitize(string_2codename(name)))
+Project(        name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryProject,       is_group, questions, string_sanitize(string_2codename(name)))
 
 "Convenience function constructing `Assignment` for a quiz."
-Quiz(           name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Category_Quiz,          is_group, questions, string_sanitize(string_2codename(name)))
+Quiz(           name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryQuiz,          is_group, questions, string_sanitize(string_2codename(name)))

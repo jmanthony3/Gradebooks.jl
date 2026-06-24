@@ -99,14 +99,16 @@ function Score(assignment::Assignment, evaluations::Vector{Evaluation})
     return Score(earned, assignment.value, percent, credit2lettergrade(percent), join(map(x->x.comment, evaluations), "\n"))
 end
 
+
 "Couples datetime stamp of submitted work to computed score from evaluations."
 struct Submission
-    submitted::Union{DateTime, Dates.CompoundPeriod, Millisecond}
+    submitted::AbstractDateTime
     score::Score
     evaluations::Vector{Evaluation}
     # Submission(assignment, submitted, score) = new(assignment, parse_datetime(submitted), score)
     Submission(submitted, score, evaluations) = new(parse_datetime(submitted), score, evaluations)
 end
+
 
 "Couples student to submitted work for assignment."
 struct Grade
@@ -121,106 +123,118 @@ end
 #     return Grade(identifier, roster, assignment, submitted, map(x->Evaluation(assignment.questions[x[1]], isa(x[2][1], Credit) ? Mark(x[2][1]) : x[2][1]; comment=x[2][2]), enumerate(marks)))
 # end
 
-# TODO: honestly, I get a little lost after this point.
 
-function absolute_question_points(q::Question, parent::Point)
-    if isa(q.value, Point)
-        return q.value
-    elseif isa(q.value, Percent)
-        return Point(parent.val * q.value.val)
+function get_leafvalue(leaf::Question, nodevalue::Point)
+    if isa(leaf.value, Point)
+        return leaf.value
+    elseif isa(leaf.value, Percent)
+        return Point(nodevalue.val * leaf.value.val)
     else
-        error("Question values must be Point or Percent, got $(typeof(q.value))")
+        error("Question values must be of type `Point` or `Percent`, got leaf=$(typeof(leaf.value))")
     end
 end
 
-function collect_leaf_weights(q::Question, parent::Point)
-    base = absolute_question_points(q, parent)
-    if isnothing(q.parts)
-        return [(q, base)]
+function get_leaves(leaf::Question, nodevalue::Point)
+    base = get_leafvalue(leaf, nodevalue)
+    return if isnothing(leaf.parts)
+        [(leaf, base)]
+    else
+        leaves = Tuple{Question, Point}[]
+        append!(leaves, get_leaves.(leaf.parts, base))
+        leaves
     end
-    leaves = Tuple{Question,Point}[]
-    for part in q.parts
-        append!(leaves, collect_leaf_weights(part, base))
-    end
-    return leaves
 end
 
-function collect_leaf_weights(items::Vector{Question}, parent::Point)
-    reduce(vcat, collect_leaf_weights.(items, parent))
+function get_leaves(leaves::Vector{Question}, nodevalue::Point)
+    reduce(vcat, get_leaves.(leaves, nodevalue))
 end
 
-function distribute_scalar_mark!(evals::Vector{Evaluation}, items::Vector{Question}, mark::Mark, parent::Point)
-    leaves = collect_leaf_weights(items, parent)
-
+function distribute_scalar_mark!(evaluations::Vector{Evaluation}, items::Vector{Question}, mark::Mark, nodevalue::Point)
+    leaves = get_leaves(items, nodevalue)
     if isa(mark.delta, Percent)
         # same fraction of each leaf
         for (leaf, _) in leaves
-            push!(evals, Evaluation(leaf, Mark(mark.delta, mark.comment)))
+            push!(evaluations, Evaluation(leaf, mark))
         end
-        return
-    end
-
-    total = sum(weight.val for (_, weight) in leaves)
-    if total == 0.0
-        for (leaf, _) in leaves
-            push!(evals, Evaluation(leaf, Mark(Point(0.0), mark.comment)))
+    else
+        total = sum(weight.val for (_, weight) in leaves)
+        if total == 0.0
+            for (leaf, _) in leaves
+                push!(evaluations, Evaluation(leaf, Mark(Point(0.0), mark.comment)))
+            end
+        else
+            for (leaf, weight) in leaves
+                share = weight.val / total
+                push!(evaluations, Evaluation(leaf, Mark(Point(mark.delta.val * share), mark.comment)))
+            end
         end
-        return
     end
-
-    for (leaf, weight) in leaves
-        share = weight.val / total
-        push!(evals, Evaluation(leaf, Mark(Point(mark.delta.val * share), mark.comment)))
-    end
+    return nothing
 end
 
-function _expand!(evals::Vector{Evaluation}, items::Vector{Question}, marks, parent::Point)
-    if marks isa Mark || marks isa Real || marks isa Percent
+"Recursively applies marks down to the leaves of the appropriate branch."
+function expand!(evaluations::Vector{Evaluation}, items::Vector{Question}, marks, nodevalue::Point)
+    if marks isa Mark || marks isa Point || marks isa Percent || marks isa Real
         mark = isa(marks, Mark) ? marks : Mark(marks)
-        return distribute_scalar_mark!(evals, items, mark, parent)
-    end
-
-    if marks isa AbstractVector
+        return distribute_scalar_mark!(evaluations, items, mark, nodevalue)
+    elseif marks isa AbstractVector
         if length(marks) == length(items)
-            for (item, m) in zip(items, marks)
-                if !isnothing(item.parts) && m isa AbstractVector
-                    _expand!(evals, item.parts, m, absolute_question_points(item, parent))
+            for (item, mark) in zip(items, marks)
+                if !isnothing(item.parts) && mark isa AbstractVector
+                    expand!(evaluations, item.parts, mark, get_leafvalue(item, nodevalue))
                 else
-                    _expand!(evals, [item], m, parent)
+                    expand!(evaluations, [item], mark, nodevalue)
                 end
             end
-            return
+            return nothing
+        else
+            error("Length mismatch between structure and marks")
         end
-        error("Length mismatch between structure and marks")
+    else
+        error("Unsupported marks type: $(typeof(marks))")
     end
-
-    error("Unsupported marks type: $(typeof(marks))")
 end
 
-function expand_marks(assignment, marks)
-    evals = Evaluation[]
-    _expand!(evals, assignment.questions, marks, assignment.value)
-    return evals
-end
-
-"""
-    grade(submission::Submission, assignment::Assignment, marks)
-
-Intelligently records evaluations at any level of the assignment tree.
-"""
+"Magically applies evaluations at any level of the course-assignment tree."
 function grade(identifier, roster, assignment, submitted, marks; threshold=STRING_MATCH_THRESHOLD)
-    evals = expand_marks(assignment, marks)
-    submission = Submission(submitted, Score(assignment, evals), evals)
+    evaluations = Evaluation[]
+    expand!(evaluations, assignment.questions, marks, assignment.value)
+    submission = Submission(submitted, Score(assignment, evaluations), evaluations)
     return Grade(get_student(identifier, roster; threshold=threshold), assignment, submission)
 end
 
-is_late(x::AbstractDateTime) = x > Millisecond(0)
-function is_late(a::T, b::T) where {T<:AbstractDateTime}
-    # x = canonicalize(a - b)
-    # return x >= Millisecond(0.0) ? false : late_penalty(x)
-    return is_late(a - b)
-end
-is_late(x::Submission) = is_late(x.submitted, x.assignment.due)
 
-# Percent(is_late(x) ? (x < Day(7) ? 0.05 : (x < Day(14) ? 0.10 : 1.0)) : 0.0)
-late_penalty(x::AbstractDateTime) = error("Late penalty not yet implemented.")
+is_late(x::AbstractDateTime) = x > Millisecond(0)
+"Helper function to determine whether submission was before due date."
+is_late(x::Submission) = is_late(x.submitted - x.assignment.due)
+
+
+"""
+    late_penalty(x)::Bool
+
+Convenience function calling `is_late` and returning appropriate deductions for if late.
+
+Will throw error if called and left unimplemented.
+
+## Example
+Say the institutional policy for deductions of student work submitted late is as follows:
+* 10% deduction if submitted within one week of due date
+* 20% deduction if submitted within two weeks of due date
+* 100% deduction if submitted two weeks or later of due date
+
+Then this could be implemented by overwriting the `late_penaly(x::AbstractDateTime)` method:
+```
+julia> late_penalty(x::AbstractDateTime) = Percent(is_late(x) ? (x < Day(7) ? 0.10 : (x < Day(14) ? 0.20 : 1.0)) : 0.0)
+julia> late_penalty(Dates.CompoundPeriod(Day(1), Hour(12), Minute(36), Second(25)))
+10%
+julia> late_penalty(Dates.CompoundPeriod(Week(1), Day(1), Hour(12), Minute(36), Second(25)))
+20%
+julia> late_penalty(Dates.CompoundPeriod(Week(2), Day(1), Hour(12), Minute(36), Second(25)))
+100%
+julia> late_penalty(-Dates.CompoundPeriod(Week(1), Day(1), Hour(12), Minute(36), Second(25)))
+0%
+```
+"""
+late_penalty(x::AbstractDateTime)::Percent = error("Late penalty not yet implemented for `AbstractDateTime`")
+late_penalty(x::Submission) = late_penalty(x.submitted - x.assignment.due)
+late_penalty(x::Grade) = late_penalty(x.submission)

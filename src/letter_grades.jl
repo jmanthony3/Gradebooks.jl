@@ -6,112 +6,113 @@ export credit2lettergrade, gpa
 
 "Grade levels for predicate filtering and sorting."
 @enum GradeLevel begin
-    Grade_Aplus
-    Grade_A
-    Grade_Aminus
-    Grade_Bplus
-    Grade_B
-    Grade_Bminus
-    Grade_Cplus
-    Grade_C
-    Grade_Cminus
-    Grade_Dplus
-    Grade_D
-    Grade_Dminus
-    Grade_F
-    Grade_FN          # Failure for Non-attendance
-    Grade_W           # Withdrawn
-    Grade_I           # Incomplete
+    GradeAplus
+    GradeA
+    GradeAminus
+    GradeBplus
+    GradeB
+    GradeBminus
+    GradeCplus
+    GradeC
+    GradeCminus
+    GradeDplus
+    GradeD
+    GradeDminus
+    GradeF
+    GradeFN          # Failure for Non-attendance
+    GradeW           # Withdrawn
+    GradeI           # Incomplete
 end
 
 # "Maps string to grade level."
 # function determine_level(g::String)::GradeLevel
 #     g = uppercase(g)
-#     g == "A+"  && return Grade_Aplus
-#     g == "A"   && return Grade_A
-#     g == "A-"  && return Grade_Aminus
-#     g == "B+"  && return Grade_Bplus
-#     g == "B"   && return Grade_B
-#     g == "B-"  && return Grade_Bminus
-#     g == "C+"  && return Grade_Cplus
-#     g == "C"   && return Grade_C
-#     g == "C-"  && return Grade_Cminus
-#     g == "D+"  && return Grade_Dplus
-#     g == "D"   && return Grade_D
-#     g == "D-"  && return Grade_Dminus
-#     g == "F"   && return Grade_F
-#     g == "FN"  && return Grade_FN
-#     g == "W"   && return Grade_W
-#     g == "I"   && return Grade_I
+#     g == "A+"  && return GradeAplus
+#     g == "A"   && return GradeA
+#     g == "A-"  && return GradeAminus
+#     g == "B+"  && return GradeBplus
+#     g == "B"   && return GradeB
+#     g == "B-"  && return GradeBminus
+#     g == "C+"  && return GradeCplus
+#     g == "C"   && return GradeC
+#     g == "C-"  && return GradeCminus
+#     g == "D+"  && return GradeDplus
+#     g == "D"   && return GradeD
+#     g == "D-"  && return GradeDminus
+#     g == "F"   && return GradeF
+#     g == "FN"  && return GradeFN
+#     g == "W"   && return GradeW
+#     g == "I"   && return GradeI
 #     @warn "Must be A, B, C, or D (+/-) or F, FN, W, or I."
 #     error("Cannot parse grade from string=$g")
 # end
 "Maps string to grade level."
 function determine_level(g::GradeLevel)::String
-    g == Grade_Aplus    && return "A+"
-    g == Grade_A        && return "A"
-    g == Grade_Aminus   && return "A-"
-    g == Grade_Bplus    && return "B+"
-    g == Grade_B        && return "B"
-    g == Grade_Bminus   && return "B-"
-    g == Grade_Cplus    && return "C+"
-    g == Grade_C        && return "C"
-    g == Grade_Cminus   && return "C-"
-    g == Grade_Dplus    && return "D+"
-    g == Grade_D        && return "D"
-    g == Grade_Dminus   && return "D-"
-    g == Grade_F        && return "F"
-    g == Grade_FN       && return "FN"
-    g == Grade_W        && return "W"
-    g == Grade_I        && return "I"
+    g == GradeAplus    && return "A+"
+    g == GradeA        && return "A"
+    g == GradeAminus   && return "A-"
+    g == GradeBplus    && return "B+"
+    g == GradeB        && return "B"
+    g == GradeBminus   && return "B-"
+    g == GradeCplus    && return "C+"
+    g == GradeC        && return "C"
+    g == GradeCminus   && return "C-"
+    g == GradeDplus    && return "D+"
+    g == GradeD        && return "D"
+    g == GradeDminus   && return "D-"
+    g == GradeF        && return "F"
+    g == GradeFN       && return "FN"
+    g == GradeW        && return "W"
+    g == GradeI        && return "I"
     @warn "Must be" GradeLevel
     error("Input not recognized: g=$g")
 end
 
 "Calculates quality point weight of `LetterGrade` according to preferences `COURSE_QUALITYPOINTS_A`, `COURSE_QUALITYPOINTS_PLUSMINUS`, and `COURSE_QUALITYPOINTS_APLUS`."
 function quality_points(lvl::GradeLevel)
-    return if   lvl == Grade_F || lvl == Grade_FN
+    return if   lvl == GradeF || lvl == GradeFN
         0
-    elseif      lvl == Grade_I || lvl == Grade_W
+    elseif      lvl == GradeI || lvl == GradeW
         NaN
     elseif COURSE_QUALITYPOINTS_PLUSMINUS == 0
-        if      lvl == Grade_A
+        if      lvl == GradeA
             COURSE_QUALITYPOINTS_A - 0
-        elseif  lvl == Grade_B
+        elseif  lvl == GradeB
             COURSE_QUALITYPOINTS_A - 1
-        elseif  lvl == Grade_C
+        elseif  lvl == GradeC
             COURSE_QUALITYPOINTS_A - 2
-        elseif  lvl == Grade_D
+        elseif  lvl == GradeD
             COURSE_QUALITYPOINTS_A - 3
         end
     else
-        if      lvl == Grade_Aplus
+        if      lvl == GradeAplus
             COURSE_QUALITYPOINTS_APLUS
-        elseif  lvl == Grade_A
+        elseif  lvl == GradeA
             COURSE_QUALITYPOINTS_A
-        elseif  lvl == Grade_Aminus
+        elseif  lvl == GradeAminus
             COURSE_QUALITYPOINTS_A - 0 - COURSE_QUALITYPOINTS_PLUSMINUS
-        elseif  lvl == Grade_Bplus
+        elseif  lvl == GradeBplus
             COURSE_QUALITYPOINTS_A - 1 + COURSE_QUALITYPOINTS_PLUSMINUS
-        elseif  lvl == Grade_B
+        elseif  lvl == GradeB
             COURSE_QUALITYPOINTS_A - 1
-        elseif  lvl == Grade_Bminus
+        elseif  lvl == GradeBminus
             COURSE_QUALITYPOINTS_A - 1 - COURSE_QUALITYPOINTS_PLUSMINUS
-        elseif  lvl == Grade_Cplus
+        elseif  lvl == GradeCplus
             COURSE_QUALITYPOINTS_A - 2 + COURSE_QUALITYPOINTS_PLUSMINUS
-        elseif  lvl == Grade_C
+        elseif  lvl == GradeC
             COURSE_QUALITYPOINTS_A - 2
-        elseif  lvl == Grade_Cminus
+        elseif  lvl == GradeCminus
             COURSE_QUALITYPOINTS_A - 2 - COURSE_QUALITYPOINTS_PLUSMINUS
-        elseif  lvl == Grade_Dplus
+        elseif  lvl == GradeDplus
             COURSE_QUALITYPOINTS_A - 3 + COURSE_QUALITYPOINTS_PLUSMINUS
-        elseif  lvl == Grade_D
+        elseif  lvl == GradeD
             COURSE_QUALITYPOINTS_A - 3
-        elseif  lvl == Grade_Dminus
+        elseif  lvl == GradeDminus
             COURSE_QUALITYPOINTS_A - 3 - COURSE_QUALITYPOINTS_PLUSMINUS
         end
     end
 end
+
 
 """
     LetterGrade
@@ -137,22 +138,23 @@ end
 # end
 LetterGrade(g::GradeLevel) = LetterGrade(g, determine_level(g), quality_points(determine_level(g)))
 
-const Aplus     = LetterGrade(Grade_Aplus)
-const A         = LetterGrade(Grade_A)
-const Aminus    = LetterGrade(Grade_Aminus)
-const Bplus     = LetterGrade(Grade_Bplus)
-const B         = LetterGrade(Grade_B)
-const Bminus    = LetterGrade(Grade_Bminus)
-const Cplus     = LetterGrade(Grade_Cplus)
-const C         = LetterGrade(Grade_C)
-const Cminus    = LetterGrade(Grade_Cminus)
-const Dplus     = LetterGrade(Grade_Dplus)
-const D         = LetterGrade(Grade_D)
-const Dminus    = LetterGrade(Grade_Dminus)
-const F         = LetterGrade(Grade_F)
-const FN        = LetterGrade(Grade_FN)
-const W         = LetterGrade(Grade_W)
-const I         = LetterGrade(Grade_I)
+const Aplus     = LetterGrade(GradeAplus)
+const A         = LetterGrade(GradeA)
+const Aminus    = LetterGrade(GradeAminus)
+const Bplus     = LetterGrade(GradeBplus)
+const B         = LetterGrade(GradeB)
+const Bminus    = LetterGrade(GradeBminus)
+const Cplus     = LetterGrade(GradeCplus)
+const C         = LetterGrade(GradeC)
+const Cminus    = LetterGrade(GradeCminus)
+const Dplus     = LetterGrade(GradeDplus)
+const D         = LetterGrade(GradeD)
+const Dminus    = LetterGrade(GradeDminus)
+const F         = LetterGrade(GradeF)
+const FN        = LetterGrade(GradeFN)
+const W         = LetterGrade(GradeW)
+const I         = LetterGrade(GradeI)
+
 
 "Converts `Credit` to `LetterGrade` according to preferences `COURSE_POINT_SCALE` and `COURSE_POINT_SCALE_PLUSMINUS`."
 function credit2lettergrade(p::Percent)::LetterGrade
@@ -205,6 +207,7 @@ function credit2lettergrade(p::Percent)::LetterGrade
 end
 credit2lettergrade(p::T, v::T) where {T<:Point} = credit2lettergrade(p / v)
 credit2lettergrade(p::T, v::T) where {T<:Real} = credit2lettergrade(Point(p) / Point(v))
+
 
 "Calculates weighted GPA from `quality_points` of `LetterGrade` and course `credit`s (defaults to preference `COURSE_CREDITS`)."
 gpa(g::LetterGrade, credit::Integer=COURSE_CREDITS) = g.quality_points * credit

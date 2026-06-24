@@ -2,9 +2,10 @@ export VALID_DATE_FORMATS, DATE_FORMAT
 export INSTITUTION, set_institution, get_institution
 export INSTITUTION_EMAILDOMAIN, set_institution_emaildomain, get_institution_emaildomain
 export COURSE_QUALITYPOINTS_A, set_course_qualitypoints_a, get_course_qualitypoints_a
-export COURSE_POINT_SYSTEM, set_course_pointsystem, get_course_pointsystem
-export COURSE_POINT_SCALE, set_course_pointscale, get_course_pointscale
-export COURSE_POINT_SCALE_PLUSMINUS, set_course_pointscale_plusminus, get_course_pointscale_plset_course_pointscale_plusminus
+export COURSE_POINT_SYSTEM, set_course_point_system, get_course_point_system
+export COURSE_POINT_SCALE, set_course_point_scale, get_course_point_scale
+export COURSE_POINT_SCALE_PLUSMINUS, set_course_point_scale_plusminus, get_course_point_scale_plusminus
+export COURSE_POINT_DECIMALPLACES, set_course_point_decimalplaces, get_course_point_decimalplaces
 export ATTENDANCE_LIMIT, set_attendance_limit, get_attendance_limit
 export ATTENDANCE_PENALTY, set_attendance_penalty, get_attendance_penalty
 export STRING_MATCH_THRESHOLD, set_string_match_threshold, get_string_match_threshold
@@ -49,6 +50,9 @@ const COURSE_POINT_SCALE = @load_preference("COURSE_POINT_SCALE", 100)
 
 "Point +/- deviation between letter grades."
 const COURSE_POINT_SCALE_PLUSMINUS = @load_preference("COURSE_POINT_SCALE_PLUSMINUS", 0)
+
+"Number of decimal places to display."
+const COURSE_POINT_DECIMALPLACES = @load_preference("COURSE_POINT_DECIMALPLACES", 2)
 
 "How many absences are allowed before penalties are applied."
 const ATTENDANCE_LIMIT = @load_preference("ATTENDANCE_LIMIT", 4)
@@ -111,26 +115,33 @@ end
 
 get_course_qualitypoints_plusminus() = @load_preference("COURSE_QUALITYPOINTS_PLUSMINUS")
 
-function set_course_pointsystem(system::Integer)
+function set_course_point_system(system::Integer)
     @set_preferences!("COURSE_POINT_SYSTEM" => system)
     @info("New `COURSE_POINT_SYSTEM` set; restart your Julia session for this change to take effect!")
 end
 
-get_course_pointsystem() = @load_preference("COURSE_POINT_SYSTEM")
+get_course_point_system() = @load_preference("COURSE_POINT_SYSTEM")
 
-function set_course_pointscale(scale::Integer)
+function set_course_point_scale(scale::Integer)
     @set_preferences!("COURSE_POINT_SCALE" => scale)
     @info("New `COURSE_POINT_SCALE` set; restart your Julia session for this change to take effect!")
 end
 
-get_course_pointscale() = @load_preference("COURSE_POINT_SCALE")
+get_course_point_scale() = @load_preference("COURSE_POINT_SCALE")
 
-function set_course_pointscale_plusminus(scale::Integer)
+function set_course_point_scale_plusminus(scale::Integer)
     @set_preferences!("COURSE_POINT_SCALE_PLUSMINUS" => scale)
     @info("New `COURSE_POINT_SCALE_PLUSMINUS` set; restart your Julia session for this change to take effect!")
 end
 
-get_course_pointscale_plusminus() = @load_preference("COURSE_POINT_SCALE_PLUSMINUS")
+get_course_point_scale_plusminus() = @load_preference("COURSE_POINT_SCALE_PLUSMINUS")
+
+function set_course_point_decimalplaces(scale::Integer)
+    @set_preferences!("COURSE_POINT_DECIMALPLACES" => scale)
+    @info("New `COURSE_POINT_DECIMALPLACES` set; restart your Julia session for this change to take effect!")
+end
+
+get_course_point_decimalplaces() = @load_preference("COURSE_POINT_DECIMALPLACES")
 
 function set_attendance_limit(limit::Integer)
     @set_preferences!("ATTENDANCE_LIMIT" => limit)

@@ -33,6 +33,7 @@ const TR = [:T, :R]
 "Shorthand for 23:59:59.999."
 const MIDNIGHT = Time(23, 59, 59, 999)
 
+
 "Magically maps `input` to vector subset of `DAYSOFWEEKSYMBOLCODES`."
 function frequency2codesymbols(input)::Vector{Symbol}
     if isnothing(input)
@@ -80,6 +81,7 @@ function frequency2codesymbols(input)::Vector{Symbol}
     end
 end
 
+
 # const DATETIME_REGEX = r"\d{8}T\d{9}"
 const DATETIME_REGEX = r"^(?P<year>\d{4}})(?P<month>\d{2}})(?P<day>\d{2}})T(?P<hour>\d{2}})(?P<minute>\d{2}})(?P<second>\d{2}})(?P<millisecond>\d{3}})$"
 
@@ -97,6 +99,7 @@ function safe_datetime_stamp(path::String)
     datetimestamp = match(DATETIME_REGEX, string(split(name, "+")[end]))
     return name * "+" * (isnothing(datetimestamp) ? safe_datetime_stamp() : datetimestamp) * ext
 end
+
 
 "Magically converts `t` to `Dates.Time`. Defaults to ISO 8601."
 function parse_time(t)
@@ -138,6 +141,7 @@ function parse_time(t)
         error("Could not parse datetime=$t")
     end
 end
+
 
 "Magically converts `d` to `Dates.Date`. Defaults to ISO 8601. (Uses `DATE_FORMAT` preference.)"
 function parse_date(d)
@@ -192,6 +196,7 @@ function parse_date(d)
         error("Could not parse datetime=$d")
     end
 end
+
 
 "Magically converts `dt` to `Dates.DateTime`. Defaults to ISO 8601. (Uses `DATE_FORMAT` preference.)"
 function parse_datetime(dt)

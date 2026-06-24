@@ -2,9 +2,12 @@ module Gradebooks
 
 
 
+
+
 export Course, AcademicCalendarType, Term
 public make_attendance, make_lectures
 export Class
+export update, withdraw!, reinstate!
 
 
 
@@ -23,7 +26,6 @@ include("assignments.jl")
 
 
 """
-
 An academic quest prescribing assignments to students to grow and evaluate their understanding and ability to think critically unto completing a degree.
 
 `credits` defaults to `COURSE_CREDITS` preference.
@@ -40,6 +42,7 @@ struct Course
     end
 end
 Course(code, number, name; credits=COURSE_CREDITS, assignments=Assignment[]) = Course(code, number, name, credits, assignments, string_2uppercase_symbol("$code$number"))
+
 
 @enum AcademicCalendarType begin
     Semester
@@ -89,22 +92,23 @@ struct Class
     lectures::Vector{Assignment}
     codename_short::Symbol
     codename_long::Symbol
-    instructors::Vector{Instructor}
     primary_instructor::Instructor
+    instructors::Vector{Instructor}
     roster::Roster
-    function Class(course, term, section, frequency, time_start, time_finish, time_duration, lectures, codename_short, codename_long, instructors, primary_instructor, roster)
+    function Class(course, term, section, frequency, time_start, time_finish, time_duration, lectures, codename_short, codename_long, primary_instructor, instructors, roster)
         return new(course, term, section, frequency2codesymbols(frequency), time_start, time_finish, canonicalize(time_finish - time_start), lectures,
             string_2uppercase_symbol("$codename_short"), string_2uppercase_symbol("$codename_long"),
-            instructors, primary_instructor, roster
+            primary_instructor, instructors, roster
         )
     end
 end
 function Class(course, term, section, frequency, time_start, time_finish, instructors::Vector{Instructor}, students::Vector{Student}, points::Real=1.0)
     return Class(course, term, section, frequency, time_start, time_finish, canonicalize(time_finish - time_start), make_lectures(term.start, term.finish, term.holidays, frequency, points),
         course.codename, string_2uppercase_symbol(join(["$(course.codename)", first(uppercase("$term")) * (uppercase("$term")[1:2] == "SU" ? "u" : "") * last("$year", 2), @sprintf("%03d", section)], "-")),
-        instructors, first(instructors), Roster(students)
+        first(instructors), instructors, Roster(students)
     )
 end
+
 
 function update(class::Class; kwargs...)
     return update(class; kwargs...)
@@ -113,10 +117,47 @@ end
 
 include("grades.jl")
 include("gradebook.jl")
+include("attendance.jl")
+
+
+function withdraw!(gb::Gradebook, student::Union{Student, String}; date::Date = today(), threshold=STRING_MATCH_THRESHOLD)
+    if student isa String
+        student = get_student(student, gb.class.roster; threshold=threshold)
+    end
+    student.final_grade = LetterGrade("W")
+    student.enrollment_status = withdrawn
+    student.withdrawal_date = date
+
+    # Optionally record a W grade automatically
+    if haskey(gb.grades_dict, student)  # or however you index grades
+        g = gb.grades_dict[student]
+        g.submission.score.letter = LetterGrade("W")
+    end
+
+    grades_sync!(gb; threshold=threshold)  # or just mark dirty
+    return nothing
+end
+
+function reinstate!(gb::Gradebook, student::Union{Student, String}; date::Date = today(), threshold=STRING_MATCH_THRESHOLD)
+    if student isa String
+        student = get_student(student, gb.class.roster; threshold=threshold)
+    end
+    student.notes[:withdrawal_date] = student.withdrawal_date  # preserve original withdrawal date
+    student.notes[:reinstatement_date] = date  # or however you want to track reinstatement
+    student.enrollment_status = active
+    student.withdrawal_date = nothing
+    # Optionally clear the W or let instructor decide
+    grades_sync!(gb; threshold=threshold)
+    return nothing
+end
+
+
 include("base.jl")
 include("io.jl")
 include("plots.jl")
 include("reports.jl")
+
+
 
 
 

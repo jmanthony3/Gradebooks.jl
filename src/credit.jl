@@ -12,8 +12,11 @@ struct Point <: AbstractCredit
 end
 Point(x::Real) = Point(Float64(x))
 
-"""
+"Shorthand construction with unit-like syntax: e.g., `Point(5.3)` ≡ `5.3pt`."
+const pt = Point
 
+
+"""
 Percent earned of evaluation item.
 
 **Automatically divides by 100 so that basis is [0, 1].**
@@ -33,14 +36,13 @@ struct Percent <: AbstractCredit
 end
 Percent(x::Real) = Percent(Float64(x))
 
-"Shorthand construction with unit-like syntax: e.g., `Point(5.3)` ≡ `5.3pt`."
-const pt = Point
-
 "Shorthand construction with unit-like syntax: e.g., `Percent(5.3)` ≡ `5.3pt`."
 const pct = Percent
 
+
 "Type union of `Point` and `Percent` for cleaner function signatures."
 const Credit = Union{Point, Percent}
+
 
 """
 Encode redline marks of submitted work.
