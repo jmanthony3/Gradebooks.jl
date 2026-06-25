@@ -45,9 +45,6 @@ save_gradebook(gb::Gradebook, path::AbstractString; history::Vector{ChangeEvent}
 load_gradebook(path::AbstractString) = ((archive = load_archive(path)); archive.gradebook)
 
 
-# --- JSON export helpers -----------------------------------------------------
-
-
 function flatten_question(q::Question)
     return Dict(
         "kind" => "Question",
@@ -147,6 +144,15 @@ function flatten_student(s::Student)
     )
 end
 
+function flatten_team(t::Team)
+    return Dict(
+        "kind" => "Team",
+        "name" => t.name,
+        "roster" => t.roster.students,
+        "codename" => t.codename
+    )
+end
+
 function flatten_class(c::Class)
     return Dict(
         "kind" => "Class",
@@ -162,7 +168,8 @@ function flatten_class(c::Class)
         "codename_long" => c.codename_long,
         "primary_instructor" => flatten_instructor(c.primary_instructor),
         "instructors" => flatten_instructor.(c.instructors),
-        "roster" => flatten_student.(c.roster.students)
+        "roster" => flatten_student.(c.roster.students),
+        "teams" => flatten_team.(c.teams)
     )
 end
 
@@ -274,9 +281,6 @@ function export_gradebook(gb::Gradebook, path::AbstractString; format::Union{Not
     end
     return nothing
 end
-
-
-# --- JSON archive round-trip -------------------------------------------------
 
 
 function rebuild_question_from_dict(d)
@@ -394,6 +398,14 @@ function rebuild_roster_from_dict(d)
     return Roster(rebuild_student_from_dict.(d["roster"]))
 end
 
+function rebuild_team_from_dict(d)
+    return Team(
+        d["name"],
+        rebuild_roster_from_dict.(d["roster"]),
+        Symbol(d["codename"])
+    )
+end
+
 function rebuild_class_from_dict(d)
     return Class(
         rebuild_course_from_dict(d["course"]),
@@ -408,7 +420,8 @@ function rebuild_class_from_dict(d)
         Symbol(d["codename_long"]),
         rebuild_instructor_from_dict(d["primary_instructor"]),
         rebuild_instructor_from_dict.(d["instructors"]),
-        rebuild_roster_from_dict(d["roster"])
+        rebuild_roster_from_dict(d["roster"]),
+        rebuild_team_from_dict.(d["teams"])
     )
 end
 

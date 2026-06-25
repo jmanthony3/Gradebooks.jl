@@ -1,18 +1,18 @@
-export view_assignment, view_gradebook, view_attendance
+export view_gradebook, view_assignment, view_attendance
+
+
 
 using DataFrames
 using PrettyTables
 using Colors
 using ColorSchemes
 
-const BASE_METADATA = ["ID", "Preferred", "Last", "Team", "Email"]
 
-# --- display helpers ---------------------------------------------------------
 
-# normalize anything we might display
-numeric_value(x) = x isa Point || x isa Percent ? x.val :
-                   x isa Number ? Float64(x) :
-                   NaN
+numeric_value(x::Real) = Float64(x)
+numeric_value(x::Credit) = x.val
+numeric_value(x::Grade) = Float64(x.submission.score.earned)
+numeric_value(x) = NaN
 
 function column_bounds(df::DataFrame, j::Int)
     vals = filter(!isnan, map(numeric_value, df[:, j]))
@@ -21,22 +21,26 @@ end
 
 function color_for_value(v, lo, hi; invert=false)
     nv = numeric_value(v)
-    isnan(nv) && return "#ffffff"
-    lo == hi && return "#e5e5e5"
-
-    s = clamp((nv - lo) / (hi - lo), 0, 1)
-    invert && (s = 1 - s)
-    return "#" * hex(get(colorschemes[:RdYlGn], s))
+    return if isnan(nv)
+        "#ffffff"
+    elseif lo == hi
+        "#e5e5e5"
+    else
+        s = clamp((nv - lo) / (hi - lo), 0, 1)
+        if invert
+            s = 1 - s
+        end
+        "#" * hex(get(colorschemes[:RdYlGn], s))
+    end
 end
 
 function per_column_highlighters(df::DataFrame; invert_cols=Set{String}())
+    df_names = names(df)
     hls = HtmlHighlighter[]
-
     for j in 1:ncol(df)
-        colname = names(df)[j]
+        colname = df_names[j]
         lo, hi = column_bounds(df, j)
-        inv = colname in invert_cols
-
+        inv = colname ∈ invert_cols
         push!(hls, HtmlHighlighter(
             (data, i, jj) -> jj == j,
             (data, i, jj) -> begin
@@ -45,7 +49,6 @@ function per_column_highlighters(df::DataFrame; invert_cols=Set{String}())
             end
         ))
     end
-
     return hls
 end
 
@@ -54,23 +57,23 @@ function render_table(
     title="",
     subtitle="",
     outpath="",
-    row_labels=nothing,
     column_labels=nothing,
+    row_labels=nothing,
+    summary_row_labels=nothing,
     summary_rows=nothing,
     invert_cols=Set{String}(),
     style=nothing
 )
-    hls = per_column_highlighters(df; invert_cols=invert_cols)
-
     p = PrettyTable(
         df;
         title=title,
         subtitle=subtitle,
-        row_labels=row_labels,
         column_labels=column_labels,
+        row_labels=row_labels,
+        summary_row_labels=summary_row_labels,
         summary_rows=summary_rows,
-        highlighters=hls,
-        style=style === nothing ? HtmlTableStyle() : style,
+        highlighters=per_column_highlighters(df; invert_cols=invert_cols),
+        style=!isnothing(style) ? style : HtmlTableStyle(),
         backend=:html,
         stand_alone=true
     )
@@ -83,40 +86,94 @@ function render_table(
     return p
 end
 
-# --- common display builders -------------------------------------------------
 
-function build_gradebook_display(gb::Gradebook, assignments::Vector{Assignment};
-    student_filter=nothing,
-    assignment_filter=nothing
+function build_gradebook_display(gb::Gradebook;
+    assignment_filter=nothing,
+    student_filter=nothing
 )
-    # choose assignment columns
-    selected = assignment_filter === nothing ? assignments : assignments[assignment_filter]
+    assignments = !isnothing(assignment_filter) ? gb.class.course.assignments[assignment_filter] : gb.class.course.assignments[findall(x->x.category != CategoryAttendance, gb.class.course.assignments)]
+    students_idx = !isnothing(student_filter) ? student_filter : (1:nrow(gb.total))
 
-    # choose student rows
-    row_idx = student_filter === nothing ? (1:nrow(gb.total)) : student_filter
+    cols = map(a->a.codename, assignments)
+    df_raw = gb.raw[students_idx, Cols(cols...)]
+    df_penalty = gb.penalty[students_idx, Cols(cols...)]
+    df_total = gb.total[students_idx, Cols(cols...)]
 
-    cols = vcat(BASE_METADATA, map(a -> a.codename, selected))
-    df = gb.total[row_idx, Cols(cols...)]
-
-    # derived columns
-    df.Total = map(eachrow(df)) do row
-        sum(row[c] for c in cols[6:end])  # skip metadata columns
+    df_total.Raw = if all(x->x.category == CategoryAttendance, assignments)
+        map(eachrow(df_raw)) do row
+            count(==(Present), row)
+        end
+    else
+        map(eachrow(df_raw)) do row
+            sum(row[c] for c in cols)
+        end
     end
 
-    total_possible = mapreduce(a -> a.value, +, selected; init=Point(0.0))
-    df.Percent = map(df.Total) do t
+    df_total.Penalty = map(eachrow(df_penalty)) do row
+        sum(row[c] for c in cols)
+    end
+
+    df_total.Total = if all(x->x.category == CategoryAttendance, assignments)
+        df_total.Penalty
+    else
+        df_total.Raw - df_total.Penalty
+    end
+
+    total_possible = all(x->x.category == CategoryAttendance, assignments) ? length(map(x->x.category == CategoryAttendance, gb.class.course.assignments)) : mapreduce(a->a.value, +, assignments; init=zero(Point))
+    df_total.Percent = map(df_total.Raw) do t
         Percent(t / total_possible)
     end
 
-    df.Letter = map(df.Percent) do p
-        credit2lettergrade(p)
+    if !all(x->x.category == CategoryAttendance, assignments)
+        df_total.Letter = map(df_total.Percent) do p
+            credit2lettergrade(p)
+        end
+
+        df_total.Missing = map(df_total.Total) do t
+            Point(total_possible.val - t.val)
+        end
     end
 
-    df.Missing = map(df.Total) do t
-        Point(total_possible.val - t.val)
+    df_total.Absent = map(eachrow(gb.penalty[students_idx, Cols(map(a->a.codename, filter(x->x.category != CategoryAttendance, gb.class.course.assignments))...)])) do t
+        count(==(Absent), t)
     end
 
-    return df
+    if !all(x->x.category == CategoryAttendance, assignments)
+        df_total.Extension = map(gb.class.roster.students[students_idx]) do student
+            get(student.notes, "Extension", "")
+        end
+
+        df_total.Accommodation = map(gb.class.roster.students[students_idx]) do student
+            get(student.notes, "Accommodation", "")
+        end
+    end
+
+    column_labels = [
+        names(df_total),
+        map(x->repr(typeof(x).parameters[1])[9:end], assignments),
+        map(x->typeof(x).parameters[2], assignments),
+        map(x->typeof(x).types[2], assignments),
+    ]
+
+    data = [
+        map(s->!isempty(s.name_preferred) ? s.name_preferred : s.name_given, gb.class.roster.students[students_idx]), # Preferred
+        map(s->s.name_family, gb.class.roster.students[students_idx]), # Last
+        map(s->s.id, gb.class.roster.students[students_idx]), # ID
+        map(s->s.email, gb.class.roster.students[students_idx]), # Email
+    ]
+    if !isempty(gb.class.teams)
+        team_names = String[]
+        for student in gb.class.roster.students[students_idx]
+            for team in gb.class.teams
+                if student ∈ team.roster.students
+                    push!(team_names, team.name)
+                end
+            end
+        end
+        push!(data, team_names) # Team
+    end
+
+    return df_total, assignments, column_labels, [join(collect(row), " ") for row in zip(data...)]
 end
 
 function leaf_items(item)
@@ -128,33 +185,35 @@ function leaf_items(item)
 end
 
 function leaf_score(item, evs, parent_value)
-    # find an exact evaluation for this leaf item
     ev = findfirst(e -> e.item === item, evs)
-    isnothing(ev) && return Point(0.0)
-
-    δ = ev.mark.delta
-    if δ isa Point
-        return δ
-    elseif δ isa Percent
-        # normalize percent to an absolute point value using the item's base
-        base = if item isa Question
-            get_leafvalue(item, parent_value)
-        else
-            parent_value
-        end
-        return Point(base.val * δ.val)
+    return if isnothing(ev)
+        Point(0.0)
     else
-        return Point(0.0)
+        δ = ev.mark.delta
+        if isa(δ, Point)
+            δ
+        elseif isa(δ, Percent)
+            base = if isa(item, Question)
+                get_leafvalue(item, parent_value)
+            else
+                parent_value
+            end
+            Point(base.val * δ.val)
+        else
+            Point(0.0)
+        end
     end
 end
 
-function build_assignment_display(grades::Vector{Grade}, assignment::Assignment)
+function build_assignment_display(grades::Vector{Grade}, assignment::Assignment; student_filter=nothing, teams=Team[])
+    students_idx = !isnothing(student_filter) ? student_filter : (1:nrow(gb.total))
+    grades = grades[students_idx]
     df = DataFrame(
-        ID = map(g -> g.student.id, grades),
-        Preferred = map(g -> isempty(g.student.person.name_preferred) ? g.student.person.name_given : g.student.person.name_preferred, grades),
-        Last = map(g -> g.student.person.name_family, grades),
-        Team = map(g -> getproperty(g.student, :team, ""), grades),
-        Email = map(g -> g.student.email, grades)
+        # Preferred = map(g -> !isempty(g.student.person.name_preferred) ? g.student.person.name_preferred : g.student.person.name_given, grades),
+        # Last = map(g -> g.student.person.name_family, grades),
+        # ID = map(g -> g.student.id, grades),
+        # Email = map(g -> g.student.email, grades),
+        # # Team = map(g -> getproperty(g.student, :team, ""), grades)
     )
 
     # collect all leaf nodes once
@@ -171,63 +230,105 @@ function build_assignment_display(grades::Vector{Grade}, assignment::Assignment)
     # summary columns
     df.Total = map(g -> g.submission.score.score, grades)
     df.Percent = map(g -> g.submission.score.percent, grades)
-    df.Letter = map(g -> g.submission.score.letter, grades)
-    df.Missing = map(g -> assignment.value - g.submission.score.score, grades)
+    df.Letter = map(g -> g.submission.score.letter.string, grades)
+    df.Missing = map(g -> assignment.value - g.submission.score.score.earned, grades)
 
-    return df
+    column_labels = [
+        names(df_total),
+        map(x->repr(typeof(x).parameters[1])[9:end], assignments),
+        map(x->typeof(x).parameters[2], assignments),
+        map(x->typeof(x).types[2], assignments),
+    ]
+
+    data = [
+        map(s->!isempty(s.name_preferred) ? s.name_preferred : s.name_given, gb.class.roster.students[students_idx]), # Preferred
+        map(s->s.name_family, gb.class.roster.students[students_idx]), # Last
+        map(s->s.id, gb.class.roster.students[students_idx]), # ID
+        map(s->s.email, gb.class.roster.students[students_idx]), # Email
+    ]
+    if !isempty(gb.class.teams)
+        team_names = String[]
+        for student in gb.class.roster.students[students_idx]
+            for team in gb.class.teams
+                if student ∈ team.roster.students
+                    push!(team_names, team.name)
+                end
+            end
+        end
+        push!(data, team_names) # Team
+    end
+
+    return df, all_leaves, column_labels, [join(collect(row), " ") for row in zip(data...)]
 end
 
-# --- view wrappers -----------------------------------------------------------
 
+"View gradebook for entire class or subset according to index filter of assignments or students."
 function view_gradebook(
-    gb::Gradebook,
-    assignments::Vector{Assignment};
-    student_filter=nothing,
+    gb::Gradebook;
     assignment_filter=nothing,
+    student_filter=nothing,
     outpath=joinpath(pwd(), "gradebook", "build", "gradebook.html")
 )
-    df = build_gradebook_display(
-        gb, assignments;
-        student_filter=student_filter,
-        assignment_filter=assignment_filter
+    df, assignments, column_labels, row_labels = build_gradebook_display(gb;
+        assignment_filter=assignment_filter,
+        student_filter=student_filter
     )
 
-    render_table(
+    return render_table(
         df;
-        title="$(gb.class.course.name)",
+        title="$(gb.class.codename_long): $(gb.class.course.name)",
         subtitle="Class Gradebook",
         outpath=outpath,
+        column_labels=column_labels,
+        row_labels=row_labels,
+        summary_row_labels=["Worth", "Due", "Average (Point)", "Average (Percent)"],
+        summary_rows=[
+            (matrix, j)->assignments[j].value,
+            (matrix, j)->assignments[j].due,
+            (matrix, j)->Point.(sum(df[:, j])/length(df[:, j])),
+            (matrix, j)->Percent.(Point.(sum(df[:, j])/length(df[:, j]))/assignments[j].value)
+        ],
         invert_cols=Set(["Missing", "Penalty", "Absent"])
     )
 end
 
+"View detailed breakdown of assignment performance across entire class or subset according to index filter of students."
 function view_assignment(
-    grades::Vector{Grade},
+    gb::Gradebook,
     assignment::Assignment;
+    student_filter=nothing,
     outpath=joinpath(pwd(), "gradebook", "build", "assignment.html")
 )
-    df = build_assignment_display(grades, assignment)
+    df, items, column_labels, row_labels = build_assignment_display(gb.total[!, assignment.codename], assignment; student_filter=student_filter, teams=gb.teams)
 
-    render_table(
+    return render_table(
         df;
         title="$(assignment.name) ($(assignment.value) points)",
-        subtitle="Assignment Detail",
+        subtitle="Assignment Breakdown",
         outpath=outpath,
+        column_labels=column_labels,
+        row_labels=row_labels,
+        summary_row_labels=["Worth", "Average (Point)", "Average (Percent)"],
+        summary_rows=[
+            (matrix, j)->items[j].value,
+            (matrix, j)->Point.(sum(df[:, j])/length(df[:, j])),
+            (matrix, j)->Percent.(Point.(sum(df[:, j])/length(df[:, j]))/items[j].value)
+        ],
         invert_cols=Set(["Missing"])
     )
 end
 
+"Similar to `view_gradebook` but specialized for attendance."
 function view_attendance(
-    gb::Gradebook,
-    lectures::Vector{Assignment};
-    student_filter=nothing,
+    gb::Gradebook;
     assignment_filter=nothing,
+    student_filter=nothing,
     outpath=joinpath(pwd(), "gradebook", "build", "attendance.html")
 )
-    df = build_gradebook_display(
-        gb, lectures;
-        student_filter=student_filter,
-        assignment_filter=assignment_filter
+    df, records, column_labels, row_labels = build_gradebook_display(
+        gb;
+        assignment_filter=!isnothing(assignment_filter) ? findall(x->x.category == CategoryAttendance, gb.class.course.assignments) : assignment_filter,
+        student_filter=student_filter
     )
 
     render_table(
@@ -235,6 +336,14 @@ function view_attendance(
         title="$(gb.class.course.name)",
         subtitle="Attendance",
         outpath=outpath,
+        column_labels=column_labels,
+        row_labels=row_labels,
+        summary_row_labels=["Due", "Present", "Present (Average)"],
+        summary_rows=[
+            (matrix, j)->Date.(records[j].due),
+            (matrix, j)->count(==(Present), df[:, j]),
+            (matrix, j)->Point.(sum(df[:, j])/length(df[:, j]))
+        ],
         invert_cols=Set(["Missing", "Absent"])
     )
 end

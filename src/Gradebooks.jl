@@ -95,17 +95,18 @@ struct Class
     primary_instructor::Instructor
     instructors::Vector{Instructor}
     roster::Roster
-    function Class(course, term, section, frequency, time_start, time_finish, time_duration, lectures, codename_short, codename_long, primary_instructor, instructors, roster)
+    teams::Vector{Team}
+    function Class(course, term, section, frequency, time_start, time_finish, time_duration, lectures, codename_short, codename_long, primary_instructor, instructors, roster, teams)
         return new(course, term, section, frequency2codesymbols(frequency), time_start, time_finish, canonicalize(time_finish - time_start), lectures,
             string_2uppercase_symbol("$codename_short"), string_2uppercase_symbol("$codename_long"),
-            primary_instructor, instructors, roster
+            primary_instructor, instructors, roster, teams
         )
     end
 end
-function Class(course, term, section, frequency, time_start, time_finish, instructors::Vector{Instructor}, students::Vector{Student}, points::Real=1.0)
+function Class(course, term, section, frequency, time_start, time_finish, instructors::Vector{Instructor}, students::Vector{Student}, teams::Vector{Team}=Team[], points::Real=1.0)
     return Class(course, term, section, frequency, time_start, time_finish, canonicalize(time_finish - time_start), make_lectures(term.start, term.finish, term.holidays, frequency, points),
         course.codename, string_2uppercase_symbol(join(["$(course.codename)", first(uppercase("$term")) * (uppercase("$term")[1:2] == "SU" ? "u" : "") * last("$year", 2), @sprintf("%03d", section)], "-")),
-        first(instructors), instructors, Roster(students)
+        first(instructors), instructors, Roster(students), teams
     )
 end
 
