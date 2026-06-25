@@ -1,4 +1,4 @@
-import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_rule, show
+import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_rule, show, parse
 
 
 
@@ -93,6 +93,7 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
     convert(::Type{Float64}, x::Point) = x.val
     promote_rule(::Type{Point}, ::Type{Float64}) = Float64
     promote_rule(::Type{Point}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
+    parse(::Type{Point}, s::AbstractString) = Point(parse(Float64, s))
 
 
     *(x::Real, ::Type{Percent}) = Percent(Float64(x))
@@ -114,6 +115,7 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
     # convert(::Type{Char}, x::Percent) = (x >= 0.90 ? 'A' : (x >= 0.80 ? 'B' : (x >= 0.70 ? 'C' : (x >= 0.60 ? 'D' : 'F'))))
     promote_rule(::Type{Percent}, ::Type{Float64}) = Float64
     promote_rule(::Type{Percent}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
+    parse(::Type{Percent}, s::AbstractString) = Percent(100parse(Float64, s))
 
 
     *(a::Point, b::Percent) = Point(a.val * b.val)

@@ -34,7 +34,7 @@ function record!(gb, student, lecture, record)
         t = count(==(Absent), Matrix(gb.raw[rows_idx, :])) # + count(==(0), Matrix(att.raw_score[occursin.(key, att.raw_score[!, "Email"]), :]))
         p = Point(t <= ATTENDANCE_LIMIT ? 0 : ((t - ATTENDANCE_LIMIT) * ATTENDANCE_PENALTY))
         gb.penalty[rows_idx, lecture.codename] .= p
-        # gb.total[rows_idx, lecture.codename] .= p
+        gb.total[rows_idx, lecture.codename] .= record
     end
 end
 
@@ -171,7 +171,6 @@ function attendance_update!(gb::Gradebook)
             t = count(==(Absent), collect(row)[begin:j]) # + count(==(0), collect(row)[begin:j])
             p = Point(t <= ATTENDANCE_LIMIT ? 0.0 : ATTENDANCE_PENALTY)
             gb.penalty[i, lectures[j].codename] .= p
-            # gb.total[i, lectures[j].codename] .= p
         end
     end
     return nothing

@@ -36,7 +36,7 @@ struct Percent <: AbstractCredit
 end
 Percent(x::Real) = Percent(Float64(x))
 
-"Shorthand construction with unit-like syntax: e.g., `Percent(5.3)` ≡ `5.3pt`."
+"Shorthand construction with unit-like syntax: e.g., `Percent(5.3)` ≡ `5.3pct`."
 const pct = Percent
 
 
