@@ -64,7 +64,7 @@ struct Term
     holidays::Vector{Date}
     code::Symbol
     metadata::Dict{Symbol,Any}
-    new(name, calendar_type, year, parse_date(start), parse_date(finish), map(parse_date, holidays), string_2uppercase_symbol(string_sanitize(string_2codename(code))), metadata)
+    Term(name, calendar_type, year, start, finish, holidays, code, metadata) = new(name, calendar_type, year, parse_date(start), parse_date(finish), map(parse_date, holidays), string_2uppercase_symbol(string_sanitize(string_2codename(code))), metadata)
 end
 Term(name, calendar_type, year, start, finish, holidays, code; metadata=Dict()) = Term(name, calendar_type, year, start, finish, holidays, code, metadata=metadata)
 

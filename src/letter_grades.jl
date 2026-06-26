@@ -75,14 +75,16 @@ function quality_points(lvl::GradeLevel)
     elseif      lvl == GradeI || lvl == GradeW
         NaN
     elseif COURSE_QUALITYPOINTS_PLUSMINUS == 0
-        if      lvl == GradeA
+        if      lvl ∈ (GradeAplus, GradeA, GradeAminus)
             COURSE_QUALITYPOINTS_A - 0
-        elseif  lvl == GradeB
+        elseif  lvl ∈ (GradeBplus, GradeB, GradeBminus)
             COURSE_QUALITYPOINTS_A - 1
-        elseif  lvl == GradeC
+        elseif  lvl ∈ (GradeCplus, GradeC, GradeCminus)
             COURSE_QUALITYPOINTS_A - 2
-        elseif  lvl == GradeD
+        elseif  lvl ∈ (GradeDplus, GradeD, GradeDminus)
             COURSE_QUALITYPOINTS_A - 3
+        else
+            throw(ArgumentError("Unsupported grade level: $lvl"))
         end
     else
         if      lvl == GradeAplus
@@ -109,6 +111,8 @@ function quality_points(lvl::GradeLevel)
             COURSE_QUALITYPOINTS_A - 3
         elseif  lvl == GradeDminus
             COURSE_QUALITYPOINTS_A - 3 - COURSE_QUALITYPOINTS_PLUSMINUS
+        else
+            throw(ArgumentError("Unsupported grade level: $lvl"))
         end
     end
 end
@@ -136,7 +140,7 @@ end
 #     end
 #     return LetterGrade(s, determine_level(s))
 # end
-LetterGrade(g::GradeLevel) = LetterGrade(g, determine_level(g), quality_points(determine_level(g)))
+LetterGrade(g::GradeLevel) = LetterGrade(g, determine_level(g), quality_points(g))
 
 const Aplus     = LetterGrade(GradeAplus)
 const A         = LetterGrade(GradeA)

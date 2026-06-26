@@ -68,9 +68,9 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
 
 
 ## Gradebooks.jl
-    show(io, x::Course) = print(io, join(["              Code: " * x.code, "            Number: " * x.number, "              Name: " * x.name, "           Credits: " * x.credits, "  # of Assignments: " * x.assignments, "          Codename: " * x.codename], "\n"))
-    show(io, x::Term) = print(io, join(["             Name: " * x.name, "     Calendar Type: " * x.calendar_type, "              Year: " * x.year, "        Start Date: " * x.date, "       Finish Date: " * x.date, "              Code: " * x.code, "\t          Metadata: " * x.metadata], "\n"))
-    show(io, x::Class) = print(io, join([show(io, x.course), show(io, x.term), "           Section: " * x.section, "         Frequency: " * x.frequency, "        Start Time: " * x.time_start, "       Finish Time: " * x.time_finish, "     Duration Time: " * x.time_duration, "Number of Lectures: " * length(x.lectures), "  Codename (Short): " * x.codename_short, "   Codename (Long): " * x.codename_long, "Primary Instructor: " * x.primary_instructor, "       Instructors: " * x.instructors, "            Roster: " * x.roster], "\n"))
+    show(io::IO, x::Course) = print(io, join(["              Code: " * x.code, "            Number: " * x.number, "              Name: " * x.name, "           Credits: " * x.credits, "  # of Assignments: " * x.assignments, "          Codename: " * x.codename], "\n"))
+    show(io::IO, x::Term) = print(io, join(["             Name: " * x.name, "     Calendar Type: " * x.calendar_type, "              Year: " * x.year, "        Start Date: " * x.date, "       Finish Date: " * x.date, "              Code: " * x.code, "\t          Metadata: " * x.metadata], "\n"))
+    show(io::IO, x::Class) = print(io, join([show(io, x.course), show(io, x.term), "           Section: " * x.section, "         Frequency: " * x.frequency, "        Start Time: " * x.time_start, "       Finish Time: " * x.time_finish, "     Duration Time: " * x.time_duration, "Number of Lectures: " * length(x.lectures), "  Codename (Short): " * x.codename_short, "   Codename (Long): " * x.codename_long, "Primary Instructor: " * x.primary_instructor, "       Instructors: " * x.instructors, "            Roster: " * x.roster], "\n"))
 
 
 
@@ -268,7 +268,7 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
     /(a::Score, b::Percent) = Score(a.percent / b, a.value)
 
 
-    show(io, x::Submission) = print(io, join(["  Submitted: " * x.submitted, "      Score: " * x.score, "Evaluations: ", join(x.evaluations, "\n\t")], "\n"))
+    show(io::IO, x::Submission) = print(io, join(["  Submitted: " * x.submitted, "      Score: " * x.score, "Evaluations: ", join(x.evaluations, "\n\t")], "\n"))
 
 
     +(a::Submission, b::Real) = Submission(a.submitted, a.score + Float64(b), a.evaluations)
@@ -286,7 +286,7 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
     /(a::Submission, b::Percent) = Submission(a.submitted, a.score / b, a.evaluations)
 
 
-    show(io, x::Grade) = print(io, join(map(fn->x[fn], fieldnames(x)), "\n"))
+    show(io::IO, x::Grade) = print(io, join(map(fn->x[fn], fieldnames(x)), "\n"))
 
 
     +(a::Grade, b::Real) = Grade(x.who, x.assignment, Submission(a.submitted, a.score + Float64(b), a.evaluations))
