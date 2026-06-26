@@ -56,7 +56,7 @@ function render_table(
     df::DataFrame;
     title="",
     subtitle="",
-    outpath="",
+    output_path="",
     column_labels=nothing,
     row_labels=nothing,
     summary_row_labels=nothing,
@@ -78,8 +78,8 @@ function render_table(
         stand_alone=true
     )
 
-    mkpath(dirname(outpath))
-    open(outpath, "w") do io
+    mkpath(dirname(output_path))
+    open(output_path, "w") do io
         write(io, repr(p))
     end
 
@@ -267,7 +267,7 @@ function view_gradebook(
     gb::Gradebook;
     assignment_filter=nothing,
     student_filter=nothing,
-    outpath=joinpath(pwd(), "gradebook", "build", "gradebook.html")
+    output_path=joinpath(pwd(), "gradebook", "build", "gradebook.html")
 )
     df, assignments, column_labels, row_labels = build_gradebook_display(gb;
         assignment_filter=assignment_filter,
@@ -278,7 +278,7 @@ function view_gradebook(
         df;
         title="$(gb.class.codename_long): $(gb.class.course.name)",
         subtitle="Class Gradebook",
-        outpath=outpath,
+        output_path=output_path,
         column_labels=column_labels,
         row_labels=row_labels,
         summary_row_labels=["Worth", "Due", "Average (Point)", "Average (Percent)"],
@@ -297,7 +297,7 @@ function view_assignment(
     gb::Gradebook,
     assignment::Assignment;
     student_filter=nothing,
-    outpath=joinpath(pwd(), "gradebook", "build", "assignment.html")
+    output_path=joinpath(pwd(), "gradebook", "build", "assignment.html")
 )
     df, items, column_labels, row_labels = build_assignment_display(gb.total[!, assignment.codename], assignment; student_filter=student_filter, teams=gb.teams)
 
@@ -305,7 +305,7 @@ function view_assignment(
         df;
         title="$(assignment.name) ($(assignment.value) points)",
         subtitle="Assignment Breakdown",
-        outpath=outpath,
+        output_path=output_path,
         column_labels=column_labels,
         row_labels=row_labels,
         summary_row_labels=["Worth", "Average (Point)", "Average (Percent)"],
@@ -323,7 +323,7 @@ function view_attendance(
     gb::Gradebook;
     assignment_filter=nothing,
     student_filter=nothing,
-    outpath=joinpath(pwd(), "gradebook", "build", "attendance.html")
+    output_path=joinpath(pwd(), "gradebook", "build", "attendance.html")
 )
     df, records, column_labels, row_labels = build_gradebook_display(
         gb;
@@ -335,7 +335,7 @@ function view_attendance(
         df;
         title="$(gb.class.course.name)",
         subtitle="Attendance",
-        outpath=outpath,
+        output_path=output_path,
         column_labels=column_labels,
         row_labels=row_labels,
         summary_row_labels=["Due", "Present", "Present (Average)"],

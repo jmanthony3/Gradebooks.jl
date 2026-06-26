@@ -1,15 +1,15 @@
 // document metadata
 = Instructor Defense for Student's {{ assignment_name }} Grade: {{ class_code }} | {{ student_name }} ({{ student_id }})
-{{ instructor_name }}, {{ instructor_jobtitle }}, {{ instructor_organization }} <{{ instructor_id }}, {{ instructor_email }}>
+{{ instructor_name }}, {{ instructor_job_title }} <{{ instructor_email }}>
 :templateauthor: Dr. Joby M. Anthony III
 :templateauthorinitials: JMA3
 :templateauthoremail: jmanthony1@liberty.edu
-:templateversion: 0.1.0
-:templatedate: January 06, 2026
+:templateversion: 0.2.0
+:templatedate: June 26, 2026
 :revnumber: v1
 :revdate: {docdate}
 :revremark: : Initial export of student gradebook.
-:version-label: {{ class_code }}-{{ student_initials }}
+:version-label: {{ class_code }}-{{ student_name_initials }}
 :description: A summary of student performance and an instructor's defense of the applied grade.
 // :keywords: 
 :docdir: {{ cwd |> ensure_formattedpath }}/reports/{{ student_name_last |> lower }}_{{ student_name_first |> lower }}
@@ -36,27 +36,27 @@
 :course_name: {{ course_name }}
 :class_semester: {{ class_semester }}
 :class_section: {{ class_section }}
+:class_codename: {{ class_codename }}
 :instructor_name_first: {{ instructor_name_first }}
 :instructor_name_last: {{ instructor_name_last }}
 :instructor_name: {{ instructor_name }}
-:instructor_initials: {{ instructor_initials |> upper }}
-:instructor_id: {{ instructor_id |> ensure_orgidprefix }}
+:instructor_name_initials: {{ instructor_name_initials |> upper }}
 :instructor_email: {{ instructor_email |> ensure_orgemailaddress }}
-:student_name_first: {{ student_name_first }}
-:student_name_last: {{ student_name_last }}
+:gradebook_path: {{ gradebook_path }}
+:assignment_name: {{ assignment_name }}
+:assignment_value: {{ assignment_value }}
+:assignment_codename: {{ assignment_codename }}
+:student_name_given: {{ student_name_given }}
+:student_name_preferred: {{ student_name_preferred }}
+:student_name_family: {{ student_name_family }}
 :student_name: {{ student_name }}
 :student_initials: {{ student_initials |> upper }}
 :student_id: {{ student_id |> ensure_orgidprefix }}
 :student_email: {{ student_email |> ensure_orgemailaddress }}
-:student_grade_points: {{ student_grade_points }}
+:student_grade_earned: {{ student_grade_earned }}
+:student_grade_percent: {{ student_grade_percent }}
 :student_grade_letter: {{ student_grade_letter |> upper }}
 
-// // Python modules
-// <%!
-//     from engineering_notation import EngNumber as engr
-//     import numpy as np
-//     from pint import UnitRegistry as ureg
-// %>
 // end document metadata
 
 
@@ -73,28 +73,28 @@ Course Code::: {course_code}
 Course Name::: {course_name}
 Class Semester::: {class_semester}
 Class Section::: {class_section}
-Class Code::: {class_code}
+Class Code::: {class_codename}
 Instructor::
 [horizontal]
 Instructor Name::: {instructor_name}
-Instructor ID::: {instructor_id}
 Instructor Email::: mailto:{instructor_email}[]
 Student::
 [horizontal]
 Student Name::: {student_name}
 Student ID::: {student_id}
 Student Email::: mailto:{student_email}[]
-Student Final Grade::: {student_grade_points} ({student_grade_letter})
+Student Final Grade::: {student_grade_earned} ({student_grade_percent}, {student_grade_letter})
 ****
 
 .Reasons
-. Reason 1
-.. Reason 1.1
-.. Reason 1.2
-. Reason 2
+{% for e in extra_fields %}
+- {{ e.name }} ({{ e.kind }})
+{% endfor %}
 
 .Local view of gradebook for {student_name}.
-image::gradebook-{{ assignment_name |> ensure_assignment_name_sanitization }}+{{ export_datetime }}[caption="Figure {counter:figs}: ", reftext="Fig. {figs}"]
+====
+include::{gradebook_path}[]
+====
 
 .Additional Comments/Data
 _insert text here..._
