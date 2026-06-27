@@ -64,17 +64,17 @@ struct Term
     holidays::Vector{Date}
     code::Symbol
     metadata::Dict{Symbol,Any}
-    Term(name, calendar_type, year, start, finish, holidays, code, metadata) = new(name, calendar_type, year, parse_date(start), parse_date(finish), map(parse_date, holidays), string_2uppercase_symbol(string_sanitize(string_2codename(code))), metadata)
+    Term(name, calendar_type, year, start, finish, holidays, code, metadata) = new(name, calendar_type, year, parse_date(start), parse_date(finish), map(parse_date, vcat(holidays...)), isa(code, Symbol) ? code : string_2codename(code), metadata)
 end
-Term(name, calendar_type, year, start, finish, holidays, code; metadata=Dict()) = Term(name, calendar_type, year, start, finish, holidays, code, metadata=metadata)
+Term(name, calendar_type, year, start, finish, holidays, code; metadata=Dict()) = Term(name, calendar_type, year, start, finish, holidays, code, metadata)
 
 make_attendance(name::AbstractString, points::Real, date::Date) = Attendance(name, Point(points), date)
 
 function make_lectures(start::Date, finish::Date, holidays::Vector{Date}, frequency::Vector{Symbol}, points::Real=1.0)
     lecture_dates = filter(parse_date(start):Day(1):parse_date(finish)) do x
-        occursin("$(DAYSYMBOLCODEMAP(dayname(x)))", "$frequency") && (Date(x) ∉ vcat(holidays))
+        occursin("$(DAYSYMBOLCODEMAP[dayname(x)])", "$frequency") && (Date(x) ∉ vcat(holidays))
     end
-    return map(x->make_attendance(x[1], points, x[2]), enumerate(lecture_dates))
+    return map(x->make_attendance("Lecture $(x[1])", points, x[2]), enumerate(lecture_dates))
 end
 function make_lectures(term::Term, frequency::Vector{Symbol}, points::Real=1.0)
     return make_lectures(term.start, term.finish, term.holidays, frequency, points)
@@ -111,9 +111,7 @@ function Class(course, term, section, frequency, time_start, time_finish, instru
 end
 
 
-function update(class::Class; kwargs...)
-    return update(class; kwargs...)
-end
+update(class::Class; kwargs...) = _update(class; kwargs...)
 
 
 include("grades.jl")

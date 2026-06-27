@@ -19,8 +19,7 @@ struct Question
             if any(p->isa(p, Rubric), parts)
                 @error "Question parts cannot be of type `Rubric`" parts
                 error("Invalid type")
-            end
-            if !(all(p->isa(p.value, Point), parts) || all(p->isa(p.value, Percent), parts))
+            elseif !(all(p->isa(p.value, Point), parts) || all(p->isa(p.value, Percent), parts))
                 @error "Question parts must be of type `Point` or `Percent`" parts
                 error("Heterogeneous vector")
             end
@@ -32,11 +31,11 @@ struct Question
         codename = if isa(codename, Symbol)
             codename
         elseif isa(codename, AbstractString)
-            string_sanitize(string_2codename(codename))
+            string_2codename(codename)
         else
             error("`codename` must be of type Symbol or AbstractString")
         end
-        return new(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), value, parts, string_2uppercase_symbol(codename))
+        return new(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), value, isa(parts, Rubric) ? parts.metrics : parts, codename)
     end
 end
 Question(name, value, parts=nothing) = Question(name, value, parts, name)
@@ -59,11 +58,11 @@ struct Rubric
         codename = if isa(codename, Symbol)
             codename
         elseif isa(codename, AbstractString)
-            string_sanitize(string_2codename(codename))
+            string_2codename(codename)
         else
             error("`codename` must be of type Symbol or AbstractString")
         end
-        return new(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), metrics, string_2uppercase_symbol(codename))
+        return new(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), metrics, codename)
     end
 end
 Rubric(name::String, metrics::Vector{Question}) = Rubric(name, metrics, name)
@@ -113,34 +112,34 @@ struct Assignment
         codename = if isa(codename, Symbol)
             codename
         elseif isa(codename, AbstractString)
-            string_sanitize(string_2codename(codename))
+            string_2codename(codename)
         else
             error("`codename` must be of type Symbol or AbstractString")
         end
-        return new(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), Point(value), parse_datetime(due), category, is_group, questions, string_2uppercase_symbol(codename))
+        return new(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), Point(value), parse_datetime(due), category, is_group, questions, codename)
     end
 end
 
 "Convenience function constructing `Assignment` to track attendance."
-Attendance(     name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryAttendance,    is_group, questions, string_sanitize(string_2codename(name)))
+Attendance(     name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryAttendance,    is_group, questions, string_2codename(name))
 
 "Convenience function constructing `Assignment` for an exam."
-Exam(           name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryExam,          is_group, questions, string_sanitize(string_2codename(name)))
+Exam(           name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryExam,          is_group, questions, string_2codename(name))
 
 "Convenience function constructing `Assignment` for homework."
-Homework(       name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryHomework,      is_group, questions, string_sanitize(string_2codename(name)))
+Homework(       name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryHomework,      is_group, questions, string_2codename(name))
 
 "Convenience function constructing `Assignment` for some other academic item: e.g., extra credit."
-Other(          name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryOther,         is_group, questions, string_sanitize(string_2codename(name)))
+Other(          name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryOther,         is_group, questions, string_2codename(name))
 
 "Convenience function constructing `Assignment` for a paper."
-Paper(          name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryPaper,         is_group, questions, string_sanitize(string_2codename(name)))
+Paper(          name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryPaper,         is_group, questions, string_2codename(name))
 
 "Convenience function constructing `Assignment` for a presentation."
-Presentation(   name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryPresentation,  is_group, questions, string_sanitize(string_2codename(name)))
+Presentation(   name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryPresentation,  is_group, questions, string_2codename(name))
 
 "Convenience function constructing `Assignment` for a project."
-Project(        name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryProject,       is_group, questions, string_sanitize(string_2codename(name)))
+Project(        name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryProject,       is_group, questions, string_2codename(name))
 
 "Convenience function constructing `Assignment` for a quiz."
-Quiz(           name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryQuiz,          is_group, questions, string_sanitize(string_2codename(name)))
+Quiz(           name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryQuiz,          is_group, questions, string_2codename(name))

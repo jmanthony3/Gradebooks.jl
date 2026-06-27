@@ -32,9 +32,13 @@ Percent(0.0083)
 """
 struct Percent <: AbstractCredit
     val::Float64
-    Percent(x::Float64) = new(Float64(x) / 100)
+
+    function Percent(x::Float64; normalized::Bool=true)
+        value = Float64(x)
+        return new(normalized ? value / 100 : value)
+    end
 end
-Percent(x::Real) = Percent(Float64(x))
+Percent(x::Real, normalized::Bool=true) = Percent(Float64(x); normalized=normalized)
 
 "Shorthand construction with unit-like syntax: e.g., `Percent(5.3)` ≡ `5.3pct`."
 const pct = Percent

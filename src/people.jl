@@ -10,6 +10,8 @@ export Team, team_candidates, get_team
 
 
 
+using CSV
+import DataFrames: DataFrame
 using StringDistances
 
 
@@ -39,11 +41,11 @@ abstract type AbstractPerson end
     name::String                    = ""
     codename::Symbol                = Symbol("")
     function Person(name_given, name_family, name_title, name_suffix, name_preferred, name_initials, name_aliases, email, phone, organization, id, name, codename)
-        _organization = isempty(organization) ? INSTITUTION : organization
+        _organization = isempty(organization) ? (!isnothing(INSTITUTION) ? INSTITUTION : "") : organization
         _name = make_person_name(name_given, name_family; title=name_title, suffix=name_suffix, nickname=name_preferred)
-        _codename = name_initials != "" ? string_2uppercase_symbol(name_initials) : make_person_codename(name_given, name_family; nickname=name_preferred)
-        new(name_given, name_family, name_title, name_suffix, name_preferred, string_2uppercase_symbol(_codename),
-            name_aliases, email, phone, _organization, id, _name, string_2uppercase_symbol(_codename))
+        _codename = !isempty(string(name_initials)) ? (isa(name_initials, Symbol) ? name_initials : string_2uppercase_symbol(name_initials)) : make_person_codename(name_given, name_family; nickname=name_preferred)
+        new(name_given, name_family, name_title, name_suffix, name_preferred, _codename,
+            name_aliases, email, phone, _organization, id, _name, _codename)
     end
 end
 
@@ -53,7 +55,7 @@ end
     job_title::String
     notes::Dict{Symbol,Any} = Dict()
 end
-Instructor(name_given::String, name_family::String; kwargs...) = Instructor(Person(name_given, name_family, kwargs...), kwargs.job_title)
+Instructor(name_given::String, name_family::String; kwargs...) = Instructor(; person=Person(; name_given=name_given, name_family=name_family, collect(pairs(kwargs))[findall(fn->fn ∈ fieldnames(Person), keys(kwargs))]...), collect(pairs(kwargs))[findall(fn->fn ∉ fieldnames(Person), keys(kwargs))]...)
 
 @enum EnrollmentStatus begin
     Active
@@ -65,14 +67,39 @@ end
 "Wrapper of `Person` with an academic status unto a degree including final course performance."
 @kwdef struct Student <: AbstractPerson
     person::Person
-    discipline::String
+    discipline::String = ""
     enrollment_status::EnrollmentStatus = Active
     final_grade::Union{LetterGrade, Nothing} = nothing
     withdrawal_date::Union{Date, Nothing} = nothing
     # reinstatement_date, notes, etc.
     notes::Dict{Symbol,Any} = Dict()
 end
-Student(name_given::String, name_family::String; kwargs...) = Student(Person(name_given, name_family, kwargs...), kwargs.discipline, kwargs.enrollment_status, kwargs.final_grade, kwargs.withdrawal_date, kwargs.notes)
+Student(name_given::String, name_family::String; kwargs...) = Student(; person=Person(; name_given=name_given, name_family=name_family, collect(pairs(kwargs))[findall(fn->fn ∈ fieldnames(Person), keys(kwargs))]...), collect(pairs(kwargs))[findall(fn->fn ∉ fieldnames(Person), keys(kwargs))]...)
+
+"Convert a vector of Student structs into a DataFrame, with one column per field."
+function DataFrame(students::Vector{Student})
+    return if isempty(students)
+        DataFrame()
+    else
+        DataFrame(
+            name_given          = [s.person.name_given for s in students],
+            name_family         = [s.person.name_family for s in students],
+            name_title          = [s.person.name_title for s in students],
+            name_suffix         = [s.person.name_suffix for s in students],
+            name_preferred      = [s.person.name_preferred for s in students],
+            name_initials       = [s.person.name_initials for s in students],
+            email               = [s.person.email for s in students],
+            phone               = [s.person.phone for s in students],
+            organization        = [s.person.organization for s in students],
+            id                  = [s.person.id for s in students],
+            codename            = [s.person.codename for s in students],
+            discipline          = [s.discipline for s in students],
+            enrollment_status   = [s.enrollment_status for s in students],
+            final_grade         = [s.final_grade for s in students],
+            withdrawal_date     = [s.withdrawal_date for s in students],
+        )
+    end
+end
 
 
 struct StudentIndex
@@ -87,13 +114,13 @@ end
 function StudentIndex(students::Vector{Student})
     idx = StudentIndex(Dict(), Dict(), Dict(), Dict(), Dict())
     for (i, s) in enumerate(students)
-        haskey(idx.by_email, s.email) || (idx.by_email[s.email] = i)
-        haskey(idx.by_id, s.id) || (idx.by_id[s.id] = i)
-        haskey(idx.by_codename, s.codename) || (idx.by_codename[s.codename] = i)
-        for alias in s.name_aliases
+        haskey(idx.by_email, s.person.email) || (idx.by_email[s.person.email] = i)
+        haskey(idx.by_id, s.person.id) || (idx.by_id[s.person.id] = i)
+        haskey(idx.by_codename, s.person.codename) || (idx.by_codename[s.person.codename] = i)
+        for alias in s.person.name_aliases
             haskey(idx.by_alias, alias) || (idx.by_alias[alias] = i)
         end
-        haskey(idx.by_name, s.name) || (idx.by_name[s.name] = i)
+        haskey(idx.by_name, s.person.name) || (idx.by_name[s.person.name] = i)
     end
     return idx
 end
@@ -103,9 +130,15 @@ struct Roster
     students::Vector{Student}
     index::StudentIndex
 end
-function Roster(students)
-    return new(students, StudentIndex(students))
-end
+Roster(students) = Roster(students, StudentIndex(students))
+
+# function Roster(src::String, cols_map::Pairs; sort_cols::Vector{Symbol}=[:name_family, :name_given, :email])
+#     csv = CSV.read(src, DataFrame)
+#     v = Student[]
+#     for x in eachrow(csv[!, keys(cols_map)])
+
+#     end
+# end
 
 
 function student_candidates(s::Student)
@@ -120,7 +153,7 @@ function student_candidates(s::Student)
         s.person.name_family,
         s.person.name_given,
     ]
-    return unique(filter(!isempty, map(sanitize_string, parts)))
+    return unique(filter(!isempty, map(string_sanitize, parts)))
 end
 
 """
@@ -129,8 +162,8 @@ Find needle (`identifier`), according to any field of `Person`, in haystack (`ro
 `threshold` adjusts Levenshtein string matching criterion.
 """
 function get_student(identifier::String, roster::Roster; threshold=STRING_MATCH_THRESHOLD)
-    q = lowercase(sanitize_string(identifier))
-    exact = findall(s -> any(c -> lowercase(sanitize_string(c)) == q, student_candidates(s)), roster.students)
+    q = lowercase(string_sanitize(identifier))
+    exact = findall(s -> any(c -> lowercase(string_sanitize(c)) == q, student_candidates(s)), roster.students)
     if length(exact) == 1
         return roster.students[only(exact)]
     elseif length(exact) > 1
@@ -139,12 +172,12 @@ function get_student(identifier::String, roster::Roster; threshold=STRING_MATCH_
         scores = Tuple{Student, String, Int}[]
         for s in roster.students
             for c in student_candidates(s)
-                push!(scores, (s, c, Levenshtein()(q, lowercase(sanitize_string(c)))))
+                push!(scores, (s, c, Levenshtein()(q, lowercase(string_sanitize(c)))))
             end
         end
         sort!(scores, by=x->x[3])
         best_student, best_candidate, best_dist = first(scores)
-        denom = max(length(q), length(sanitize_string(best_candidate)))
+        denom = max(length(q), length(string_sanitize(best_candidate)))
         if denom > 0 && best_dist / denom < threshold
             return best_student
         else
@@ -179,21 +212,16 @@ end
 
 
 function update(person::Person; kwargs...)
-    return update(person; kwargs...)
+    return _update(person; kwargs...)
 end
 
 function update(student::Student; kwargs...)
-    discipline          = student.discipline        == kwargs.discipline            ? student.discipline            : kwargs.discipline
-    enrollment_status   = student.enrollment_status == kwargs.enrollment_status     ? student.enrollment_status     : kwargs.enrollment_status
-    final_grade         = student.final_grade       == kwargs.final_grade           ? student.final_grade           : kwargs.final_grade
-    withdrawal_date     = student.withdrawal_date   == kwargs.withdrawal_date       ? student.withdrawal_date       : kwargs.withdrawal_date
-    notes               = student.notes             == kwargs.notes                 ? student.notes                 : kwargs.notes
-    return Student(update(student.person; kwargs...), discipline, enrollment_status, final_grade, withdrawal_date, notes)
+    return Student(; person=update(student.person; collect(pairs(kwargs))[findall(fn->fn ∈ fieldnames(Person), keys(kwargs))]...), collect(pairs(kwargs))[findall(fn->fn ∉ fieldnames(Person), keys(kwargs))]...)
 end
 
 function update(roster::Roster, student::Union{Student, String}; threshold=STRING_MATCH_THRESHOLD, kwargs...)
     s = isa(student, String) ? get_student(student, roster; threshold=threshold) : student
-    roster.students[roster.index.by_id[s.id]] = update(s; kwargs...)
+    roster.students[roster.index.by_id[s.person.id]] = update(s; kwargs...)
     return Roster(roster.students)
 end
 
@@ -224,11 +252,11 @@ struct Team
         codename = if isa(codename, Symbol)
             codename
         elseif isa(codename, String)
-            string_sanitize(string_2codename(codename))
+            string_2codename(codename)
         else
             error("`codename` must be of type Symbol or String.")
         end
-        return new(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), roster, string_2uppercase_symbol(codename))
+        return new(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), roster, string_2codename(codename))
     end
 end
 Team(name, roster::Roster) = Team(name, roster, name)
@@ -241,12 +269,12 @@ get_student(identifier::String, team::Team; threshold=STRING_MATCH_THRESHOLD) = 
 function team_candidates(t::Team)
     parts = String[t.name, t.codename]
     push!(parts, map(student_candidates, t.roster.students))
-    return unique(filter(!isempty, map(sanitize_string, parts)))
+    return unique(filter(!isempty, map(string_sanitize, parts)))
 end
 
 function get_team(identifier::String, teams::Vector{Team}; threshold=STRING_MATCH_THRESHOLD)
-    q = lowercase(sanitize_string(identifier))
-    exact = findall(t -> any(c -> lowercase(sanitize_string(c)) == q, team_candidates(t)), teams)
+    q = lowercase(string_sanitize(identifier))
+    exact = findall(t -> any(c -> lowercase(string_sanitize(c)) == q, team_candidates(t)), teams)
     if length(exact) == 1
         return teams[exact[1]]
     elseif length(exact) > 1
@@ -255,12 +283,12 @@ function get_team(identifier::String, teams::Vector{Team}; threshold=STRING_MATC
         scores = Tuple{Team, String, Int}[]
         for t in teams
             for c in team_candidates(t)
-                push!(scores, (t, c, Levenshtein()(q, lowercase(sanitize_string(c)))))
+                push!(scores, (t, c, Levenshtein()(q, lowercase(string_sanitize(c)))))
             end
         end
         sort!(scores, by=x->x[3])
         best_team, best_candidate, best_dist = first(scores)
-        denom = max(length(q), length(sanitize_string(best_candidate)))
+        denom = max(length(q), length(string_sanitize(best_candidate)))
         if denom > 0 && best_dist / denom < threshold
             return best_team
         else

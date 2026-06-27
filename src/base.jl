@@ -1,4 +1,4 @@
-import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_rule, show, parse
+import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_rule, length, iterate, parse, show
 
 
 
@@ -67,13 +67,6 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
 
 
 
-## Gradebooks.jl
-    show(io::IO, x::Course) = print(io, join(["              Code: " * x.code, "            Number: " * x.number, "              Name: " * x.name, "           Credits: " * x.credits, "  # of Assignments: " * x.assignments, "          Codename: " * x.codename], "\n"))
-    show(io::IO, x::Term) = print(io, join(["             Name: " * x.name, "     Calendar Type: " * x.calendar_type, "              Year: " * x.year, "        Start Date: " * x.date, "       Finish Date: " * x.date, "              Code: " * x.code, "\t          Metadata: " * x.metadata], "\n"))
-    show(io::IO, x::Class) = print(io, join([show(io, x.course), show(io, x.term), "           Section: " * x.section, "         Frequency: " * x.frequency, "        Start Time: " * x.time_start, "       Finish Time: " * x.time_finish, "     Duration Time: " * x.time_duration, "Number of Lectures: " * length(x.lectures), "  Codename (Short): " * x.codename_short, "   Codename (Long): " * x.codename_long, "Primary Instructor: " * x.primary_instructor, "       Instructors: " * x.instructors, "            Roster: " * x.roster], "\n"))
-
-
-
 ## credit.jl
     *(x::Real, ::Type{Point}) = Point(Float64(x))
 
@@ -88,20 +81,25 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
     >=(a::Point, b::Point) = a.val >= b.val
     zero(::Type{Point}) = Point(0.0)
     one(::Type{Point}) = Point(1.0)
-    show(io::IO, x::Point) = print(io, round(x.val; digits=COURSE_POINT_DECIMALPLACES))
     float(x::Point) = x.val
     convert(::Type{Float64}, x::Point) = x.val
     promote_rule(::Type{Point}, ::Type{Float64}) = Float64
     promote_rule(::Type{Point}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
+    length(x::Point) = length(x.val)
+    function iterate(x::Point, state=1)
+        state > length(x.val) && return nothing
+        return x.val[state], state + 1
+    end
     parse(::Type{Point}, s::AbstractString) = Point(parse(Float64, s))
+    show(io::IO, x::Point) = print(io, round(x.val; digits=COURSE_POINT_DECIMALPLACES))
 
 
     *(x::Real, ::Type{Percent}) = Percent(Float64(x))
 
-    +(a::Percent, b::Percent) = Percent(a.val + b.val)
-    -(a::Percent, b::Percent) = Percent(a.val - b.val)
-    *(a::Percent, b::Percent) = Percent(a.val * b.val)
-    /(a::Percent, b::Percent) = Percent(a.val / b.val)
+    +(a::Percent, b::Percent) = Percent(a.val + b.val; normalized=false)
+    -(a::Percent, b::Percent) = Percent(a.val - b.val; normalized=false)
+    *(a::Percent, b::Percent) = Percent(a.val * b.val; normalized=false)
+    /(a::Percent, b::Percent) = Percent(a.val / b.val; normalized=false)
     ==(a::Percent, b::Percent) = a.val == b.val
     <(a::Percent, b::Percent) = a.val < b.val
     <=(a::Percent, b::Percent) = a.val <= b.val
@@ -109,13 +107,18 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
     >=(a::Percent, b::Percent) = a.val >= b.val
     zero(::Type{Percent}) = Percent(0.0)
     one(::Type{Percent}) = Percent(1.0)
-    show(io::IO, x::Percent) = print(io, round(x.val; digits=COURSE_POINT_DECIMALPLACES), " %")
     float(x::Percent) = x.val
     convert(::Type{Float64}, x::Percent) = x.val
     # convert(::Type{Char}, x::Percent) = (x >= 0.90 ? 'A' : (x >= 0.80 ? 'B' : (x >= 0.70 ? 'C' : (x >= 0.60 ? 'D' : 'F'))))
     promote_rule(::Type{Percent}, ::Type{Float64}) = Float64
     promote_rule(::Type{Percent}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
-    parse(::Type{Percent}, s::AbstractString) = Percent(100parse(Float64, s))
+    length(x::Percent) = length(x.val)
+    function iterate(x::Percent, state=1)
+        state > length(x.val) && return nothing
+        return x.val[state], state + 1
+    end
+    parse(::Type{Percent}, s::AbstractString) = Percent(parse(Float64, s); normalized=false)
+    show(io::IO, x::Percent) = print(io, round(x.val; digits=COURSE_POINT_DECIMALPLACES), " %")
 
 
     *(a::Point, b::Percent) = Point(a.val * b.val)
@@ -131,11 +134,16 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
     <=(a::Mark, b::Mark) = a.delta <= b.delta
     >(a::Mark, b::Mark) = a.delta > b.delta
     >=(a::Mark, b::Mark) = a.delta >= b.delta
-    show(io::IO, x::Mark) = print(io, x.delta, " # ", x.comment)
     float(x::Mark) = x.delta.val
     convert(::Type{Float64}, x::Mark) = x.delta.val
     promote_rule(::Type{Mark}, ::Type{Float64}) = Float64
     promote_rule(::Type{Mark}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
+    length(x::Mark) = length(x.delta)
+    function iterate(x::Mark, state=1)
+        state > length(x.delta) && return nothing
+        return x.delta[state], state + 1
+    end
+    show(io::IO, x::Mark) = print(io, x.delta, " # ", x.comment)
 
 
     +(a::Mark, b::Real) = Mark(a.delta + Float64(b), a.comment)
@@ -155,11 +163,11 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
 
 
 ## letter_grades.jl
-    show(io::IO, g::GradeLevel) = print(io, determine_level(g))
     float(x::GradeLevel) = Float64(quality_points(x))
     convert(::Type{Float64}, x::GradeLevel) = Float64(quality_points(x))
     promote_rule(::Type{GradeLevel}, ::Type{Float64}) = Float64
     promote_rule(::Type{GradeLevel}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
+    show(io::IO, g::GradeLevel) = print(io, determine_level(g))
 
 
     ==(a::LetterGrade, b::LetterGrade) = quality_points(a) == quality_points(b)
@@ -167,14 +175,19 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
     <=(a::LetterGrade, b::LetterGrade) = quality_points(a) <= quality_points(b)
     >(a::LetterGrade, b::LetterGrade) = quality_points(a) > quality_points(b)
     >=(a::LetterGrade, b::LetterGrade) = quality_points(a) >= quality_points(b)
-    show(io::IO, x::LetterGrade) = print(io, x.string)
     float(x::LetterGrade) = x.quality_points
-    convert(::Type{Float64}, x::LetterGrade) = x.quality_points
-    promote_rule(::Type{LetterGrade}, ::Type{Float64}) = Float64
-    promote_rule(::Type{LetterGrade}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
     Base.string(x::LetterGrade) = x.string
+    convert(::Type{Float64}, x::LetterGrade) = x.quality_points
     convert(::Type{String}, x::LetterGrade) = x.string
     convert(::Type{LetterGrade}, x::AbstractString) = LetterGrade(x)
+    promote_rule(::Type{LetterGrade}, ::Type{Float64}) = Float64
+    promote_rule(::Type{LetterGrade}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
+    length(x::LetterGrade) = length(x.quality_points)
+    function iterate(x::LetterGrade, state=1)
+        state > length(x.quality_points) && return nothing
+        return x.quality_points[state], state + 1
+    end
+    show(io::IO, x::LetterGrade) = print(io, x.string)
 
     *(a::LetterGrade, b::Real) = gpa(a, b)
     *(a::Real, b::LetterGrade) = gpa(b, a)
@@ -182,10 +195,20 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
 
 
 ## people.jl
-    show(io::IO, x::Person) = print(io, join(["              Name: " * x.name, "           Aliases: " * x.aliases, "             Email: " * x.email, "             Phone: " * x.phone, "      Organization: " * x.organization, "                ID: " * x.id, "              Code: ", x.codename], "\n"))
-    show(io::IO, x::Instructor) = print(io, join([x.person, "         Job Title: " * x.job_title], "\n"))
-    show(io::IO, x::Student) = print(io, join([x.person, "        Discipline: " * x.discipline, "        Enrollment: " * x.enrollment_status, "       Final Grade: " * x.final_grade, "   Withdrawal Date: " * x.withdrawal_date, "             Notes: ", x.notes], "\n"))
-    show(io::IO, x::Roster) = print(io, join(map(s->join(["              Name: " * x.name, "\t           Aliases: " * x.aliases, "\t             Email: " * x.email, "\t             Phone: " * x.phone, "\t      Organization: " * x.organization, "\t                ID: " * x.id, "\t              Code: ", x.codename, "\t        Discipline: " * x.discipline, "\t        Enrollment: " * x.enrollment_status, "\t       Final Grade: " * x.final_grade, "\t   Withdrawal Date: " * x.withdrawal_date, "\t             Notes: ", x.notes], "\n"), x.students), "\n"))
+    show(io::IO, x::Person) = print(io, join(["              Name: " * x.name, "           Aliases: " * (!isempty(x.name_aliases) ? join(x.name_aliases, ", ") : ""), "             Email: " * x.email, "             Phone: " * x.phone, "      Organization: " * x.organization, "                ID: " * x.id, "              Code: " * string(x.codename)], "\n"))
+    show(io::IO, x::Instructor) = print(io, join([repr(x.person), "         Job Title: " * x.job_title], "\n"))
+    show(io::IO, x::Student) = print(io, join([repr(x.person), "        Discipline: " * x.discipline, "        Enrollment: " * string(x.enrollment_status), "       Final Grade: " * (!isnothing(x.final_grade) ? repr(x.final_grade) : "n/a"), "   Withdrawal Date: " * string(x.withdrawal_date), "             Notes: ", x.notes], "\n"))
+    length(x::Roster) = length(x.students)
+    function iterate(x::Roster, state=1)
+        state > length(x.students) && return nothing
+        return x.students[state], state + 1
+    end
+    show(io::IO, x::Roster) = print(io, join(map(s->join(["              Name: " * s.person.name, "\t           Aliases: " * (!isempty(s.person.name_aliases) ? join(s.person.name_aliases, ", ") : ""), "\t             Email: " * s.person.email, "\t             Phone: " * s.person.phone, "\t      Organization: " * s.person.organization, "\t                ID: " * s.person.id, "\t              Code: " * string(s.person.codename), "\t        Discipline: " * s.discipline, "\t        Enrollment: " * string(s.enrollment_status), "\t       Final Grade: " * repr(s.final_grade), "\t   Withdrawal Date: " * string(s.withdrawal_date), "\t             Notes: ", s.notes], "\n"), x.students), "\n"))
+    length(x::Team) = length(x.roster.students)
+    function iterate(x::Team, state=1)
+        state > length(x.roster.students) && return nothing
+        return x.roster.students[state], state + 1
+    end
     show(io::IO, x::Team) = print(io, x.name, " (", x.codename, "):", first(x.roster.students))
 
 
@@ -200,25 +223,40 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
     >=(a::Question, b::Question) = a.value.val >= b.value.val
     # zero(::Type{Question}; name="Auto") = Question(name, 0.0)
     # one(::Type{Question}; name="Auto") = Question(name, 1.0)
-    show(io::IO, x::Question) = print(io, join([x.name, x.codename * ": " * round(x.value.val; digits=COURSE_POINT_DECIMALPLACES), isnothing(x.parts) ? nothing : join(map(p->show(io, p), x.parts), "\n\t")], "\n"))
     float(x::Question) = x.value.val
     convert(::Type{Float64}, x::Question) = x.value.val
     promote_rule(::Type{Question}, ::Type{Float64}) = Float64
     promote_rule(::Type{Question}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
+    length(x::Question) = (!isnothing(x.parts) ? length(x.parts) : 1)
+    function iterate(x::Question, state=1)
+        state > (!isnothing(x.parts) ? length(x.parts) : 1) && return nothing
+        return x.parts[state], state + 1
+    end
+    show(io::IO, x::Question) = print(io, join([x.name, string(x.codename) * ": " * string(round(x.value.val; digits=COURSE_POINT_DECIMALPLACES)), isnothing(x.parts) ? nothing : join(map(p->show(io, p), x.parts), "\n\t")], "\n"))
 
 
-    show(io::IO, x::Evaluation) = print(io, join(map(fn->show(io, x[fn]), fieldnames(x)), "\n"))
     float(x::Evaluation) = x.mark.delta.val / x.target.value.val
     convert(::Type{Float64}, x::Evaluation) = x.mark.delta.val / x.target.value.val
     promote_rule(::Type{Evaluation}, ::Type{Float64}) = Float64
     promote_rule(::Type{Evaluation}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
+    length(x::Evaluation) = length(x.mark)
+    function iterate(x::Evaluation, state=1)
+        state > length(x.mark) && return nothing
+        return x.mark[state], state + 1
+    end
+    show(io::IO, x::Evaluation) = print(io, join(map(fn->show(io, x[fn]), fieldnames(x)), "\n"))
 
 
-    show(io::IO, x::Rubric) = print(io, join([x.name, x.codename * ": ", join(map(m->show(io, m), x.metrics), "\n\t")], "\n"))
     float(x::Rubric) = float.(x.metrics)
     convert(::Type{Float64}, x::Rubric) = float.(x.metrics)
     promote_rule(::Type{Rubric}, ::Type{Float64}) = Float64
     promote_rule(::Type{Rubric}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
+    length(r::Rubric) = length(r.metrics)
+    function iterate(r::Rubric, state=1)
+        state > length(r.metrics) && return nothing
+        return r.metrics[state], state + 1
+    end
+    show(io::IO, x::Rubric) = print(io, join([x.name, string(x.codename) * ": ", join(map(m->show(io, m), x.metrics), "\n\t")], "\n"))
 
     # +(a::Assignment, b::Assignment) = a.value + b.value
     # -(a::Assignment, b::Assignment) = a.value - b.value
@@ -227,11 +265,28 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
     # <=(a::Assignment, b::Assignment) = a.value <= b.value
     # >(a::Assignment, b::Assignment) = a.value > b.value
     # >=(a::Assignment, b::Assignment) = a.value >= b.value
-    show(io::IO, x::Assignment) = print(io, join(["Name: " * x.name, "Value: " * x.value, "Due: " * x.due, "Category: " * x.category, "Is Group? " * x.is_group, "Questions: " * join(map(q->show(io, q), x.questions), "\n\t"), "Codename: " * x.codename], "\n"))
     float(x::Assignment) = x.value.val
     convert(::Type{Float64}, x::Assignment) = x.value.val
     promote_rule(::Type{Assignment}, ::Type{Float64}) = Float64
     promote_rule(::Type{Assignment}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
+    length(x::Assignment) = length(x.questions)
+    function iterate(x::Assignment, state=1)
+        state > length(x.questions) && return nothing
+        return x.questions[state], state + 1
+    end
+    show(io::IO, x::Assignment) = print(io, join(["Name: " * x.name, "Value: " * repr(x.value), "Due: " * string(x.due), "Category: " * string(x.category), "Is Group? " * string(x.is_group), "Questions: " * join(map(q->show(io, q), x.questions), "\n\t"), "Codename: " * string(x.codename)], "\n"))
+
+
+
+## Gradebooks.jl
+    length(x::Course) = length(x.assignments)
+    function iterate(x::Course, state=1)
+        state > length(x.assignments) && return nothing
+        return x.assignments[state], state + 1
+    end
+    show(io::IO, x::Course) = print(io, join(["              Code: " * string(x.code), "            Number: " * string(x.number), "              Name: " * x.name, "           Credits: " * string(x.credits), "  # of Assignments: " * join(map(a->show(io, a), x.assignments), "\n"), "          Codename: " * string(x.codename)], "\n"))
+    show(io::IO, x::Term) = print(io, join(["             Name: " * x.name, "     Calendar Type: " * string(x.calendar_type), "              Year: " * string(x.year), "        Start Date: " * string(x.start), "       Finish Date: " * string(x.finish), "              Code: " * string(x.code), "\t          Metadata: ", x.metadata], "\n"))
+    show(io::IO, x::Class) = print(io, join([repr(x.course), repr(x.term), "           Section: " * string(x.section), "         Frequency: " * join(x.frequency, ", "), "        Start Time: " * string(x.time_start), "       Finish Time: " * string(x.time_finish), "     Duration Time: " * string(x.time_duration), "Number of Lectures: " * string(length(x.lectures)), "  Codename (Short): " * string(x.codename_short), "   Codename (Long): " * string(x.codename_long), "Primary Instructor: " * repr(x.primary_instructor), "       Instructors: \n\t" * join(map(y->show(io, y), x.instructors), "\n\t"), "            Roster: " * repr(x.roster)], "\n"))
 
 
 
@@ -251,6 +306,12 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
     convert(::Type{Float64}, x::Score) = x.percent.val
     promote_rule(::Type{Score}, ::Type{Float64}) = Float64
     promote_rule(::Type{Score}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
+    length(x::Score) = length(x.percent)
+    function iterate(x::Score, state=1)
+        state > length(x.percent) && return nothing
+        return x.percent[state], state + 1
+    end
+    show(io::IO, x::Score) = print(io, string(x.earned) * " / " * string(x.value) * " (" * string(x.percent) * ", " * repr(x.letter) *  ")" * (isempty(x.comment) ? "" : "# ") * x.comment)
 
 
     +(a::Score, b::Real) = Score(a.earned + Float64(b), a.value)
@@ -268,7 +329,12 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
     /(a::Score, b::Percent) = Score(a.percent / b, a.value)
 
 
-    show(io::IO, x::Submission) = print(io, join(["  Submitted: " * x.submitted, "      Score: " * x.score, "Evaluations: ", join(x.evaluations, "\n\t")], "\n"))
+    length(x::Submission) = length(x.evaluations)
+    function iterate(x::Submission, state=1)
+        state > length(x.evaluations) && return nothing
+        return x.evaluations[state], state + 1
+    end
+    show(io::IO, x::Submission) = print(io, join(["  Submitted: " * string(x.submitted), "      Score: " * repr(x.score), "Evaluations: ", join(map(e->show(io, e), x.evaluations), "\n\t")], "\n"))
 
 
     +(a::Submission, b::Real) = Submission(a.submitted, a.score + Float64(b), a.evaluations)

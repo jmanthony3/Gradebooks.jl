@@ -15,7 +15,7 @@ struct Gradebook
     total::DataFrame
 end
 function Gradebook(class::Class)
-    names = [string(a.codename) for a in class.assignments]
+    names = [string(a.codename) for a in class.course.assignments]
     pushfirst!(names, "Who")
     df = DataFrame(zeros(length(class.roster), length(names)), names)
     return Gradebook(class, Grade[], deepcopy(df), deepcopy(df), deepcopy(df))

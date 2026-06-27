@@ -39,9 +39,9 @@ function frequency2codesymbols(input)::Vector{Symbol}
     if isnothing(input)
         return Symbol[]
     elseif isa(input, Symbol)
-        if string_2uppercase_symbol(input) == :MWF
+        if string_2codename(input) == :MWF
             return MWF
-        elseif string_2uppercase_symbol(input) == :TR
+        elseif string_2codename(input) == :TR
             return TR
         else
             s = uppercase(string(input))
@@ -61,7 +61,7 @@ function frequency2codesymbols(input)::Vector{Symbol}
         days = Symbol[]
         for item in input
             if isa(item, Symbol) || isa(item, Char) || isa(item, AbstractString)
-                key = Symbol(uppercasefirst(string(item)))
+                key = uppercasefirst(string(item))
                 day = get(DAYSYMBOLCODEMAP, key, nothing)
                 if isnothing(day)
                     error("Unknown day: $item")
@@ -146,8 +146,8 @@ end
 "Magically converts `d` to `Dates.Date`. Defaults to ISO 8601. (Uses `DATE_FORMAT` preference.)"
 function parse_date(d)
     if isa(d, Date)
-        d = if year(d) == 1
-            Date(year(now()), month(d), day(d))
+        d = if Year(d) == Year(1)
+            Date(Year(now()), month(d), day(d))
         else
             d
         end
@@ -181,8 +181,8 @@ function parse_date(d)
                     parse = parse_date_g(dateformats[i])
                 end
                 d = parse
-                d = if year(d) == 1
-                    Date(year(now()), month(d), day(d))
+                d = if Year(d) == Year(1)
+                    Date(Year(now()), month(d), day(d))
                 else
                     d
                 end
@@ -203,8 +203,8 @@ function parse_datetime(dt)
     if isa(dt, DateTime) || isa(dt, Millisecond)
         return dt
     elseif isa(dt, Date)
-        d = if year(dt) == 1
-            Date(year(now()), month(dt), day(dt))
+        d = if Year(dt) == Year(1)
+            Date(Year(now()), month(dt), day(dt))
         else
             dt
         end
@@ -254,8 +254,8 @@ function parse_datetime(dt)
                     # else
                     #     d
                     # end
-                    return if year(dt′) == 1
-                        DateTime(Date(year(now()), month(dt′), day(dt′)), Time(dt′))
+                    return if Year(dt′) == Year(1)
+                        DateTime(Date(Year(now()), month(dt′), day(dt′)), Time(dt′))
                     else
                         dt′
                     end
