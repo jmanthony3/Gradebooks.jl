@@ -15,11 +15,12 @@ export attendance_status_map_from_string, attendance_record!, attendance_update!
 end
 
 "Records datetime stamp of attendance status[ with comments]."
-@kwdef struct AttendanceRecord
+struct AttendanceRecord
     status::AttendanceStatus
     stamp::DateTime
-    comment::String=""
+    comment::String
 end
+AttendanceRecord(status::AttendanceStatus, stamp::DateTime; comment::String="") = AttendanceRecord(status, stamp, comment)
 
 is_present(r::AttendanceRecord) = r.status == Present
 is_absent(r::AttendanceRecord)  = r.status == Absent
@@ -55,20 +56,20 @@ record_attendance!(gb, Date("2026-06-24"), Date("2026-06-25"), [
 ])
 ```
 """
-function attendance_record!(gb::Gradebook, date_stamp::Union{Date, String}, date_lecture::Union{Date, String}, marks::Vector{Any}; threshold=STRING_MATCH_THRESHOLD)
+function attendance_record!(gb::Gradebook, date_stamp::Union{Date, String}, date_lecture::Union{Date, String}, marks::Vector{<:Any}; threshold=STRING_MATCH_THRESHOLD)
     date_stamp = parse_date(date_stamp)
     date_lecture = parse_date(date_lecture)
     lecture = gb.class.lectures[findlast(x->x<=date_lecture, map(y->Date(y.due), gb.class.lectures))]
     # grades_post!(gb, map(x->grade(x[1], gb.class.roster, lecture, date_lecture, length(x) == 3 ? AttendanceRecord(x[2], date_stamp, x[3]) : AttendanceRecord(x[2], date_stamp))), marks)
     # attendance_idx = filter(!isnothing, indexin(assignments, filter(x->x.category !== :attendance, gb.class.course.assignments)))
     for mark in marks
-        if length(mark) <= 2 && any(x->isa(x, AttendanceStatus), mark) && !(any(x->isa(Student, (get_student(x, gb.class.roster; threshold=threshold))), mark))
+        if length(mark) <= 2 && any(x->isa(x, AttendanceStatus), mark) && !(any(x->isa(get_student(x, gb.class.roster; threshold=threshold), Student), mark))
             which_record_idx = findfirst(x->isa(x, AttendanceStatus), mark)
             record = length(mark) == 2 ? AttendanceRecord(mark[which_record_idx], date_stamp, mark[which_record_idx == 1 ? 2 : 1]) : AttendanceRecord(only(mark), date_stamp)
             record!.(gb, gb.class.roster.students, record)
-        elseif length(mark) <= 3 && any(x->isa(x, AttendanceStatus), mark) && any(x->isa(Student, (get_student(x, gb.class.roster; threshold=threshold))), mark)
+        elseif length(mark) <= 3 && any(x->isa(x, AttendanceStatus), mark) && any(x->isa(get_student(x, gb.class.roster; threshold=threshold), Student), mark)
             which_record_idx = findfirst(x->isa(x, AttendanceStatus), mark)
-            which_student_idx = findfirst(x->isa(Student, (get_student(x, gb.class.roster; threshold=threshold))), mark)
+            which_student_idx = findfirst(x->isa(get_student(x, gb.class.roster; threshold=threshold), Student), mark)
             record = if length(mark) == 3
                 which_comment_idx = findfirst(x->x ∉ [1, 2, 3], [which_record_idx, which_student_idx])
                 AttendanceRecord(mark[which_record_idx], date_stamp, mark[which_comment_idx])

@@ -156,6 +156,7 @@ function student_candidates(s::Student)
     return unique(filter(!isempty, map(string_sanitize, parts)))
 end
 
+# TODO: come back to parse by "Last, First"
 """
 Find needle (`identifier`), according to any field of `Person`, in haystack (`roster`).
 
