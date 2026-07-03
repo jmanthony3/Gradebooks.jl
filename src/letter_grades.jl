@@ -162,7 +162,7 @@ const I         = LetterGrade(GradeI)
 
 "Converts `Credit` to `LetterGrade` according to preferences `COURSE_POINT_SCALE` and `COURSE_POINT_SCALE_PLUSMINUS`."
 function credit2lettergrade(p::Percent)::LetterGrade
-    val = p.val * 100
+    val = p.value * 100
     return if COURSE_POINT_SCALE_PLUSMINUS == 0
         if      val >= 100 - 1(COURSE_POINT_SCALE/10)
             A

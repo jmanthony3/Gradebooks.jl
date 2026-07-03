@@ -156,15 +156,33 @@ function student_candidates(s::Student)
     return unique(filter(!isempty, map(string_sanitize, parts)))
 end
 
-# TODO: come back to parse by "Last, First"
 """
 Find needle (`identifier`), according to any field of `Person`, in haystack (`roster`).
 
 `threshold` adjusts Levenshtein string matching criterion.
 """
 function get_student(identifier::String, roster::Roster; threshold=STRING_MATCH_THRESHOLD)
-    q = lowercase(string_sanitize(identifier))
-    exact = findall(s -> any(c -> lowercase(string_sanitize(c)) == q, student_candidates(s)), roster.students)
+    exact = if occursin(", ", identifier)
+        family, given = split(identifier, ", ")
+        family_idx = findall(s -> any(c -> lowercase(string_sanitize(c)) == lowercase(string_sanitize(family)), student_candidates(s)), roster.students)
+        if isnothing(family_idx)
+            error("No student found with that family name: $family")
+        end
+        given_idx = findall(s->any(c->begin
+            if length(lowercase(string_sanitize(given))) <= length(lowercase(string_sanitize(c)))
+                lowercase(string_sanitize(c))[1:length(lowercase(string_sanitize(given)))] == lowercase(string_sanitize(given))
+            else
+                false
+            end
+        end, student_candidates(s)), roster.students[family_idx])
+        if isnothing(family_idx)
+            error("No student found with that name: $family, $given")
+        end
+        family_idx[given_idx]
+    else
+        q = lowercase(string_sanitize(identifier))
+        findall(s -> any(c -> lowercase(string_sanitize(c)) == q, student_candidates(s)), roster.students)
+    end
     if length(exact) == 1
         return roster.students[only(exact)]
     elseif length(exact) > 1
@@ -257,7 +275,7 @@ struct Team
         else
             error("`codename` must be of type Symbol or String.")
         end
-        return new(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), roster, string_2codename(codename))
+        return new(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), roster, codename)
     end
 end
 Team(name, roster::Roster) = Team(name, roster, name)

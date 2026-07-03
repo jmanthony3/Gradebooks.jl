@@ -133,7 +133,7 @@ function withdraw!(gb::Gradebook, student::Union{Student, String}; date::Date = 
         g.submission.score.letter = LetterGrade("W")
     end
 
-    grades_sync!(gb; threshold=threshold)  # or just mark dirty
+    grades_sync(gb; threshold=threshold)  # or just mark dirty
     return nothing
 end
 
@@ -146,7 +146,7 @@ function reinstate!(gb::Gradebook, student::Union{Student, String}; date::Date =
     student.enrollment_status = active
     student.withdrawal_date = nothing
     # Optionally clear the W or let instructor decide
-    grades_sync!(gb; threshold=threshold)
+    grades_sync(gb; threshold=threshold)
     return nothing
 end
 

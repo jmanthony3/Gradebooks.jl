@@ -235,9 +235,9 @@ function flatten_cell(x)
     elseif isa(x, Grade)
         return flatten_grade(x)
     elseif isa(x, Point)
-        return Dict("kind" => "Point", "val" => x.val)
+        return Dict("kind" => "Point", "val" => x.value)
     elseif isa(x, Percent)
-        return Dict("kind" => "Percent", "val" => x.val)
+        return Dict("kind" => "Percent", "val" => x.value)
     elseif isa(x, Nothing)
         return nothing
     else

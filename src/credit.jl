@@ -8,7 +8,7 @@ abstract type AbstractCredit end
 
 "Points earned in the course."
 struct Point <: AbstractCredit
-    val::Float64
+    value::Float64
 end
 Point(x::Real) = Point(Float64(x))
 
@@ -31,7 +31,7 @@ Percent(0.0083)
 ```
 """
 struct Percent <: AbstractCredit
-    val::Float64
+    value::Float64
 
     function Percent(x::Float64; normalized::Bool=true)
         value = Float64(x)
@@ -58,4 +58,4 @@ struct Mark
     comment::String
 end
 Mark(delta::Real; comment::String="") = Mark(Point(delta), comment)
-Mark(delta::Percent; comment::String="") = Mark(delta, comment)
+Mark(delta::Credit; comment::String="") = Mark(delta, comment)

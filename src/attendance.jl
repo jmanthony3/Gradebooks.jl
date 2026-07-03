@@ -19,8 +19,9 @@ struct AttendanceRecord
     status::AttendanceStatus
     stamp::DateTime
     comment::String
+    AttendanceRecord(status, stamp, comment) = new(status, (isa(stamp, DateTime) ? stamp : (isa(stamp, Date) ? DateTime(stamp, MIDNIGHT) : error("Got unrecognized stamp type: $stamp, T=$(typeof(stamp))"))), comment)
 end
-AttendanceRecord(status::AttendanceStatus, stamp::DateTime; comment::String="") = AttendanceRecord(status, stamp, comment)
+AttendanceRecord(status::AttendanceStatus, stamp::Union{DateTime, Date}; comment::String="") = AttendanceRecord(status, stamp, comment)
 
 is_present(r::AttendanceRecord) = r.status == Present
 is_absent(r::AttendanceRecord)  = r.status == Absent
@@ -30,12 +31,12 @@ is_tardy(r::AttendanceRecord) = r.status == Tardy
 
 function record!(gb, student, lecture, record)
     if student.enrollment_status == Active && (isnothing(student.final_grade) || student.final_grade ∉ [FN, W, I])
-        rows_idx = occursin.(student, gb.raw[!, "Who"])
-        gb.raw[rows_idx, lecture.codename] .= record
-        t = count(==(Absent), Matrix(gb.raw[rows_idx, :])) # + count(==(0), Matrix(att.raw_score[occursin.(key, att.raw_score[!, "Email"]), :]))
+        i = gb.class.roster.index.by_id[student.person.id]
+        gb.raw[i, lecture.codename] = record
+        t = count(==(Absent), gb.raw[i, :][filter(j->isassigned(gb.raw[!, j], i), length(gb.class.course.assignments) .+ (1:length(gb.class.lectures)))]) # + count(==(0), Matrix(att.raw_score[occursin.(key, att.raw_score[!, "Email"]), :]))
         p = Point(t <= ATTENDANCE_LIMIT ? 0 : ((t - ATTENDANCE_LIMIT) * ATTENDANCE_PENALTY))
-        gb.penalty[rows_idx, lecture.codename] .= p
-        gb.total[rows_idx, lecture.codename] .= record
+        gb.penalty[i, lecture.codename] = p
+        gb.total[i, lecture.codename] = record
     end
 end
 
@@ -71,7 +72,7 @@ function attendance_record!(gb::Gradebook, date_stamp::Union{Date, String}, date
             which_record_idx = findfirst(x->isa(x, AttendanceStatus), mark)
             which_student_idx = findfirst(x->isa(get_student(x, gb.class.roster; threshold=threshold), Student), mark)
             record = if length(mark) == 3
-                which_comment_idx = findfirst(x->x ∉ [1, 2, 3], [which_record_idx, which_student_idx])
+                which_comment_idx = findfirst(x->x ∉ [which_record_idx, which_student_idx], [1, 2, 3])
                 AttendanceRecord(mark[which_record_idx], date_stamp, mark[which_comment_idx])
             elseif length(mark) == 2
                 AttendanceRecord(mark[which_record_idx], date_stamp)
@@ -118,9 +119,7 @@ Records on date of entry (`date_stamp`) quality of attendance from a file matchi
 If using this method, make sure to implement `attendance_status_map_from_string(x::AbstractString)`.
 """
 function attendance_record!(gb::Gradebook, date_stamp::Union{Date, String}, regex::Regex, dir::String; threshold=STRING_MATCH_THRESHOLD)
-    roster = gb.class.roster
-    lectures = filter(x->x.category==CategoryAttendance, gb.class.course.assignments)
-    lecture_dates = map(y->Date(y.due), lectures)
+    lecture_dates = map(x->Date(x.due), gb.class.lectures)
     for course_export in filter(x->occursin(regex, basename(x)), readdir(dir; join=true))
         # @show basename(course_export)
         submissions_df = CSV.read(course_export, DataFrame)
@@ -165,13 +164,13 @@ end
 
 "Calculates number of `Absent` for each student and records penalties."
 function attendance_update!(gb::Gradebook)
-    lectures = gb.class.lectures
-    df = select(gb.raw, All()=>x->x.category==CategoryAttendance)
+    df = select(gb.raw, map(x->x.codename, gb.class.lectures))
     for (i, row) in enumerate(eachrow(df))
         for j in 1:1:ncol(df)
-            t = count(==(Absent), collect(row)[begin:j]) # + count(==(0), collect(row)[begin:j])
+            # t = count(==(Absent), gb.raw[i, :][filter(j->isassigned(gb.raw[!, j], i), length(gb.class.course.assignments) .+ (1:length(gb.class.lectures)))]) # + count(==(0), Matrix(att.raw_score[occursin.(key, att.raw_score[!, "Email"]), :]))
+            t = count(==(Absent), row[filter(k->isassigned(gb.raw[!, length(gb.class.course.assignments)+k], i), 1:j)]) # + count(==(0), collect(row)[begin:j])
             p = Point(t <= ATTENDANCE_LIMIT ? 0.0 : ATTENDANCE_PENALTY)
-            gb.penalty[i, lectures[j].codename] .= p
+            gb.penalty[i, gb.class.lectures[j].codename] = p
         end
     end
     return nothing

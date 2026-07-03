@@ -1,6 +1,7 @@
 export Question, Rubric
 public AssignmentCategory
 export Assignment, Attendance, Exam, Homework, Paper, Presentation, Project, Quiz
+export is_attendance, is_exam, is_homework, is_other, is_paper, is_presentation, is_project, is_quiz
 
 
 
@@ -24,7 +25,7 @@ struct Question
                 error("Heterogeneous vector")
             end
             value_p = mapreduce(x->x.value, +, parts; init=zero(typeof(first(parts).value)))
-            if isa(value_p, Percent) ? !(isapprox(value_p.val, 1.0; atol=1e-6)) : (typeof(value_p) == typeof(value) ? (value_p != value) : true)
+            if isa(value_p, Percent) ? !(isapprox(value_p.value, 1.0; atol=1e-6)) : (typeof(value_p) == typeof(value) ? (value_p != value) : true)
                 @warn "Value distribution of question parts does not equal question value" Σp=value_p question=(name, value)
             end
         end
@@ -47,7 +48,7 @@ struct Rubric
     codename::Symbol
     function Rubric(name, metrics, codename)
         if all(x->isa(x.value, Percent), metrics)
-            total = mapreduce(x->x.value.val, +, metrics; init=0.0)
+            total = mapreduce(x->x.value.value, +, metrics; init=0.0)
             if !isapprox(total, 1.0; atol=1e-6)
                 @warn "Rubric metric values do not sum to 100%" Σmetrics=100total
             end
@@ -105,7 +106,7 @@ struct Assignment
             if question_or_rubric && any(q->isa(q, Rubric), questions)
                 value_q += mapreduce(x->x.source.value, +, filter(x->isa(x, Rubric), questions); init=zero(typeof(first(filter(x->isa(x, Rubric), questions)).source.value)))
             end
-            if isa(value_q, Percent) ? !(isapprox(value_q.val, 1.0; atol=1e-6)) : (typeof(value_q) == typeof(value) ? (value_q != value) : true)
+            if isa(value_q, Percent) ? !(isapprox(value_q.value, 1.0; atol=1e-6)) : (typeof(value_q) == typeof(value) ? (value_q != value) : true)
                 @warn "Value distribution of questions does not equal assignment value" Σq=value_q assignment=(name, value)
             end
         end
@@ -143,3 +144,12 @@ Project(        name, value, due, questions=nothing; is_group=false) = Assignmen
 
 "Convenience function constructing `Assignment` for a quiz."
 Quiz(           name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryQuiz,          is_group, questions, string_2codename(name))
+
+is_attendance(x::Assignment) = x.category == CategoryAttendance
+is_exam(x::Assignment)  = x.category == CategoryExam
+is_homework(x::Assignment) = x.category == CategoryHomework
+is_other(x::Assignment) = x.category == CategoryOther
+is_paper(x::Assignment) = x.category == CategoryPaper
+is_presentation(x::Assignment) = x.category == CategoryPresentation
+is_project(x::Assignment)  = x.category == CategoryProject
+is_quiz(x::Assignment) = x.category == CategoryQuiz

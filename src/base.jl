@@ -1,4 +1,4 @@
-import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_rule, length, iterate, parse, show
+import Base: +, -, *, /, ==, <, <=, >, >=, isless, zero, one, float, convert, promote_rule, length, iterate, parse, show
 
 
 
@@ -70,59 +70,70 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
 ## credit.jl
     *(x::Real, ::Type{Point}) = Point(Float64(x))
 
-    +(a::Point, b::Point) = Point(a.val + b.val)
-    -(a::Point, b::Point) = Point(a.val - b.val)
+    +(a::Point, b::Point) = Point(a.value + b.value)
+    -(a::Point, b::Point) = Point(a.value - b.value)
     # *(a::Point, b::Point) = Point(a.x * b.x)
-    /(a::Point, b::Point) = Percent(a.val / b.val)
-    ==(a::Point, b::Point) = a.val == b.val
-    <(a::Point, b::Point) = a.val < b.val
-    <=(a::Point, b::Point) = a.val <= b.val
-    >(a::Point, b::Point) = a.val > b.val
-    >=(a::Point, b::Point) = a.val >= b.val
+    /(a::Point, b::Point) = Percent(a.value / b.value)
+    ==(a::Point, b::Point) = a.value == b.value
+    <(a::Point, b::Point) = a.value < b.value
+    <=(a::Point, b::Point) = a.value <= b.value
+    >(a::Point, b::Point) = a.value > b.value
+    >=(a::Point, b::Point) = a.value >= b.value
+    isless(a::Point, b::Point) = a.value < b.value
     zero(::Type{Point}) = Point(0.0)
     one(::Type{Point}) = Point(1.0)
-    float(x::Point) = x.val
-    convert(::Type{Float64}, x::Point) = x.val
+    float(x::Point) = x.value
+    convert(::Type{Float64}, x::Point) = x.value
+    convert(::Type{Point}, x::Real) = Point(x)
+    convert(::Type{Point}, x::Point) = x
     promote_rule(::Type{Point}, ::Type{Float64}) = Float64
     promote_rule(::Type{Point}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
-    length(x::Point) = length(x.val)
+    length(x::Point) = length(x.value)
     function iterate(x::Point, state=1)
-        state > length(x.val) && return nothing
-        return x.val[state], state + 1
+        state > length(x.value) && return nothing
+        return x.value[state], state + 1
     end
     parse(::Type{Point}, s::AbstractString) = Point(parse(Float64, s))
-    show(io::IO, x::Point) = print(io, round(x.val; digits=COURSE_POINT_DECIMALPLACES))
+    show(io::IO, x::Point) = print(io, round(x.value; digits=COURSE_POINT_DECIMALPLACES))
+
+    +(a::Point, b::Real) = Point(a.value + Float64(b))
+    +(a::Real, b::Point) = Point(Float64(a) + b.value)
+    -(a::Point, b::Real) = Point(a.value - Float64(b))
+    *(a::Point, b::Real) = Point(a.value * Float64(b))
+    *(a::Real, b::Point) = Point(Float64(a) * b.value)
+    /(a::Point, b::Real) = Point(a.value / Float64(b))
 
 
     *(x::Real, ::Type{Percent}) = Percent(Float64(x))
 
-    +(a::Percent, b::Percent) = Percent(a.val + b.val; normalized=false)
-    -(a::Percent, b::Percent) = Percent(a.val - b.val; normalized=false)
-    *(a::Percent, b::Percent) = Percent(a.val * b.val; normalized=false)
-    /(a::Percent, b::Percent) = Percent(a.val / b.val; normalized=false)
-    ==(a::Percent, b::Percent) = a.val == b.val
-    <(a::Percent, b::Percent) = a.val < b.val
-    <=(a::Percent, b::Percent) = a.val <= b.val
-    >(a::Percent, b::Percent) = a.val > b.val
-    >=(a::Percent, b::Percent) = a.val >= b.val
+    +(a::Percent, b::Percent) = Percent(a.value + b.value; normalized=false)
+    -(a::Percent, b::Percent) = Percent(a.value - b.value; normalized=false)
+    *(a::Percent, b::Percent) = Percent(a.value * b.value; normalized=false)
+    /(a::Percent, b::Percent) = Percent(a.value / b.value; normalized=false)
+    ==(a::Percent, b::Percent) = a.value == b.value
+    <(a::Percent, b::Percent) = a.value < b.value
+    <=(a::Percent, b::Percent) = a.value <= b.value
+    >(a::Percent, b::Percent) = a.value > b.value
+    >=(a::Percent, b::Percent) = a.value >= b.value
+    isless(a::Percent, b::Percent) = a.value < b.value
     zero(::Type{Percent}) = Percent(0.0)
     one(::Type{Percent}) = Percent(1.0)
-    float(x::Percent) = x.val
-    convert(::Type{Float64}, x::Percent) = x.val
+    float(x::Percent) = x.value
+    convert(::Type{Float64}, x::Percent) = x.value
     # convert(::Type{Char}, x::Percent) = (x >= 0.90 ? 'A' : (x >= 0.80 ? 'B' : (x >= 0.70 ? 'C' : (x >= 0.60 ? 'D' : 'F'))))
     promote_rule(::Type{Percent}, ::Type{Float64}) = Float64
     promote_rule(::Type{Percent}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
-    length(x::Percent) = length(x.val)
+    length(x::Percent) = length(x.value)
     function iterate(x::Percent, state=1)
-        state > length(x.val) && return nothing
-        return x.val[state], state + 1
+        state > length(x.value) && return nothing
+        return x.value[state], state + 1
     end
     parse(::Type{Percent}, s::AbstractString) = Percent(parse(Float64, s); normalized=false)
-    show(io::IO, x::Percent) = print(io, round(x.val; digits=COURSE_POINT_DECIMALPLACES), " %")
+    show(io::IO, x::Percent) = print(io, round(x.value; digits=COURSE_POINT_DECIMALPLACES), " %")
 
 
-    *(a::Point, b::Percent) = Point(a.val * b.val)
-    *(a::Percent, b::Point) = Point(a.val * b.val)
+    *(a::Point, b::Percent) = Point(a.value * b.value)
+    *(a::Percent, b::Point) = Point(a.value * b.value)
 
 
     +(a::Mark, b::Mark) = Mark(a.delta + b.delta; comment=join([a.comment, b.comment], "\n")) # , a.value + b.value)
@@ -134,8 +145,9 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
     <=(a::Mark, b::Mark) = a.delta <= b.delta
     >(a::Mark, b::Mark) = a.delta > b.delta
     >=(a::Mark, b::Mark) = a.delta >= b.delta
-    float(x::Mark) = x.delta.val
-    convert(::Type{Float64}, x::Mark) = x.delta.val
+    isless(a::Mark, b::Mark) = a.delta < b.delta
+    float(x::Mark) = x.delta.value
+    convert(::Type{Float64}, x::Mark) = x.delta.value
     promote_rule(::Type{Mark}, ::Type{Float64}) = Float64
     promote_rule(::Type{Mark}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
     length(x::Mark) = length(x.delta)
@@ -152,6 +164,13 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
     *(a::Mark, b::Real) = Mark(a.delta * Float64(b), a.comment)
     *(a::Real, b::Mark) = Mark(Float64(a) * b.delta, b.comment)
     /(a::Mark, b::Real) = Mark(a.delta / Float64(b), a.comment)
+
+    +(a::Mark, b::Point) = Mark(a.delta + b, a.comment)
+    +(a::Point, b::Mark) = Mark(a + b.delta, b.comment)
+    -(a::Mark, b::Point) = Mark(a.delta - b, a.comment)
+    *(a::Mark, b::Point) = Mark(a.delta * b, a.comment)
+    *(a::Point, b::Mark) = Mark(a * b.delta, b.comment)
+    /(a::Mark, b::Point) = Mark(a.delta / b, a.comment)
 
     +(a::Mark, b::Percent) = Mark(a.delta + b, a.comment)
     +(a::Percent, b::Mark) = Mark(a + b.delta, b.comment)
@@ -170,11 +189,12 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
     show(io::IO, g::GradeLevel) = print(io, determine_level(g))
 
 
-    ==(a::LetterGrade, b::LetterGrade) = quality_points(a) == quality_points(b)
-    <(a::LetterGrade, b::LetterGrade) = quality_points(a) < quality_points(b)
-    <=(a::LetterGrade, b::LetterGrade) = quality_points(a) <= quality_points(b)
-    >(a::LetterGrade, b::LetterGrade) = quality_points(a) > quality_points(b)
-    >=(a::LetterGrade, b::LetterGrade) = quality_points(a) >= quality_points(b)
+    ==(a::LetterGrade, b::LetterGrade) = a.quality_points == b.quality_points
+    <(a::LetterGrade, b::LetterGrade) = a.quality_points < b.quality_points
+    <=(a::LetterGrade, b::LetterGrade) = a.quality_points <= b.quality_points
+    >(a::LetterGrade, b::LetterGrade) = a.quality_points > b.quality_points
+    >=(a::LetterGrade, b::LetterGrade) = a.quality_points >= b.quality_points
+    isless(a::LetterGrade, b::LetterGrade) = a.quality_points < b.quality_points
     float(x::LetterGrade) = x.quality_points
     Base.string(x::LetterGrade) = x.string
     convert(::Type{Float64}, x::LetterGrade) = x.quality_points
@@ -216,15 +236,16 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
 ## assignments.jl
     # +(a::Question, b::Question) = a.value + b.value # Question(join([a.name, b.name], "\n"), a.value + b.value, join(filter(x->!isnothing(x), [a.parts, b.parts]), "\n"))
     # -(a::Question, b::Question) = a.value - b.value # Question(join([a.name, b.name], "\n"), a.value - b.value, join(filter(x->!isnothing(x), [a.parts, b.parts]), "\n"))
-    ==(a::Question, b::Question) = a.value.val == b.value.val
-    <(a::Question, b::Question) = a.value.val < b.value.val
-    <=(a::Question, b::Question) = a.value.val <= b.value.val
-    >(a::Question, b::Question) = a.value.val > b.value.val
-    >=(a::Question, b::Question) = a.value.val >= b.value.val
+    ==(a::Question, b::Question) = a.value.value == b.value.value
+    <(a::Question, b::Question) = a.value.value < b.value.value
+    <=(a::Question, b::Question) = a.value.value <= b.value.value
+    >(a::Question, b::Question) = a.value.value > b.value.value
+    >=(a::Question, b::Question) = a.value.value >= b.value.value
+    isless(a::Question, b::Question) = a.value.value < b.value.value
     # zero(::Type{Question}; name="Auto") = Question(name, 0.0)
     # one(::Type{Question}; name="Auto") = Question(name, 1.0)
-    float(x::Question) = x.value.val
-    convert(::Type{Float64}, x::Question) = x.value.val
+    float(x::Question) = x.value.value
+    convert(::Type{Float64}, x::Question) = x.value.value
     promote_rule(::Type{Question}, ::Type{Float64}) = Float64
     promote_rule(::Type{Question}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
     length(x::Question) = (!isnothing(x.parts) ? length(x.parts) : 1)
@@ -232,11 +253,11 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
         state > (!isnothing(x.parts) ? length(x.parts) : 1) && return nothing
         return x.parts[state], state + 1
     end
-    show(io::IO, x::Question) = print(io, join([x.name, string(x.codename) * ": " * string(round(x.value.val; digits=COURSE_POINT_DECIMALPLACES)), isnothing(x.parts) ? nothing : join(map(p->show(io, p), x.parts), "\n\t")], "\n"))
+    show(io::IO, x::Question) = print(io, join([x.name, string(x.codename) * ": " * string(round(x.value.value; digits=COURSE_POINT_DECIMALPLACES)), isnothing(x.parts) ? nothing : join(map(p->show(io, p), x.parts), "\n\t")], "\n"))
 
 
-    float(x::Evaluation) = x.mark.delta.val / x.target.value.val
-    convert(::Type{Float64}, x::Evaluation) = x.mark.delta.val / x.target.value.val
+    float(x::Evaluation) = x.mark.delta.value / x.target.value.value
+    convert(::Type{Float64}, x::Evaluation) = x.mark.delta.value / x.target.value.value
     promote_rule(::Type{Evaluation}, ::Type{Float64}) = Float64
     promote_rule(::Type{Evaluation}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
     length(x::Evaluation) = length(x.mark)
@@ -265,8 +286,8 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
     # <=(a::Assignment, b::Assignment) = a.value <= b.value
     # >(a::Assignment, b::Assignment) = a.value > b.value
     # >=(a::Assignment, b::Assignment) = a.value >= b.value
-    float(x::Assignment) = x.value.val
-    convert(::Type{Float64}, x::Assignment) = x.value.val
+    float(x::Assignment) = x.value.value
+    convert(::Type{Float64}, x::Assignment) = x.value.value
     promote_rule(::Type{Assignment}, ::Type{Float64}) = Float64
     promote_rule(::Type{Assignment}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
     length(x::Assignment) = length(x.questions)
@@ -302,8 +323,9 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
     <=(a::Score, b::Score) = a.percent <= b.percent
     >(a::Score, b::Score) = a.percent > b.percent
     >=(a::Score, b::Score) = a.percent >= b.percent
-    float(x::Score) = x.percent.val
-    convert(::Type{Float64}, x::Score) = x.percent.val
+    isless(a::Score, b::Score) = a.percent < b.percent
+    float(x::Score) = x.percent.value
+    convert(::Type{Float64}, x::Score) = x.percent.value
     promote_rule(::Type{Score}, ::Type{Float64}) = Float64
     promote_rule(::Type{Score}, ::Type{T}) where {T<:Real} = promote_rule(Float64, T)
     length(x::Score) = length(x.percent)
@@ -321,6 +343,13 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
     *(a::Real, b::Score) = Score(Float64(a) * b.earned, b.value)
     /(a::Score, b::Real) = Score(a.earned / Float64(b), a.value)
 
+    +(a::Score, b::Point) = Score(a.earned + b, a.value)
+    +(a::Point, b::Score) = Score(a + b.earned, b.value)
+    -(a::Score, b::Point) = Score(a.earned - b, a.value)
+    *(a::Score, b::Point) = Score(a.earned * b, a.value)
+    *(a::Point, b::Score) = Score(a * b.earned, b.value)
+    /(a::Score, b::Point) = Score(a.earned / b, a.value)
+
     +(a::Score, b::Percent) = Score(a.percent + b, a.value)
     +(a::Percent, b::Score) = Score(a + b.percent, b.value)
     -(a::Score, b::Percent) = Score(a.percent - b, a.value)
@@ -329,6 +358,12 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
     /(a::Score, b::Percent) = Score(a.percent / b, a.value)
 
 
+    ==(a::Submission, b::Submission) = a.score.percent == b.score.percent
+    <(a::Submission, b::Submission) = a.score.percent < b.score.percent
+    <=(a::Submission, b::Submission) = a.score.percent <= b.score.percent
+    >(a::Submission, b::Submission) = a.score.percent > b.score.percent
+    >=(a::Submission, b::Submission) = a.score.percent >= b.score.percent
+    isless(a::Submission, b::Submission) = a.score.percent < b.score.percent
     length(x::Submission) = length(x.evaluations)
     function iterate(x::Submission, state=1)
         state > length(x.evaluations) && return nothing
@@ -338,11 +373,18 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
 
 
     +(a::Submission, b::Real) = Submission(a.submitted, a.score + Float64(b), a.evaluations)
-    +(a::Real, b::Submission) = b + Float64(a)
+    +(a::Real, b::Submission) = b + a
     -(a::Submission, b::Real) = Submission(a.submitted, a.score - Float64(b), a.evaluations)
     *(a::Submission, b::Real) = Submission(a.submitted, a.score * Float64(b), a.evaluations)
-    *(a::Real, b::Submission) = b * Float64(a)
+    *(a::Real, b::Submission) = b * a
     /(a::Submission, b::Real) = Submission(a.submitted, a.score / Float64(b), a.evaluations)
+
+    +(a::Submission, b::Point) = Submission(a.submitted, a.score + b, a.evaluations)
+    +(a::Point, b::Submission) = b + a
+    -(a::Submission, b::Point) = Submission(a.submitted, a.score - b, a.evaluations)
+    *(a::Submission, b::Point) = Submission(a.submitted, a.score * b, a.evaluations)
+    *(a::Point, b::Submission) = b * a
+    /(a::Submission, b::Point) = Submission(a.submitted, a.score / b, a.evaluations)
 
     +(a::Submission, b::Percent) = Submission(a.submitted, a.score + b, a.evaluations)
     +(a::Percent, b::Submission) = b + a
@@ -352,22 +394,35 @@ import Base: +, -, *, /, ==, <, <=, >, >=, zero, one, float, convert, promote_ru
     /(a::Submission, b::Percent) = Submission(a.submitted, a.score / b, a.evaluations)
 
 
+    ==(a::Grade, b::Grade) = a.submission.score.percent == b.submission.score.percent
+    <(a::Grade, b::Grade) = a.submission.score.percent < b.submission.score.percent
+    <=(a::Grade, b::Grade) = a.submission.score.percent <= b.submission.score.percent
+    >(a::Grade, b::Grade) = a.submission.score.percent > b.submission.score.percent
+    >=(a::Grade, b::Grade) = a.submission.score.percent >= b.submission.score.percent
+    isless(a::Grade, b::Grade) = a.submission.score.percent < b.submission.score.percent
     show(io::IO, x::Grade) = print(io, join(map(fn->x[fn], fieldnames(x)), "\n"))
 
 
-    +(a::Grade, b::Real) = Grade(x.who, x.assignment, Submission(a.submitted, a.score + Float64(b), a.evaluations))
-    +(a::Real, b::Grade) = Grade(x.who, x.assignment, b + Float64(a))
-    -(a::Grade, b::Real) = Grade(x.who, x.assignment, Submission(a.submitted, a.score - Float64(b), a.evaluations))
-    *(a::Grade, b::Real) = Grade(x.who, x.assignment, Submission(a.submitted, a.score * Float64(b), a.evaluations))
-    *(a::Real, b::Grade) = Grade(x.who, x.assignment, b * Float64(a))
-    /(a::Grade, b::Real) = Grade(x.who, x.assignment, Submission(a.submitted, a.score / Float64(b), a.evaluations))
+    +(a::Grade, b::Real) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score + Float64(b), a.submission.evaluations))
+    +(a::Real, b::Grade) = b + a
+    -(a::Grade, b::Real) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score - Float64(b), a.submission.evaluations))
+    *(a::Grade, b::Real) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score * Float64(b), a.submission.evaluations))
+    *(a::Real, b::Grade) = b * a
+    /(a::Grade, b::Real) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score / Float64(b), a.submission.evaluations))
 
-    +(a::Grade, b::Percent) = Grade(x.who, x.assignment, Submission(a.submitted, a.score + b, a.evaluations))
-    +(a::Percent, b::Grade) = Grade(x.who, x.assignment, b + a)
-    -(a::Grade, b::Percent) = Grade(x.who, x.assignment, Submission(a.submitted, a.score - b, a.evaluations))
-    *(a::Grade, b::Percent) = Grade(x.who, x.assignment, Submission(a.submitted, a.score * b, a.evaluations))
-    *(a::Percent, b::Grade) = Grade(x.who, x.assignment, b * a)
-    /(a::Grade, b::Percent) = Grade(x.who, x.assignment, Submission(a.submitted, a.score / b, a.evaluations))
+    +(a::Grade, b::Point) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score + b, a.submission.evaluations))
+    +(a::Point, b::Grade) = b + a
+    -(a::Grade, b::Point) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score - b, a.submission.evaluations))
+    *(a::Grade, b::Point) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score * b, a.submission.evaluations))
+    *(a::Point, b::Grade) = b * a
+    /(a::Grade, b::Point) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score / b, a.submission.evaluations))
+
+    +(a::Grade, b::Percent) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score + b, a.submission.evaluations))
+    +(a::Percent, b::Grade) = b + a
+    -(a::Grade, b::Percent) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score - b, a.submission.evaluations))
+    *(a::Grade, b::Percent) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score * b, a.submission.evaluations))
+    *(a::Percent, b::Grade) = b * a
+    /(a::Grade, b::Percent) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score / b, a.submission.evaluations))
 
 
     function convert(::Type{Dict}, x::Grade)

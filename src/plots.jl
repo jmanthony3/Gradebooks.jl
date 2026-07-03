@@ -10,7 +10,7 @@ using ColorSchemes
 
 
 numeric_value(x::Real) = Float64(x)
-numeric_value(x::Credit) = x.val
+numeric_value(x::Credit) = x.value
 numeric_value(x::Grade) = Float64(x.submission.score.earned)
 numeric_value(x) = NaN
 
@@ -130,7 +130,7 @@ function build_gradebook_display(gb::Gradebook;
         end
 
         df_total.Missing = map(df_total.Total) do t
-            Point(total_possible.val - t.val)
+            Point(total_possible.value - t.value)
         end
     end
 
@@ -198,14 +198,14 @@ function leaf_score(item, evs, parent_value)
             else
                 parent_value
             end
-            Point(base.val * δ.val)
+            Point(base.value * δ.value)
         else
             Point(0.0)
         end
     end
 end
 
-function build_assignment_display(grades::Vector{Grade}, assignment::Assignment; student_filter=nothing, teams=Team[])
+function build_assignment_display(gb::Gradebook, grades::Vector{Grade}, assignment::Assignment; student_filter=nothing, teams=Team[])
     students_idx = !isnothing(student_filter) ? student_filter : (1:nrow(gb.total))
     grades = grades[students_idx]
     df = DataFrame(
@@ -214,24 +214,30 @@ function build_assignment_display(grades::Vector{Grade}, assignment::Assignment;
         # ID = map(g -> g.student.id, grades),
         # Email = map(g -> g.student.email, grades),
         # # Team = map(g -> getproperty(g.student, :team, ""), grades)
+        # summary columns
+        Total = map(g -> g.submission.score.score, grades),
+        Percent = map(g -> g.submission.score.percent, grades),
+        Letter = map(g -> g.submission.score.letter.string, grades),
+        Missing = map(g -> assignment.value - g.submission.score.score.earned, grades)
     )
 
     # collect all leaf nodes once
     all_leaves = vcat((leaf_items(q) for q in assignment.questions)...)
 
     # add one column per leaf
-    for leaf in all_leaves
-        df[!, leaf.codename] = map(grades) do g
-            # g.submission.evaluations should be the leaf-level evaluations
-            leaf_score(leaf, g.submission.evaluations, assignment.value)
-        end
+    for (i, leaf) in enumerate(all_leaves)
+        # df[!, leaf.codename] = map(grades) do g
+        #     # g.submission.evaluations should be the leaf-level evaluations
+        #     leaf_score(leaf, g.submission.evaluations, assignment.value)
+        # end
+        insertcols!(df, i, leaf.codename=>map(g->leaf_score(leaf, g.submission.evaluations, assignment.value), grades))
     end
 
-    # summary columns
-    df.Total = map(g -> g.submission.score.score, grades)
-    df.Percent = map(g -> g.submission.score.percent, grades)
-    df.Letter = map(g -> g.submission.score.letter.string, grades)
-    df.Missing = map(g -> assignment.value - g.submission.score.score.earned, grades)
+    # # summary columns
+    # df.Total = map(g -> g.submission.score.score, grades)
+    # df.Percent = map(g -> g.submission.score.percent, grades)
+    # df.Letter = map(g -> g.submission.score.letter.string, grades)
+    # df.Missing = map(g -> assignment.value - g.submission.score.score.earned, grades)
 
     column_labels = [
         names(df_total),
@@ -299,7 +305,7 @@ function view_assignment(
     student_filter=nothing,
     output_path=joinpath(pwd(), "gradebook", "build", "assignment.html")
 )
-    df, items, column_labels, row_labels = build_assignment_display(gb.total[!, assignment.codename], assignment; student_filter=student_filter, teams=gb.teams)
+    df, items, column_labels, row_labels = build_assignment_display(gb, gb.total[!, assignment.codename], assignment; student_filter=student_filter, teams=gb.class.teams)
 
     return render_table(
         df;

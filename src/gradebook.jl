@@ -1,4 +1,4 @@
-export Gradebook, grades_post!, grades_sync!
+export Gradebook, grades_post, grades_sync
 
 
 
@@ -15,10 +15,22 @@ struct Gradebook
     total::DataFrame
 end
 function Gradebook(class::Class)
-    names = [string(a.codename) for a in class.course.assignments]
-    pushfirst!(names, "Who")
-    df = DataFrame(zeros(length(class.roster), length(names)), names)
-    return Gradebook(class, Grade[], deepcopy(df), deepcopy(df), deepcopy(df))
+    names = vcat([string(a.codename) for a in class.course.assignments], [string(a.codename) for a in class.lectures])
+    df_raw, df_penalty, df_total = DataFrame(), DataFrame(), DataFrame() # zeros(length(class.roster), length(names)), names)
+    for i in 1:1:length(class.course.assignments)
+        # df[!, i] = convert.(Grade, df[!, i])
+        insertcols!(df_raw, class.course.assignments[i].codename=>Vector{Grade}(undef, length(class.roster)))
+        insertcols!(df_penalty, class.course.assignments[i].codename=>Vector{Point}(undef, length(class.roster)))
+        insertcols!(df_total, class.course.assignments[i].codename=>Vector{Grade}(undef, length(class.roster)))
+    end
+    for i in 1:1:length(class.lectures)
+        # df[!, i] = convert.(AttendanceRecord, df[!, i])
+        insertcols!(df_raw, class.lectures[i].codename=>Vector{AttendanceRecord}(undef, length(class.roster)))
+        insertcols!(df_penalty, class.lectures[i].codename=>Vector{Point}(undef, length(class.roster)))
+        insertcols!(df_total, class.lectures[i].codename=>Vector{AttendanceRecord}(undef, length(class.roster)))
+    end
+    # return Gradebook(class, Grade[], deepcopy(df), deepcopy(df), deepcopy(df))
+    return Gradebook(class, Grade[], df_raw, df_penalty, df_total)
 end
 
 """
@@ -29,42 +41,40 @@ Can post grades for `assignments` from `src` searching for first non-empty row `
 ## Warning
 This applies a scalar grade onto the entire assignment and risks erasing evaluation history in gradebook!
 """
-function grades_post!(gb::Gradebook, grades::Vector{Grade})
-    nonattendance_idx = filter(!isnothing, indexin(assignments, filter(x->x.category !== :attendance, gb.class.course.assignments)))
+function grades_post(gb::Gradebook, grades::Vector{Grade})
+    # nonattendance_idx = filter(!isnothing, indexin(assignments, filter(is_attendance, gb.class.course.assignments)))
     students = gb.class.roster.students
     for grade in filter(g->g.student.enrollment_status == Active && (isnothing(g.student.final_grade) || g.student.final_grade ∉ [FN, W, I]), collect(grades))
-        rows_idx = occursin.(grade.student, gb.raw[!, "Who"])
-        gb.raw[rows_idx, assignment.codename] .= grade
+        i, j = gb.class.roster.index.by_id[grade.student.person.id], length(gb.class.course.assignments)
+        gb.raw[i, grade.assignment.codename] = grade
         p = Point(grade.assignment.value * late_penalty(grade))
-        gb.penalty[rows_idx, assignment.codename] .= p
-        gb.total[rows_idx, assignment.codename] .= Point(max(Point(0.0), grade - p))
+        gb.penalty[i, grade.assignment.codename] = p
+        gb.total[i, grade.assignment.codename] = max(grade - grade.submission.score.earned, grade - p)
         x, y = zero(Point), zero(Point)
-        # row = select(gb.total, Cols(x->x.assignment_category !== :attendance, gb.class.course.assignments)=>ByRow(occursin.(grade.student.email, gb.total[!, "Email"])))
-        row = gb.total[rows_idx, :]
-        for (i, g) in zip(nonattendance_idx, row[nonattendance_idx])
-            x += g.submission.score.score.value
-            y += gb.class.course.assignments[i].value
+        for (_, g) in enumerate(gb.total[i, :][filter(k->isassigned(gb.raw[!, k], i), 1:j)])
+            x += g.submission.score.earned.value
+            # y += gb.class.course.assignments[i].value
+            y += g.assignment.value
         end
-        students[gb.class.student_index.by_id[grade.student.id]] = update(grade.student; final_grade=credit2lettergrade(x, y))
+        students[i] = update(grade.student; final_grade=credit2lettergrade(x, y))
     end
     class = update(gb.class; roster=Roster(students))
-    gb = update(gb; class=class)
-    return nothing
+    return update(gb; class=class, grades=grades)
 end
 
-function grades_post!(gb::Gradebook, assignments::Vector{Assignment}, src::String; by="ID", threshold=STRING_MATCH_THRESHOLD)
+function grades_post(gb::Gradebook, assignments::Vector{Assignment}, src::String; by="ID", threshold=STRING_MATCH_THRESHOLD)
     function find_submission_col(df, assignment; threshold=STRING_MATCH_THRESHOLD)
         headers     = string.(names(df))
-        target      = sanitize_string(assignment.name)
-        exact       = findall(h->sanitize_string(h) == target, headers)
+        target      = string_sanitize(assignment.name)
+        exact       = findall(h->string_sanitize(h) == target, headers)
         if length(exact) == 1
             return only(exact)
         elseif length(exact) > 1
             error("Ambiguous submission column for $(assignment.name): $(headers[exact])")
         else # fuzzy fallback only if exact matching failed
-            scores = map(h->(h, Levenshtein()(target, sanitize_string(h))), headers)
+            scores = map(h->(h, Levenshtein()(target, string_sanitize(h))), headers)
             best_name, best_dist = first(sort(scores, by=x->x[2]))
-            if best_dist / max(length(target), length(sanitize_string(best_name))) < threshold
+            if best_dist / max(length(target), length(string_sanitize(best_name))) < threshold
                 return findfirst(==(best_name), headers)
             end
             matches = map(x->first(x), (sort(scores, by=x->x[2])))
@@ -80,15 +90,15 @@ function grades_post!(gb::Gradebook, assignments::Vector{Assignment}, src::Strin
         submissions_df′ = submissions_df[!, Cols(by, cols)]
         submissions_df′ = DataFrame(Matrix(submissions_df′)[findfirst(!ismissing, submissions_df′[!, by]):end, :], names(submissions_df′))
         submissions_df′[!, 1] = convert.(String, submissions_df′[!, 1])
-        submissions_df′[!, 2] = convert.(Point, (map(x->ismissing(x) ? 0.0 : x, submissions_df′[!, 2])))
+        submissions_df′[!, 2] = convert.(Point, (map(x->ismissing(x) ? 0.0 : (isa(x, String) ? parse(x, Float64) : x), submissions_df′[!, 2])))
         grades = Grade[]
         for row in eachrow(submissions_df′)
             push!(grades, grade(row[1], gb.class.roster, assignment, assignment.due, row[2]; threshold=threshold))
         end
-        grades_post!(gb, grades)
+        gb = grades_post(gb, grades)
     end
-    return nothing
+    return gb
 end
 
 "Syncs current field value of gb.grades to gradebook."
-grades_sync!(gb::Gradebook) = grades_post!(gb, gb.grades)
+grades_sync(gb::Gradebook) = grades_post(gb, gb.grades)
