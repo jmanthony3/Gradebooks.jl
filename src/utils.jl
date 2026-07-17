@@ -4,7 +4,7 @@ export update
 
 
 "Sanitizes a string by stripping all non-alphanumeric characters."
-string_sanitize(s::AbstractString) = replace(string(s), r"[^[:alnum:]]+" => "")
+string_sanitize(s::AbstractString) = replace(Base.string(s), r"[^[:alnum:]]+" => "")
 
 "Converts string to an uppercase symbol."
 string_2uppercase_symbol(s::AbstractString) = isa(s, Symbol) ? s : Symbol(uppercase(string_sanitize(s)))

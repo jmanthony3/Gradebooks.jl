@@ -1,4 +1,5 @@
-import Base: +, -, *, /, ==, <, <=, >, >=, isless, zero, one, float, convert, promote_rule, length, iterate, parse, show
+import Base: +, -, *, /, ==, <, <=, >, >=, isless, hash, zero, one, float, convert, promote_rule, length, iterate, parse, string, show
+import DataFrames: DataFrame
 
 
 
@@ -73,7 +74,7 @@ import Base: +, -, *, /, ==, <, <=, >, >=, isless, zero, one, float, convert, pr
     +(a::Point, b::Point) = Point(a.value + b.value)
     -(a::Point, b::Point) = Point(a.value - b.value)
     # *(a::Point, b::Point) = Point(a.x * b.x)
-    /(a::Point, b::Point) = Percent(a.value / b.value)
+    /(a::Point, b::Point) = Percent(a.value / b.value; normalized=false)
     ==(a::Point, b::Point) = a.value == b.value
     <(a::Point, b::Point) = a.value < b.value
     <=(a::Point, b::Point) = a.value <= b.value
@@ -108,16 +109,16 @@ import Base: +, -, *, /, ==, <, <=, >, >=, isless, zero, one, float, convert, pr
 
     +(a::Percent, b::Percent) = Percent(a.value + b.value; normalized=false)
     -(a::Percent, b::Percent) = Percent(a.value - b.value; normalized=false)
-    *(a::Percent, b::Percent) = Percent(a.value * b.value; normalized=false)
-    /(a::Percent, b::Percent) = Percent(a.value / b.value; normalized=false)
+    *(a::Percent, b::Percent) = Percent(100a.value * 100b.value)
+    /(a::Percent, b::Percent) = Percent(100a.value / 100b.value)
     ==(a::Percent, b::Percent) = a.value == b.value
     <(a::Percent, b::Percent) = a.value < b.value
     <=(a::Percent, b::Percent) = a.value <= b.value
     >(a::Percent, b::Percent) = a.value > b.value
     >=(a::Percent, b::Percent) = a.value >= b.value
     isless(a::Percent, b::Percent) = a.value < b.value
-    zero(::Type{Percent}) = Percent(0.0)
-    one(::Type{Percent}) = Percent(1.0)
+    zero(::Type{Percent}) = Percent(0.0; normalized=false)
+    one(::Type{Percent}) = Percent(1.0; normalized=false)
     float(x::Percent) = x.value
     convert(::Type{Float64}, x::Percent) = x.value
     # convert(::Type{Char}, x::Percent) = (x >= 0.90 ? 'A' : (x >= 0.80 ? 'B' : (x >= 0.70 ? 'C' : (x >= 0.60 ? 'D' : 'F'))))
@@ -129,7 +130,7 @@ import Base: +, -, *, /, ==, <, <=, >, >=, isless, zero, one, float, convert, pr
         return x.value[state], state + 1
     end
     parse(::Type{Percent}, s::AbstractString) = Percent(parse(Float64, s); normalized=false)
-    show(io::IO, x::Percent) = print(io, round(x.value; digits=COURSE_POINT_DECIMALPLACES), " %")
+    show(io::IO, x::Percent) = print(io, round(100x.value; digits=COURSE_POINT_DECIMALPLACES), " %")
 
 
     *(a::Point, b::Percent) = Point(a.value * b.value)
@@ -214,22 +215,64 @@ import Base: +, -, *, /, ==, <, <=, >, >=, isless, zero, one, float, convert, pr
 
 
 
+==(a::LeafPath, b::LeafPath) = a.parts == b.parts
+hash(p::LeafPath, h::UInt) = hash(p.parts, h)
+string(p::LeafPath) = isempty(p.parts) ? "" : join(string.(p.parts), ".")
+show(io::IO, x::LeafPath) = print(io, string(x))
+
+
+
 ## people.jl
-    show(io::IO, x::Person) = print(io, join(["              Name: " * x.name, "           Aliases: " * (!isempty(x.name_aliases) ? join(x.name_aliases, ", ") : ""), "             Email: " * x.email, "             Phone: " * x.phone, "      Organization: " * x.organization, "                ID: " * x.id, "              Code: " * string(x.codename)], "\n"))
-    show(io::IO, x::Instructor) = print(io, join([repr(x.person), "         Job Title: " * x.job_title], "\n"))
-    show(io::IO, x::Student) = print(io, join([repr(x.person), "        Discipline: " * x.discipline, "        Enrollment: " * string(x.enrollment_status), "       Final Grade: " * (!isnothing(x.final_grade) ? repr(x.final_grade) : "n/a"), "   Withdrawal Date: " * string(x.withdrawal_date), "             Notes: ", x.notes], "\n"))
+    ==(a::Person, b::Person) = a.id == b.id
+    ==(a::Instructor, b::Instructor) = a.person == b.person
+    ==(a::Student, b::Student) = a.person == b.person
+    hash(x::Person, h::UInt) = hash(x.id, h)
+    hash(x::Instructor, h::UInt) = hash(x.person, h)
+    hash(x::Student, h::UInt) = hash(x.person, h)
+    # show(io::IO, x::Person) = print(io, join(["              Name: " * x.name, "           Aliases: " * (!isempty(x.name_aliases) ? join(x.name_aliases, ", ") : ""), "             Email: " * x.email, "             Phone: " * x.phone, "      Organization: " * x.organization, "                ID: " * x.id, "              Code: " * string(x.codename)], "\n"))
+    # show(io::IO, x::Instructor) = print(io, join([repr(x.person), "         Job Title: " * x.job_title], "\n"))
+    # show(io::IO, x::Student) = print(io, join([repr(x.person), "        Discipline: " * x.discipline, "        Enrollment: " * string(x.enrollment_status), "       Final Grade: " * (!isnothing(x.final_grade) ? repr(x.final_grade) : "n/a"), "   Withdrawal Date: " * string(x.withdrawal_date), "             Notes: ", x.notes], "\n"))
     length(x::Roster) = length(x.students)
     function iterate(x::Roster, state=1)
         state > length(x.students) && return nothing
         return x.students[state], state + 1
     end
-    show(io::IO, x::Roster) = print(io, join(map(s->join(["              Name: " * s.person.name, "\t           Aliases: " * (!isempty(s.person.name_aliases) ? join(s.person.name_aliases, ", ") : ""), "\t             Email: " * s.person.email, "\t             Phone: " * s.person.phone, "\t      Organization: " * s.person.organization, "\t                ID: " * s.person.id, "\t              Code: " * string(s.person.codename), "\t        Discipline: " * s.discipline, "\t        Enrollment: " * string(s.enrollment_status), "\t       Final Grade: " * repr(s.final_grade), "\t   Withdrawal Date: " * string(s.withdrawal_date), "\t             Notes: ", s.notes], "\n"), x.students), "\n"))
+    # show(io::IO, x::Roster) = print(io, join(map(s->join(["              Name: " * s.person.name, "\t           Aliases: " * (!isempty(s.person.name_aliases) ? join(s.person.name_aliases, ", ") : ""), "\t             Email: " * s.person.email, "\t             Phone: " * s.person.phone, "\t      Organization: " * s.person.organization, "\t                ID: " * s.person.id, "\t              Code: " * string(s.person.codename), "\t        Discipline: " * s.discipline, "\t        Enrollment: " * string(s.enrollment_status), "\t       Final Grade: " * repr(s.final_grade), "\t   Withdrawal Date: " * string(s.withdrawal_date), "\t             Notes: ", s.notes], "\n"), x.students), "\n"))
     length(x::Team) = length(x.roster.students)
     function iterate(x::Team, state=1)
         state > length(x.roster.students) && return nothing
         return x.roster.students[state], state + 1
     end
-    show(io::IO, x::Team) = print(io, x.name, " (", x.codename, "):", first(x.roster.students))
+    # show(io::IO, x::Team) = print(io, x.name, " (", x.codename, "):", first(x.roster.students))
+
+    ==(::Person, ::Any) = false
+    ==(::Instructor, ::Any) = false
+    ==(::Student, ::Any) = false
+
+    "Convert a vector of Student structs into a DataFrame, with one column per field."
+    function DataFrame(students::Vector{Student})
+        return if isempty(students)
+            DataFrame()
+        else
+            DataFrame(
+                name_given          = [s.person.name_given for s in students],
+                name_family         = [s.person.name_family for s in students],
+                name_title          = [s.person.name_title for s in students],
+                name_suffix         = [s.person.name_suffix for s in students],
+                name_preferred      = [s.person.name_preferred for s in students],
+                name_initials       = [s.person.name_initials for s in students],
+                email               = [s.person.email for s in students],
+                phone               = [s.person.phone for s in students],
+                organization        = [s.person.organization for s in students],
+                id                  = [s.person.id for s in students],
+                codename            = [s.person.codename for s in students],
+                discipline          = [s.discipline for s in students],
+                enrollment_status   = [s.enrollment_status for s in students],
+                final_grade         = [s.final_grade for s in students],
+                withdrawal_date     = [s.withdrawal_date for s in students],
+            )
+        end
+    end
 
 
 
@@ -253,7 +296,7 @@ import Base: +, -, *, /, ==, <, <=, >, >=, isless, zero, one, float, convert, pr
         state > (!isnothing(x.parts) ? length(x.parts) : 1) && return nothing
         return x.parts[state], state + 1
     end
-    show(io::IO, x::Question) = print(io, join([x.name, string(x.codename) * ": " * string(round(x.value.value; digits=COURSE_POINT_DECIMALPLACES)), isnothing(x.parts) ? nothing : join(map(p->show(io, p), x.parts), "\n\t")], "\n"))
+    # show(io::IO, x::Question) = print(io, join([x.name, string(x.codename) * ": " * string(round(x.value.value; digits=COURSE_POINT_DECIMALPLACES)), isnothing(x.parts) ? nothing : join(map(p->show(io, p), x.parts), "\n\t")], "\n"))
 
 
     float(x::Evaluation) = x.mark.delta.value / x.target.value.value
@@ -265,7 +308,7 @@ import Base: +, -, *, /, ==, <, <=, >, >=, isless, zero, one, float, convert, pr
         state > length(x.mark) && return nothing
         return x.mark[state], state + 1
     end
-    show(io::IO, x::Evaluation) = print(io, join(map(fn->show(io, x[fn]), fieldnames(x)), "\n"))
+    # show(io::IO, x::Evaluation) = print(io, join([x.target, x.mark, x.comment], "\n"))
 
 
     float(x::Rubric) = float.(x.metrics)
@@ -277,7 +320,7 @@ import Base: +, -, *, /, ==, <, <=, >, >=, isless, zero, one, float, convert, pr
         state > length(r.metrics) && return nothing
         return r.metrics[state], state + 1
     end
-    show(io::IO, x::Rubric) = print(io, join([x.name, string(x.codename) * ": ", join(map(m->show(io, m), x.metrics), "\n\t")], "\n"))
+    # show(io::IO, x::Rubric) = print(io, join([x.name, string(x.codename) * ": ", join(map(m->show(io, m), x.metrics), "\n\t")], "\n"))
 
     # +(a::Assignment, b::Assignment) = a.value + b.value
     # -(a::Assignment, b::Assignment) = a.value - b.value
@@ -295,7 +338,7 @@ import Base: +, -, *, /, ==, <, <=, >, >=, isless, zero, one, float, convert, pr
         state > length(x.questions) && return nothing
         return x.questions[state], state + 1
     end
-    show(io::IO, x::Assignment) = print(io, join(["Name: " * x.name, "Value: " * repr(x.value), "Due: " * string(x.due), "Category: " * string(x.category), "Is Group? " * string(x.is_group), "Questions: " * join(map(q->show(io, q), x.questions), "\n\t"), "Codename: " * string(x.codename)], "\n"))
+    # show(io::IO, x::Assignment) = print(io, join(["Name: " * x.name, "Value: " * repr(x.value), "Due: " * string(x.due), "Category: " * string(x.category), "Is Group? " * string(x.is_group), "Questions: " * join(map(q->show(io, q), x.questions), "\n\t"), "Codename: " * string(x.codename)], "\n"))
 
 
 
@@ -305,9 +348,9 @@ import Base: +, -, *, /, ==, <, <=, >, >=, isless, zero, one, float, convert, pr
         state > length(x.assignments) && return nothing
         return x.assignments[state], state + 1
     end
-    show(io::IO, x::Course) = print(io, join(["              Code: " * string(x.code), "            Number: " * string(x.number), "              Name: " * x.name, "           Credits: " * string(x.credits), "  # of Assignments: " * join(map(a->show(io, a), x.assignments), "\n"), "          Codename: " * string(x.codename)], "\n"))
+    # show(io::IO, x::Course) = print(io, join(["              Code: " * string(x.code), "            Number: " * string(x.number), "              Name: " * x.name, "           Credits: " * string(x.credits), "  # of Assignments: " * join(map(a->show(io, a), x.assignments), "\n"), "          Codename: " * string(x.codename)], "\n"))
     show(io::IO, x::Term) = print(io, join(["             Name: " * x.name, "     Calendar Type: " * string(x.calendar_type), "              Year: " * string(x.year), "        Start Date: " * string(x.start), "       Finish Date: " * string(x.finish), "              Code: " * string(x.code), "\t          Metadata: ", x.metadata], "\n"))
-    show(io::IO, x::Class) = print(io, join([repr(x.course), repr(x.term), "           Section: " * string(x.section), "         Frequency: " * join(x.frequency, ", "), "        Start Time: " * string(x.time_start), "       Finish Time: " * string(x.time_finish), "     Duration Time: " * string(x.time_duration), "Number of Lectures: " * string(length(x.lectures)), "  Codename (Short): " * string(x.codename_short), "   Codename (Long): " * string(x.codename_long), "Primary Instructor: " * repr(x.primary_instructor), "       Instructors: \n\t" * join(map(y->show(io, y), x.instructors), "\n\t"), "            Roster: " * repr(x.roster)], "\n"))
+    # show(io::IO, x::Class) = print(io, join([repr(x.course), repr(x.term), "           Section: " * string(x.section), "         Frequency: " * join(x.frequency, ", "), "        Start Time: " * string(x.time_start), "       Finish Time: " * string(x.time_finish), "     Duration Time: " * string(x.time_duration), "Number of Lectures: " * string(length(x.lectures)), "  Codename (Short): " * string(x.codename_short), "   Codename (Long): " * string(x.codename_long), "Primary Instructor: " * repr(x.primary_instructor), "       Instructors: \n\t" * join(map(y->show(io, y), x.instructors), "\n\t"), "            Roster: " * repr(x.roster)], "\n"))
 
 
 
@@ -333,7 +376,7 @@ import Base: +, -, *, /, ==, <, <=, >, >=, isless, zero, one, float, convert, pr
         state > length(x.percent) && return nothing
         return x.percent[state], state + 1
     end
-    show(io::IO, x::Score) = print(io, string(x.earned) * " / " * string(x.value) * " (" * string(x.percent) * ", " * repr(x.letter) *  ")" * (isempty(x.comment) ? "" : "# ") * x.comment)
+    # show(io::IO, x::Score) = print(io, string(x.earned) * " / " * string(x.value) * " (" * repr(x.percent) * ", " * repr(x.letter) *  ")" * (isempty(x.comment) ? "" : "# ") * x.comment)
 
 
     +(a::Score, b::Real) = Score(a.earned + Float64(b), a.value)
@@ -369,7 +412,7 @@ import Base: +, -, *, /, ==, <, <=, >, >=, isless, zero, one, float, convert, pr
         state > length(x.evaluations) && return nothing
         return x.evaluations[state], state + 1
     end
-    show(io::IO, x::Submission) = print(io, join(["  Submitted: " * string(x.submitted), "      Score: " * repr(x.score), "Evaluations: ", join(map(e->show(io, e), x.evaluations), "\n\t")], "\n"))
+    # show(io::IO, x::Submission) = print(io, join(["  Submitted: " * string(x.submitted), "      Score: " * repr(x.score), "Evaluations: ", join(map(e->show(io, e), x.evaluations), "\n\t")], "\n"))
 
 
     +(a::Submission, b::Real) = Submission(a.submitted, a.score + Float64(b), a.evaluations)
@@ -394,13 +437,15 @@ import Base: +, -, *, /, ==, <, <=, >, >=, isless, zero, one, float, convert, pr
     /(a::Submission, b::Percent) = Submission(a.submitted, a.score / b, a.evaluations)
 
 
+    +(a::Grade, b::Grade) = Grade(a.student, a.assignment, Submission(max(a.submission.submitted, b.submission.submitted), a.submission.score + b.submission.score, vcat(a.submission.evaluations, b.submission.evaluations)))
+    -(a::Grade, b::Grade) = Grade(a.student, a.assignment, Submission(max(a.submission.submitted, b.submission.submitted), a.submission.score - b.submission.score, vcat(a.submission.evaluations, b.submission.evaluations)))
     ==(a::Grade, b::Grade) = a.submission.score.percent == b.submission.score.percent
     <(a::Grade, b::Grade) = a.submission.score.percent < b.submission.score.percent
     <=(a::Grade, b::Grade) = a.submission.score.percent <= b.submission.score.percent
     >(a::Grade, b::Grade) = a.submission.score.percent > b.submission.score.percent
     >=(a::Grade, b::Grade) = a.submission.score.percent >= b.submission.score.percent
     isless(a::Grade, b::Grade) = a.submission.score.percent < b.submission.score.percent
-    show(io::IO, x::Grade) = print(io, join(map(fn->x[fn], fieldnames(x)), "\n"))
+    # show(io::IO, x::Grade) = print(io, join([x.student, x.assignment, x.submission], "\n"))
 
 
     +(a::Grade, b::Real) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score + Float64(b), a.submission.evaluations))
