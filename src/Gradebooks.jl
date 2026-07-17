@@ -4,6 +4,7 @@ module Gradebooks
 
 
 
+export AbstractGradebookNode, LeafPath, leaf_path, assign_paths!, isleaf, flatten_leaves
 export Course, AcademicCalendarType, Term
 public make_attendance, make_lectures
 export Class
@@ -11,6 +12,7 @@ export update, withdraw!, reinstate!
 
 
 
+using AbstractTrees
 using Dates
 import Printf: @sprintf
 
@@ -21,8 +23,112 @@ include("utils.jl")
 include("datetime.jl")
 include("credit.jl")
 include("letter_grades.jl")
+
+
+abstract type AbstractGradebookNode end
+
+struct LeafPath
+    parts::Tuple{Vararg{Symbol}}
+end
+
+# LeafPath(parts::Tuple{Vararg{Symbol}}=()) = LeafPath(tuple(parts...))
+LeafPath(parts::Vector{Symbol}) = LeafPath(Tuple(parts))
+LeafPath() = LeafPath(())
+
+
 include("people.jl")
 include("assignments.jl")
+
+
+# const _PATH_CACHE = Dict{UInt,LeafPath}()
+
+# function clear_paths!()
+#     empty!(_PATH_CACHE)
+#     return nothing
+# end
+
+function leaf_path(node::Nothing; prefix=())
+    return LeafPath(prefix)
+end
+
+function leaf_path(node::LeafPath; prefix=())
+    return LeafPath(tuple(prefix..., node.parts...))
+end
+
+function leaf_path(node::Symbol; prefix=())
+    return LeafPath(tuple(prefix..., node))
+end
+
+function leaf_path(node::AbstractString; prefix=())
+    return LeafPath(tuple(prefix..., string_2codename(node)))
+end
+
+function leaf_path(node::Assignment; prefix=())
+    return LeafPath(tuple(prefix..., node.codename))
+end
+
+function leaf_path(node::Question; prefix=())
+    return LeafPath(tuple(prefix..., node.codename))
+end
+
+# function leaf_path(node; prefix=())
+#     if haskey(_PATH_CACHE, objectid(node))
+#         return _PATH_CACHE[objectid(node)]
+#     end
+
+#     name = if hasproperty(node, :codename)
+#         Symbol(node.codename)
+#     elseif isa(node, AbstractGradebookNode)
+#         Symbol(typeof(node).name.name)
+#     else
+#         nothing
+#     end
+
+#     path = isnothing(name) ? LeafPath(prefix) : LeafPath(tuple(prefix..., name))
+#     _PATH_CACHE[objectid(node)] = path
+#     return path
+# end
+
+# function assign_paths!(node::T, prefix=()) where {T <: AbstractGradebookNode}
+#     current = leaf_path(node; prefix=prefix)
+#     _PATH_CACHE[objectid(node)] = current
+#     for child in children(node)
+#         assign_paths!(child, current.parts)
+#     end
+#     return nothing
+# end
+
+"Determines if a node is a leaf (i.e., has no children)."
+isleaf(node::T) where {T <: AbstractGradebookNode} = isempty(children(node))
+
+function flatten_leaves(node::T; prefix=(), parent_value=nothing) where {T <: AbstractGradebookNode}
+    current_path = leaf_path(node; prefix=prefix)
+    current_value = if parent_value === nothing
+        hasproperty(node, :value) ? node.value : nothing
+    elseif hasproperty(node, :value)
+        # node.value
+        # parent_value * node.value
+        if isa(node.value, Point)
+            node.value
+        # elseif isa(parent_value, Point) && isa(node.value, Percent)
+        else
+            parent_value * node.value
+            # nothing
+        end
+    else
+        parent_value
+    end
+
+    if isleaf(node)
+        return [(current_path, node, current_value)]
+    else
+        out = Tuple{LeafPath, Any, Any}[]
+        for child in children(node)
+            append!(out, flatten_leaves(child; prefix=current_path.parts, parent_value=current_value))
+        end
+        return out
+    end
+end
 
 
 """
@@ -30,7 +136,7 @@ An academic quest prescribing assignments to students to grow and evaluate their
 
 `credits` defaults to `COURSE_CREDITS` preference.
 """
-struct Course
+struct Course <: AbstractGradebookNode
     code::Symbol
     number::Integer
     name::String
@@ -81,7 +187,7 @@ function make_lectures(term::Term, frequency::Vector{Symbol}, points::Real=1.0)
 end
 
 "Couples course with prescribing assignments in term offered to attending student roster."
-struct Class
+struct Class <: AbstractGradebookNode
     course::Course
     term::Term
     section::Integer
@@ -133,7 +239,7 @@ function withdraw!(gb::Gradebook, student::Union{Student, String}; date::Date = 
         g.submission.score.letter = LetterGrade("W")
     end
 
-    grades_sync(gb; threshold=threshold)  # or just mark dirty
+    grades_sync!(gb; threshold=threshold)  # or just mark dirty
     return nothing
 end
 
@@ -146,11 +252,12 @@ function reinstate!(gb::Gradebook, student::Union{Student, String}; date::Date =
     student.enrollment_status = active
     student.withdrawal_date = nothing
     # Optionally clear the W or let instructor decide
-    grades_sync(gb; threshold=threshold)
+    grades_sync!(gb; threshold=threshold)
     return nothing
 end
 
 
+include("trees.jl")
 include("base.jl")
 include("io.jl")
 include("plots.jl")

@@ -1,7 +1,7 @@
 export Question, Rubric
 public AssignmentCategory
 export Assignment, Attendance, Exam, Homework, Paper, Presentation, Project, Quiz
-export is_attendance, is_exam, is_homework, is_other, is_paper, is_presentation, is_project, is_quiz
+export isattendance, isexam, ishomework, isother, ispaper, ispresentation, isproject, isquiz
 
 
 
@@ -10,7 +10,7 @@ using Dates: DateTime
 
 
 "As the leaf in course-assignment tree model, can be nested for questions with parts or rubric categories."
-struct Question
+struct Question <: AbstractGradebookNode
     name::String
     value::Credit
     parts::Union{Nothing, Vector{Question}}
@@ -24,8 +24,8 @@ struct Question
                 @error "Question parts must be of type `Point` or `Percent`" parts
                 error("Heterogeneous vector")
             end
-            value_p = mapreduce(x->x.value, +, parts; init=zero(typeof(first(parts).value)))
-            if isa(value_p, Percent) ? !(isapprox(value_p.value, 1.0; atol=1e-6)) : (typeof(value_p) == typeof(value) ? (value_p != value) : true)
+            value_p = mapreduce(x->x.value.value, +, parts; init=0.0)
+            if isa(first(parts).value, Percent) ? !(isapprox(value_p, 1.0; atol=1e-6)) : (typeof(first(parts).value) == typeof(value) ? (value_p != value.value) : true)
                 @warn "Value distribution of question parts does not equal question value" Σp=value_p question=(name, value)
             end
         end
@@ -36,13 +36,20 @@ struct Question
         else
             error("`codename` must be of type Symbol or AbstractString")
         end
-        return new(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), value, isa(parts, Rubric) ? parts.metrics : parts, codename)
+        pieces = isa(parts, Rubric) ? parts.metrics : parts
+        # if !isnothing(pieces)
+        #     for (i, part) in enumerate(pieces)
+        #         pieces[i] = Question(part.name, part.value, part.parts, Symbol(uppercase("$(codename)_$(isa(part.codename, Symbol) ? part.codename : string_2codename(part.codename))")))
+        #     end
+        # end
+        return new(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), value, pieces, codename)
     end
 end
 Question(name, value, parts=nothing) = Question(name, value, parts, name)
 
+
 "Weight distributions to calculate grade from evaluations."
-struct Rubric
+struct Rubric <: AbstractGradebookNode
     name::String
     metrics::Vector{Question}
     codename::Symbol
@@ -86,7 +93,7 @@ Is branch in course-assignment tree model always composed of at least one leaf q
 
 `is_group` switches whether assignment should be completed individually.
 """
-struct Assignment
+struct Assignment <: AbstractGradebookNode
     name::String
     value::Point
     due::DateTime
@@ -99,14 +106,19 @@ struct Assignment
             questions = [Question(name, value)]
         else
             value_q, question_or_rubric = if any(q->isa(q, Question), questions)
-                mapreduce(x->x.value, +, filter(x->isa(x, Question), questions); init=zero(typeof(first(filter(x->isa(x, Question), questions)).value))), true
+                mapreduce(x->x.value.value, +, filter(x->isa(x, Question), questions); init=0.0), true
             elseif any(q->isa(q, Rubric), questions)
-                mapreduce(x->x.source.value, +, filter(x->isa(x, Rubric), questions); init=zero(typeof(first(filter(x->isa(x, Rubric), questions)).source.value))), false
+                mapreduce(x->x.source.value.value, +, filter(x->isa(x, Rubric), questions); init=0.0), false
             end
             if question_or_rubric && any(q->isa(q, Rubric), questions)
-                value_q += mapreduce(x->x.source.value, +, filter(x->isa(x, Rubric), questions); init=zero(typeof(first(filter(x->isa(x, Rubric), questions)).source.value)))
+                value_q += mapreduce(x->x.source.value.value, +, filter(x->isa(x, Rubric), questions); init=0.0)
             end
-            if isa(value_q, Percent) ? !(isapprox(value_q.value, 1.0; atol=1e-6)) : (typeof(value_q) == typeof(value) ? (value_q != value) : true)
+            value_first = if question_or_rubric
+                first(filter(x->isa(x, Question), questions)).value
+            else
+                first(filter(x->isa(x, Rubric), questions)).source.value
+            end
+            if isa(value_first, Percent) ? !(isapprox(value_q, 1.0; atol=1e-6)) : (typeof(value_first) == typeof(value) ? (value_q != value.value) : true)
                 @warn "Value distribution of questions does not equal assignment value" Σq=value_q assignment=(name, value)
             end
         end
@@ -145,11 +157,11 @@ Project(        name, value, due, questions=nothing; is_group=false) = Assignmen
 "Convenience function constructing `Assignment` for a quiz."
 Quiz(           name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryQuiz,          is_group, questions, string_2codename(name))
 
-is_attendance(x::Assignment) = x.category == CategoryAttendance
-is_exam(x::Assignment)  = x.category == CategoryExam
-is_homework(x::Assignment) = x.category == CategoryHomework
-is_other(x::Assignment) = x.category == CategoryOther
-is_paper(x::Assignment) = x.category == CategoryPaper
-is_presentation(x::Assignment) = x.category == CategoryPresentation
-is_project(x::Assignment)  = x.category == CategoryProject
-is_quiz(x::Assignment) = x.category == CategoryQuiz
+isattendance(x::Assignment) = x.category == CategoryAttendance
+isexam(x::Assignment)  = x.category == CategoryExam
+ishomework(x::Assignment) = x.category == CategoryHomework
+isother(x::Assignment) = x.category == CategoryOther
+ispaper(x::Assignment) = x.category == CategoryPaper
+ispresentation(x::Assignment) = x.category == CategoryPresentation
+isproject(x::Assignment)  = x.category == CategoryProject
+isquiz(x::Assignment) = x.category == CategoryQuiz

@@ -24,28 +24,6 @@ export credit2lettergrade, gpa
     GradeI           # Incomplete
 end
 
-# "Maps string to grade level."
-# function determine_level(g::String)::GradeLevel
-#     g = uppercase(g)
-#     g == "A+"  && return GradeAplus
-#     g == "A"   && return GradeA
-#     g == "A-"  && return GradeAminus
-#     g == "B+"  && return GradeBplus
-#     g == "B"   && return GradeB
-#     g == "B-"  && return GradeBminus
-#     g == "C+"  && return GradeCplus
-#     g == "C"   && return GradeC
-#     g == "C-"  && return GradeCminus
-#     g == "D+"  && return GradeDplus
-#     g == "D"   && return GradeD
-#     g == "D-"  && return GradeDminus
-#     g == "F"   && return GradeF
-#     g == "FN"  && return GradeFN
-#     g == "W"   && return GradeW
-#     g == "I"   && return GradeI
-#     @warn "Must be A, B, C, or D (+/-) or F, FN, W, or I."
-#     error("Cannot parse grade from string=$g")
-# end
 "Maps string to grade level."
 function determine_level(g::GradeLevel)::String
     g == GradeAplus    && return "A+"
@@ -129,17 +107,6 @@ struct LetterGrade
     string::String
     quality_points::Real
 end
-# function LetterGrade(s::AbstractString)
-#     s = uppercase(strip(string(s)))
-#     len = length(s)
-#     if len == 0 || len > 2
-#         throw(ArgumentError("LetterGrade must be 1 or 2 characters, got: \"$s\"."))
-#     end
-#     if !all(c -> isletter(c) || c in ('+', '-'), s)
-#         @warn "Unusual grade characters in \"$s\"."
-#     end
-#     return LetterGrade(s, determine_level(s))
-# end
 LetterGrade(g::GradeLevel) = LetterGrade(g, determine_level(g), quality_points(g))
 
 const Aplus     = LetterGrade(GradeAplus)

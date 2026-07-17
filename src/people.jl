@@ -23,10 +23,10 @@ make_person_name(given, family; title="", suffix="", nickname="") = join(filter(
 make_person_codename(given, family; nickname="") = string_2uppercase_symbol(join(map(s->first(s, 1), [!isempty(nickname) ? nickname : given, family])))
 
 
-abstract type AbstractPerson end
+abstract type AbstractPerson <: AbstractGradebookNode end
 
 "Base structure for personal, contact, organizational, and metadata information."
-@kwdef struct Person
+@kwdef struct Person <: AbstractGradebookNode
     name_given::String
     name_family::String
     name_title::String              = ""
@@ -76,31 +76,6 @@ end
 end
 Student(name_given::String, name_family::String; kwargs...) = Student(; person=Person(; name_given=name_given, name_family=name_family, collect(pairs(kwargs))[findall(fn->fn ∈ fieldnames(Person), keys(kwargs))]...), collect(pairs(kwargs))[findall(fn->fn ∉ fieldnames(Person), keys(kwargs))]...)
 
-"Convert a vector of Student structs into a DataFrame, with one column per field."
-function DataFrame(students::Vector{Student})
-    return if isempty(students)
-        DataFrame()
-    else
-        DataFrame(
-            name_given          = [s.person.name_given for s in students],
-            name_family         = [s.person.name_family for s in students],
-            name_title          = [s.person.name_title for s in students],
-            name_suffix         = [s.person.name_suffix for s in students],
-            name_preferred      = [s.person.name_preferred for s in students],
-            name_initials       = [s.person.name_initials for s in students],
-            email               = [s.person.email for s in students],
-            phone               = [s.person.phone for s in students],
-            organization        = [s.person.organization for s in students],
-            id                  = [s.person.id for s in students],
-            codename            = [s.person.codename for s in students],
-            discipline          = [s.discipline for s in students],
-            enrollment_status   = [s.enrollment_status for s in students],
-            final_grade         = [s.final_grade for s in students],
-            withdrawal_date     = [s.withdrawal_date for s in students],
-        )
-    end
-end
-
 
 struct StudentIndex
     by_email::Dict{String, Int}
@@ -126,19 +101,11 @@ function StudentIndex(students::Vector{Student})
 end
 
 "Special type for `Vector{Student}` coupled with `StudentIndex`."
-struct Roster
+struct Roster <: AbstractGradebookNode
     students::Vector{Student}
     index::StudentIndex
 end
 Roster(students) = Roster(students, StudentIndex(students))
-
-# function Roster(src::String, cols_map::Pairs; sort_cols::Vector{Symbol}=[:name_family, :name_given, :email])
-#     csv = CSV.read(src, DataFrame)
-#     v = Student[]
-#     for x in eachrow(csv[!, keys(cols_map)])
-
-#     end
-# end
 
 
 function student_candidates(s::Student)
@@ -175,10 +142,13 @@ function get_student(identifier::String, roster::Roster; threshold=STRING_MATCH_
                 false
             end
         end, student_candidates(s)), roster.students[family_idx])
-        if isnothing(family_idx)
+        if isnothing(given_idx)
             error("No student found with that name: $family, $given")
         end
         family_idx[given_idx]
+        # if is username without "@<organization>.<domain>"
+    elseif occursin('@', identifier)
+        roster.index.by_email[identifier]
     else
         q = lowercase(string_sanitize(identifier))
         findall(s -> any(c -> lowercase(string_sanitize(c)) == q, student_candidates(s)), roster.students)
@@ -204,30 +174,6 @@ function get_student(identifier::String, roster::Roster; threshold=STRING_MATCH_
         end
     end
 end
-
-# function get_student(identifier::String, roster::Vector{Student}, index::StudentIndex; threshold=STRING_MATCH_THRESHOLD)
-#     # exact matches first
-#     for d in (index.by_email, index.by_id, index.by_codename)
-#         haskey(d, identifier) && return roster[d[identifier]]
-#     end
-
-#     # if is username without "@<organization>.<domain>"
-#     if occursin('@', identifier)
-#         username = split(identifier, '@')[1]
-#         haskey(index.by_email, username) && return roster[index.by_email[username]]
-#     end
-
-#     # fuzzy fallback
-#     dist = Levenshtein()
-#     best_student, best_dist = findnearest(identifier, [s.name for s in roster], dist)
-
-#     if best_dist / max(length(identifier), length(best_student)) < threshold
-#         return roster[findfirst(s -> s.name == best_student, roster)]
-#     end
-
-#     error("Student not found: $identifier. Closest was $best_student (distance too high)")
-#     return roster[findfirst(x->any(y->occursin(a, repr(getproperty(x, y))), propertynames(x)), roster)]
-# end
 
 
 function update(person::Person; kwargs...)
@@ -263,7 +209,7 @@ end
 
 
 "A group of students working as a team toward a common goal."
-struct Team
+struct Team <: AbstractGradebookNode
     name::String
     roster::Roster
     codename::Symbol

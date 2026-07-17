@@ -1,5 +1,5 @@
 export Evaluation, Score, Submission, Grade, grade
-export is_late, late_penalty
+export islate, latepenalty
 
 
 
@@ -8,22 +8,25 @@ using Dates: AbstractDateTime
 
 
 "Couples target question with redline mark."
-struct Evaluation
+struct Evaluation <: AbstractGradebookNode
     target::Question
     mark::Mark
+    path::LeafPath
     comment::String
-    function Evaluation(question, mark, comment)
+    function Evaluation(question, mark, path, comment)
         if question.parts !== nothing
             @warn "Evaluating question without specifying a part" question
         end
-        return new(question, mark, comment)
+        return new(question, mark, path, comment)
     end
 end
-Evaluation(question, mark::Mark; comment="") = Evaluation(question, mark, comment)
-Evaluation(question, mark::Credit; comment="") = Evaluation(question, Mark(mark), comment)
+Evaluation(question, mark::Mark, path=Symbol[]; comment="") = Evaluation(question, mark, LeafPath(path), comment)
+Evaluation(question, mark::Credit, path=Symbol[]; comment="") = Evaluation(question, Mark(mark), LeafPath(path), comment)
+# Evaluation(question, mark::Mark, path::LeafPath=LeafPath(); comment="") = Evaluation(question, mark, path, comment)
+# Evaluation(question, mark::Credit, path::LeafPath=LeafPath(); comment="") = Evaluation(question, Mark(mark), path, comment)
 
 "Compares `earned` points to `value` with `percent` and letter grade."
-struct Score
+struct Score <: AbstractGradebookNode
     earned::Point
     value::Point
     percent::Percent
@@ -31,8 +34,8 @@ struct Score
     comment::String
 end
 Score(percentage::Percent, value::Point; comment="") = Score(percentage*value, value, percentage, credit2lettergrade(percentage), comment)
-Score(points::T, value::T; comment="") where {T<:Real} = ((p, v) = Point.([points, value]); Score(p, v, p/v, credit2lettergrade(p/v), comment))
-Score(points::T, value::T; comment="") where {T<:Point} = Score(points, value, points/value, credit2lettergrade(points/value), comment)
+Score(points::T, value::T; comment="") where {T<:Point} = Score(points, value, Percent(points.value / value.value; normalized=false), credit2lettergrade(Percent(points.value / value.value; normalized=false)), comment)
+Score(points::T, value::T; comment="") where {T<:Real} = ((p, v) = Point.([points, value]); Score(p, v, Percent(p.value / v.value; normalized=false), credit2lettergrade(Percent(p.value / v.value; normalized=false)), comment))
 
 # # Score(assignment::Assignment, tallies::Vararg{Tally{T,M,V}}) where {T<:AbstractScore,M<:AbstractMark,V<:AbstractScore} = Score(assignment.value, tally(tallies...)) # mapreduce(tally, +, [tallies...]))
 # # Score(assignment::Assignment, tallies::Vector{<:Tally}; comment="") = Score(mapreduce(tally, +, filter(!isempty, map(y->filter(x->isa(x.mark, y), tallies), [Grant, Subtract]))), assignment.value; comment=comment)
@@ -111,13 +114,13 @@ function Score(assignment::Assignment, evaluations::Vector{Evaluation})
             error("Unsupported type")
         end
     end
-    percent = earned / assignment.value
+    percent = Percent(earned.value / assignment.value.value; normalized=false)
     return Score(earned, assignment.value, percent, credit2lettergrade(percent), join(map(x->x.comment, evaluations), "\n"))
 end
 
 
 "Couples datetime stamp of submitted work to computed score from evaluations."
-struct Submission
+struct Submission <: AbstractGradebookNode
     submitted::AbstractDateTime
     score::Score
     evaluations::Vector{Evaluation}
@@ -127,7 +130,7 @@ end
 
 
 "Couples student to submitted work for assignment."
-struct Grade
+struct Grade <: AbstractGradebookNode
     student::Student
     assignment::Assignment
     submission::Submission
@@ -140,6 +143,27 @@ end
 # end
 
 
+function normalize_mark(raw)
+    if raw isa Tuple
+        if length(raw) == 0
+            return Mark(Point(0.0)), ""
+        elseif length(raw) >= 2
+            value, comment = raw[1], raw[2]
+            return if value isa Mark
+                value, string(comment)
+            else
+                Mark(value), string(comment)
+            end
+        else
+            return normalize_mark(raw[1])
+        end
+    elseif raw isa Mark
+        return raw, ""
+    else
+        return Mark(raw), ""
+    end
+end
+
 function get_leafvalue(leaf::Question, nodevalue::Point)
     if isa(leaf.value, Point)
         return leaf.value
@@ -150,38 +174,42 @@ function get_leafvalue(leaf::Question, nodevalue::Point)
     end
 end
 
-function get_leaves(leaf::Question, nodevalue::Point)
-    base = get_leafvalue(leaf, nodevalue)
-    return if isnothing(leaf.parts)
-        [(leaf, base)]
+function get_leaves(node::Question, nodevalue::Point)
+    base = get_leafvalue(node, nodevalue)
+    return if isnothing(node.parts)
+        [(node, base)]
     else
         leaves = Tuple{Question, Point}[]
-        append!(leaves, [get_leaves(part, base) for part in leaf.parts]...)
+        append!(leaves, [get_leaves(part, base) for part in node.parts]...)
         leaves
     end
 end
 
-function get_leaves(leaves::Vector{Question}, nodevalue::Point)
-    reduce(vcat, [get_leaves(leaf, nodevalue) for leaf in leaves])
+function get_leaves(node::Vector{Question}, nodevalue::Point)
+    reduce(vcat, [get_leaves(leaf, nodevalue) for leaf in node])
 end
 
-function distribute_scalar_mark!(evaluations::Vector{Evaluation}, items::Vector{Question}, mark::Mark, nodevalue::Point)
+function get_leaves(node::Rubric, nodevalue::Point)
+    return [(metric, get_leafvalue(metric, nodevalue)) for metric in node.metrics]
+end
+
+function distribute_scalar_mark!(evaluations::Vector{Evaluation}, items, mark::Mark, nodevalue::Point, prefix=())
     leaves = get_leaves(items, nodevalue)
     if isa(mark.delta, Percent)
         # same fraction of each leaf
         for (leaf, _) in leaves
-            push!(evaluations, Evaluation(leaf, mark))
+            push!(evaluations, Evaluation(leaf, mark, LeafPath(tuple(prefix..., leaf.codename)), mark.comment))
         end
     else
         total = sum(weight.value for (_, weight) in leaves)
         if total == 0.0
             for (leaf, _) in leaves
-                push!(evaluations, Evaluation(leaf, Mark(Point(0.0), mark.comment)))
+                push!(evaluations, Evaluation(leaf, Mark(Point(0.0)), LeafPath(tuple(prefix..., leaf.codename)), mark.comment))
             end
         else
             for (leaf, weight) in leaves
                 share = weight.value / total
-                push!(evaluations, Evaluation(leaf, Mark(Point(mark.delta * share), mark.comment)))
+                push!(evaluations, Evaluation(leaf, Mark(Point(mark.delta * share)), LeafPath(tuple(prefix..., leaf.codename)), mark.comment))
             end
         end
     end
@@ -189,17 +217,27 @@ function distribute_scalar_mark!(evaluations::Vector{Evaluation}, items::Vector{
 end
 
 "Recursively applies marks down to the leaves of the appropriate branch."
-function expand!(evaluations::Vector{Evaluation}, items::Vector{Question}, marks, nodevalue::Point)
-    if marks isa Mark || marks isa Point || marks isa Percent || marks isa Real
-        mark = isa(marks, Mark) ? marks : Mark(marks)
-        return distribute_scalar_mark!(evaluations, items, mark, nodevalue)
-    elseif marks isa AbstractVector
+function expand!(evaluations::Vector{Evaluation}, items, marks, nodevalue::Point, prefix=())
+    if marks isa Mark || marks isa Point || marks isa Percent || marks isa Real || marks isa Tuple
+        mark, comment = normalize_mark(marks)
+        return distribute_scalar_mark!(evaluations, items, mark, nodevalue, prefix)
+    elseif marks isa AbstractVector || marks isa Tuple
         if length(marks) == length(items)
             for (item, mark) in zip(items, marks)
-                if !isnothing(item.parts) && mark isa AbstractVector
-                    expand!(evaluations, item.parts, mark, get_leafvalue(item, nodevalue))
+                child_prefix = tuple(prefix..., item.codename)
+                if !isnothing(children(item)) && !isempty(children(item))
+                    expand!(evaluations, children(item), mark, get_leafvalue(item, nodevalue), child_prefix)
                 else
-                    expand!(evaluations, [item], mark, nodevalue)
+                    mark_obj, comment = normalize_mark(mark)
+                    if isa(item, Question)
+                        push!(evaluations, Evaluation(item, mark_obj, LeafPath(child_prefix), comment))
+                    elseif isa(item, Rubric)
+                        for metric in item.metrics
+                            metric_path = tuple(child_prefix..., metric.codename)
+                            metric_mark, metric_comment = normalize_mark(mark)
+                            push!(evaluations, Evaluation(metric, metric_mark, LeafPath(metric_path), metric_comment))
+                        end
+                    end
                 end
             end
             return nothing
@@ -214,20 +252,20 @@ end
 "Magically applies evaluations at any level of the course-assignment tree."
 function grade(identifier, roster, assignment, submitted, marks; threshold=STRING_MATCH_THRESHOLD)
     evaluations = Evaluation[]
-    expand!(evaluations, assignment.questions, marks, Point(assignment.value))
+    expand!(evaluations, assignment.questions, marks, Point(assignment.value), (assignment.codename,))
     submission = Submission(submitted, Score(assignment, evaluations), evaluations)
     return Grade(get_student(identifier, roster; threshold=threshold), assignment, submission)
 end
 
 
 "Helper function to determine whether submission was before assignment due date."
-is_late(x::Millisecond) = x > Millisecond(0)
-is_late(a::Submission, y::Assignment) = is_late(a.submitted - y.due)
-is_late(x::Grade) = is_late(x.submission, x.assignment)
+islate(x::Millisecond) = x > Millisecond(0)
+islate(a::Submission, y::Assignment) = islate(a.submitted - y.due)
+islate(x::Grade) = islate(x.submission, x.assignment)
 
 
 """
-    late_penalty(x)::Bool
+    latepenalty(x)::Bool
 
 Convenience function calling `is_late` and returning appropriate deductions for if late.
 
@@ -242,17 +280,17 @@ Say the institutional policy for deductions of student work submitted late is as
 Then this could be implemented by overwriting the `Gradebooks.late_penaly(x::Millisecond)` method:
 ```
 julia> using Gradebooks
-julia> Gradebooks.late_penalty(x::Millisecond) = Percent(is_late(x) ? (x < Day(7) ? 0.10 : (x < Day(14) ? 0.20 : 1.0)) : 0.0)
-julia> late_penalty(Dates.CompoundPeriod(Day(1), Hour(12), Minute(36), Second(25)))
+julia> Gradebooks.latepenalty(x::Millisecond) = Percent(is_late(x) ? (x < Day(7) ? 0.10 : (x < Day(14) ? 0.20 : 1.0)) : 0.0)
+julia> latepenalty(Dates.CompoundPeriod(Day(1), Hour(12), Minute(36), Second(25)))
 10%
-julia> late_penalty(Dates.CompoundPeriod(Week(1), Day(1), Hour(12), Minute(36), Second(25)))
+julia> latepenalty(Dates.CompoundPeriod(Week(1), Day(1), Hour(12), Minute(36), Second(25)))
 20%
-julia> late_penalty(Dates.CompoundPeriod(Week(2), Day(1), Hour(12), Minute(36), Second(25)))
+julia> latepenalty(Dates.CompoundPeriod(Week(2), Day(1), Hour(12), Minute(36), Second(25)))
 100%
-julia> late_penalty(-Dates.CompoundPeriod(Week(1), Day(1), Hour(12), Minute(36), Second(25)))
+julia> latepenalty(-Dates.CompoundPeriod(Week(1), Day(1), Hour(12), Minute(36), Second(25)))
 0%
 ```
 """
-late_penalty(x::Millisecond)::Percent = error("Late penalty not yet implemented for `Millisecond`")
-late_penalty(a::Submission, y::Assignment) = late_penalty(a.submitted - y.due)
-late_penalty(x::Grade) = late_penalty(x.submission, x.assignment)
+latepenalty(x::Millisecond)::Percent = error("Late penalty not yet implemented for `Millisecond`")
+latepenalty(a::Submission, y::Assignment) = latepenalty(a.submitted - y.due)
+latepenalty(x::Grade) = latepenalty(x.submission, x.assignment)

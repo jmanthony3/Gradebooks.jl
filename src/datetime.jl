@@ -93,6 +93,7 @@ Converts `Dates.DateTime` to a string safe for file paths.
 safe_datetime_stamp(dt::DateTime)   = replace(string(dt), "-"=>"", ":"=>"", "."=>"")
 safe_datetime_stamp()               = safe_datetime_stamp(now())
 safe_datetime_stamp(::Nothing)      = safe_datetime_stamp(now())
+
 "Safely append datetime stamp to file name."
 function safe_datetime_stamp(path::String)
     dir, base, name, ext = dirbasenameextname(path)
@@ -164,12 +165,12 @@ function parse_date(d)
                         nothing
                     end
                 end
-                date_variations = if DATE_FORMAT == MMDDYYYY
+                date_variations = if DATE_FORMAT == "MMDDYYYY"
                     ["y-m-d", "m-d", "yyyymmdd", "m/d/y", "m/d", "U d, y", "U d", "u. d, y", "u. d", "u d, y", "u d"]
-                elseif DATE_FORMAT == DDMMYYYY
+                elseif DATE_FORMAT == "DDMMYYYY"
                     ["y-m-d", "d-m", "yyyymmdd", "d/m/y", "d/m", "d U y", "d U", "d u. y", "d u.", "d u y", "d u"]
                 else
-                    error("Invalid `DATE_FORMAT` preference. Please set to one of: $(join(VALID_DATE_FORMATS, ", "))")
+                    error("Invalid `DATE_FORMAT` preference. Please set to one of: MMDDYYYY, DDMMYYYY")
                 end
                 dateformats = DateFormat.(date_variations)
                 i, parse, n = 0, nothing, length(dateformats)
@@ -188,7 +189,7 @@ function parse_date(d)
                 end
                 return d
             catch
-                error("Could not parse datetime", d)
+                error("Could not parse datetime=$d")
             end
         end
     else
@@ -228,12 +229,12 @@ function parse_datetime(dt)
                             nothing
                         end
                     end
-                    date_variations = if DATE_FORMAT == MMDDYYYY
+                    date_variations = if DATE_FORMAT == "MMDDYYYY"
                         ["y-m-d", "m-d", "yyyymmdd", "m/d/y", "m/d", "U d, y", "U d", "u. d, y", "u. d", "u d, y", "u d"]
-                    elseif DATE_FORMAT == DDMMYYYY
+                    elseif DATE_FORMAT == "DDMMYYYY"
                         ["y-m-d", "d-m", "yyyymmdd", "d/m/y", "d/m", "d U y", "d U", "d u. y", "d u.", "d u y", "d u"]
                     else
-                        error("Invalid `DATE_FORMAT` preference. Please set to one of: $(join(VALID_DATE_FORMATS, ", "))")
+                        error("Invalid `DATE_FORMAT` preference. Please set to one of: MMDDYYYY, DDMMYYYY")
                     end
                     time_variations = ["H:M:S.s", "H:M:S", "H:M", "H.M.S.s", "H.M.S", "H.M", "HHMMSSsss", "HHMMSS", "HHMM", "I:M p", "I.M p", "I:MMp", "I.MMp", "IIMM p", "IIMMp"]
                     datetimeformats = DateFormat.(vcat(
@@ -260,7 +261,7 @@ function parse_datetime(dt)
                         dt′
                     end
                 catch
-                    error("Could not parse datetime", dt)
+                    error("Could not parse datetime=$dt")
                 end
             end
         end

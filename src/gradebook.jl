@@ -1,4 +1,4 @@
-export Gradebook, grades_post, grades_sync
+export Gradebook, grades_post!, grades_sync!
 
 
 
@@ -7,7 +7,7 @@ using DataFrames, StringDistances
 
 
 "Single source of truth recording all academic activity for class."
-struct Gradebook
+mutable struct Gradebook <: AbstractGradebookNode
     class::Class
     grades::Vector{Grade}
     raw::DataFrame
@@ -33,6 +33,15 @@ function Gradebook(class::Class)
     return Gradebook(class, Grade[], df_raw, df_penalty, df_total)
 end
 
+function post_grade!(gb::Gradebook, grade::Grade)
+    i = gb.class.roster.index.by_id[grade.student.person.id]
+    gb.raw[i, grade.assignment.codename] = grade
+    p = Point(grade.assignment.value * latepenalty(grade))
+    gb.penalty[i, grade.assignment.codename] = p
+    gb.total[i, grade.assignment.codename] = max(grade - grade.submission.score.earned, grade - p)
+    return nothing
+end
+
 """
 Post grades to the gradebook.
 
@@ -41,15 +50,17 @@ Can post grades for `assignments` from `src` searching for first non-empty row `
 ## Warning
 This applies a scalar grade onto the entire assignment and risks erasing evaluation history in gradebook!
 """
-function grades_post(gb::Gradebook, grades::Vector{Grade})
-    # nonattendance_idx = filter(!isnothing, indexin(assignments, filter(is_attendance, gb.class.course.assignments)))
+function grades_post!(gb::Gradebook, grades::Vector{Grade})
+    gb.grades = grades
+    # nonattendance_idx = filter(!isnothing, indexin(assignments, filter(isattendance, gb.class.course.assignments)))
     students = gb.class.roster.students
-    for grade in filter(g->g.student.enrollment_status == Active && (isnothing(g.student.final_grade) || g.student.final_grade ∉ [FN, W, I]), collect(grades))
+    for grade in filter(g->g.student.enrollment_status == Active && all(g.student.final_grade .!= [FN, W, I]), grades)
         i, j = gb.class.roster.index.by_id[grade.student.person.id], length(gb.class.course.assignments)
-        gb.raw[i, grade.assignment.codename] = grade
-        p = Point(grade.assignment.value * late_penalty(grade))
-        gb.penalty[i, grade.assignment.codename] = p
-        gb.total[i, grade.assignment.codename] = max(grade - grade.submission.score.earned, grade - p)
+        # gb.raw[i, grade.assignment.codename] = grade
+        # p = Point(grade.assignment.value * latepenalty(grade))
+        # gb.penalty[i, grade.assignment.codename] = p
+        # gb.total[i, grade.assignment.codename] = max(grade - grade.submission.score.earned, grade - p)
+        post_grade!(gb, grade)
         x, y = zero(Point), zero(Point)
         for (_, g) in enumerate(gb.total[i, :][filter(k->isassigned(gb.raw[!, k], i), 1:j)])
             x += g.submission.score.earned.value
@@ -58,11 +69,11 @@ function grades_post(gb::Gradebook, grades::Vector{Grade})
         end
         students[i] = update(grade.student; final_grade=credit2lettergrade(x, y))
     end
-    class = update(gb.class; roster=Roster(students))
-    return update(gb; class=class, grades=grades)
+    gb.class = update(gb.class; roster=Roster(students))
+    return nothing
 end
 
-function grades_post(gb::Gradebook, assignments::Vector{Assignment}, src::String; by="ID", threshold=STRING_MATCH_THRESHOLD)
+function grades_post!(gb::Gradebook, assignments::Vector{Assignment}, src::String; by="ID", threshold=STRING_MATCH_THRESHOLD)
     function find_submission_col(df, assignment; threshold=STRING_MATCH_THRESHOLD)
         headers     = string.(names(df))
         target      = string_sanitize(assignment.name)
@@ -84,7 +95,7 @@ function grades_post(gb::Gradebook, assignments::Vector{Assignment}, src::String
     end
     submissions_df = CSV.read(src, DataFrame)
     cols = fill(false, ncol(submissions_df))
-    for assignment in collect(assignments)
+    for assignment in assignments
         cols .= false
         cols[find_submission_col(submissions_df, assignment; threshold=threshold)] = true
         submissions_df′ = submissions_df[!, Cols(by, cols)]
@@ -95,10 +106,10 @@ function grades_post(gb::Gradebook, assignments::Vector{Assignment}, src::String
         for row in eachrow(submissions_df′)
             push!(grades, grade(row[1], gb.class.roster, assignment, assignment.due, row[2]; threshold=threshold))
         end
-        gb = grades_post(gb, grades)
+        grades_post!(gb, grades)
     end
-    return gb
+    return nothing
 end
 
 "Syncs current field value of gb.grades to gradebook."
-grades_sync(gb::Gradebook) = grades_post(gb, gb.grades)
+grades_sync!(gb::Gradebook) = grades_post!(gb, gb.grades)
