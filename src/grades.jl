@@ -77,45 +77,55 @@ Score(points::T, value::T; comment="") where {T<:Real} = ((p, v) = Point.([point
 # end
 "Resolves evaluations to total points earned which may be calculated from percent earned against assignment part value."
 function Score(assignment::Assignment, evaluations::Vector{Evaluation})
-    earned = zero(Point)
-    for evaluation in evaluations
-        delta = evaluation.mark.delta
-        if isa(delta, Point)
-            earned += delta
-        elseif isa(delta, Percent)
-            if isa(evaluation.target, Question)
-                if isa(evaluation.target.value, Point)
-                    earned += delta * evaluation.target.value
-                elseif isa(evaluation.target.value, Percent)
-                    earned += delta * evaluation.target.value * assignment.value
-                else
-                    @error "Question values must be of type `Point` or `Percent`" question=evaluation.target
-                    error("Unsupported type")
-                end
-            elseif isa(evaluation.target, Rubric)
-                for metric in evaluation.target.metrics
-                    if isa(metric.value, Point)
-                        earned += delta * metric.value
-                    elseif isa(metric.value, Percent)
-                        try
-                            earned += delta * metric.value * assignment.value
-                        catch
-                            @error "Unclear how combination resolves to points" assignment=assignment target=evaluation.target mark=evaluation.mark metric=metric
-                            error("Ambiguous evaluation")
-                        end
-                    else
-                        @error "Rubric metrics must be of type `Point` or `Percent`" metric
-                        error("Unsupported type")
-                    end
-                end
-            end
-        else
-            @error "Mark must be of type `Point` or `Percent`" typeof(delta)
-            error("Unsupported type")
-        end
+    # earned = zero(Point)
+    # for evaluation in evaluations
+    #     delta = evaluation.mark.delta
+    #     if isa(delta, Point)
+    #         earned += delta
+    #     elseif isa(delta, Percent)
+    #         if isa(evaluation.target, Question)
+    #             if isa(evaluation.target.value, Point)
+    #                 earned += delta * evaluation.target.value
+    #             elseif isa(evaluation.target.value, Percent)
+    #                 earned += delta * evaluation.target.value * assignment.value
+    #             else
+    #                 @error "Question values must be of type `Point` or `Percent`" question=evaluation.target
+    #                 error("Unsupported type")
+    #             end
+    #         elseif isa(evaluation.target, Rubric)
+    #             for metric in evaluation.target.metrics
+    #                 if isa(metric.value, Point)
+    #                     earned += delta * metric.value
+    #                 elseif isa(metric.value, Percent)
+    #                     try
+    #                         earned += delta * metric.value * assignment.value
+    #                     catch
+    #                         @error "Unclear how combination resolves to points" assignment=assignment target=evaluation.target mark=evaluation.mark metric=metric
+    #                         error("Ambiguous evaluation")
+    #                     end
+    #                 else
+    #                     @error "Rubric metrics must be of type `Point` or `Percent`" metric
+    #                     error("Unsupported type")
+    #                 end
+    #             end
+    #         end
+    #     else
+    #         @error "Mark must be of type `Point` or `Percent`" typeof(delta)
+    #         error("Unsupported type")
+    #     end
+    # end
+    # percent = Percent(earned.value / assignment.value.value; normalized=false)
+    # return Score(earned, assignment.value, percent, credit2lettergrade(percent), join(map(x->x.comment, evaluations), "\n"))
+    flat_leaves = flatten_leaves(assignment; parent_value=assignment.value)
+    # all_leaves = [leaf for (_, leaf, _, _) in flat_leaves]
+    # total_values = map(g -> total_for_grade(g, flat_leaves, assignment; display_credits=display_credits), grades)
+    points = 0.0
+    for (path, leaf, parent_value, current_value) in flat_leaves
+        score = leaf_score(path, leaf, evaluations, parent_value, current_value; display_credits="point")
+        points += score.value
     end
-    percent = Percent(earned.value / assignment.value.value; normalized=false)
-    return Score(earned, assignment.value, percent, credit2lettergrade(percent), join(map(x->x.comment, evaluations), "\n"))
+    percent = Percent(points / assignment.value.value; normalized=false)
+    return Score(Point(points), assignment.value, percent, credit2lettergrade(percent), join(filter(!isnothing, map(x->x.comment, evaluations)), "\n"))
 end
 
 
@@ -143,6 +153,16 @@ end
 # end
 
 
+isattendance(x::Grade)     = isattendance(x.assignment)
+isexam(x::Grade)           = isexam(x.assignment)
+ishomework(x::Grade)       = ishomework(x.assignment)
+isother(x::Grade)          = isother(x.assignment)
+ispaper(x::Grade)          = ispaper(x.assignment)
+ispresentation(x::Grade)   = ispresentation(x.assignment)
+isproject(x::Grade)        = isproject(x.assignment)
+isquiz(x::Grade)           = isquiz(x.assignment)
+
+
 function normalize_mark(raw)
     if raw isa Tuple
         if length(raw) == 0
@@ -164,13 +184,72 @@ function normalize_mark(raw)
     end
 end
 
-function get_leafvalue(leaf::Question, nodevalue::Point)
+function resolve_branch_value(node, parent_value)
+    if parent_value === nothing
+        return nothing
+    end
+
+    if !hasproperty(node, :value)
+        return parent_value
+    end
+
+    value = getproperty(node, :value)
+
+    if isa(value, Point)
+        return value
+    elseif isa(value, Percent)
+        if isa(parent_value, Point)
+            return Point(parent_value.value * value.value)
+        elseif isa(parent_value, Percent)
+            return Percent(parent_value.value * value.value)
+        else
+            return parent_value
+        end
+    end
+
+    return parent_value
+end
+
+function resolve_leaf_point_value(node, parent_value)
+    resolved = resolve_branch_value(node, parent_value)
+
+    if isa(resolved, Point)
+        return resolved
+    elseif isa(resolved, Percent)
+        return Point(resolved.value)
+    else
+        return Point(0.0)
+    end
+end
+
+function resolve_point_value(node, parent_value::Point)
+    return resolve_leaf_point_value(node, parent_value)
+end
+
+function resolve_point_value(node, parent_value::Percent)
+    return resolve_leaf_point_value(node, parent_value)
+end
+
+function trace_leaf_resolution(node, parent_value; prefix=())
+    path = leaf_path(node; prefix=prefix)
+    resolved = resolve_leaf_point_value(node, parent_value)
+    return (
+        path = path,
+        node_value = hasproperty(node, :value) ? getproperty(node, :value) : nothing,
+        parent_value = parent_value,
+        resolved_value = resolved
+    )
+end
+
+function get_leafvalue(leaf, nodevalue::Point)
     if isa(leaf.value, Point)
         return leaf.value
     elseif isa(leaf.value, Percent)
         return Point(nodevalue.value * leaf.value.value)
+    elseif isnothing(leaf.value)
+        return nodevalue
     else
-        error("Question values must be of type `Point` or `Percent`, got leaf=$(typeof(leaf.value))")
+        error("Leaf values must be of type `Point` or `Percent`, got leaf=$(typeof(leaf.value))")
     end
 end
 
@@ -209,7 +288,8 @@ function distribute_scalar_mark!(evaluations::Vector{Evaluation}, items, mark::M
         else
             for (leaf, weight) in leaves
                 share = weight.value / total
-                push!(evaluations, Evaluation(leaf, Mark(Point(mark.delta * share)), LeafPath(tuple(prefix..., leaf.codename)), mark.comment))
+                leaf_points = Point(mark.delta.value * share)
+                push!(evaluations, Evaluation(leaf, Mark(leaf_points), LeafPath(tuple(prefix..., leaf.codename)), mark.comment))
             end
         end
     end

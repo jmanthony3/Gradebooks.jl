@@ -156,7 +156,7 @@ function get_student(identifier::String, roster::Roster; threshold=STRING_MATCH_
     if length(exact) == 1
         return roster.students[only(exact)]
     elseif length(exact) > 1
-        error("Ambiguous student match for $(identifier): $(map(x -> x.email, roster.students[exact]))")
+        error("Ambiguous student match for $(identifier): $(map(x->x.person.email, roster.students[exact]))")
     else # fallback to fuzzy logic
         scores = Tuple{Student, String, Int}[]
         for s in roster.students

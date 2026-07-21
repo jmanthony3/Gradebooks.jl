@@ -102,27 +102,14 @@ end
 isleaf(node::T) where {T <: AbstractGradebookNode} = isempty(children(node))
 
 function flatten_leaves(node::T; prefix=(), parent_value=nothing) where {T <: AbstractGradebookNode}
-    current_path = leaf_path(node; prefix=prefix)
-    current_value = if parent_value === nothing
-        hasproperty(node, :value) ? node.value : nothing
-    elseif hasproperty(node, :value)
-        # node.value
-        # parent_value * node.value
-        if isa(node.value, Point)
-            node.value
-        # elseif isa(parent_value, Point) && isa(node.value, Percent)
-        else
-            parent_value * node.value
-            # nothing
-        end
-    else
-        parent_value
-    end
+    trace = trace_leaf_resolution(node, parent_value; prefix=prefix)
+    current_path = trace.path
+    current_value = trace.resolved_value
 
     if isleaf(node)
-        return [(current_path, node, current_value)]
+        return [(current_path, node, parent_value, current_value)]
     else
-        out = Tuple{LeafPath, Any, Any}[]
+        out = Tuple{LeafPath, Any, Any, Any}[]
         for child in children(node)
             append!(out, flatten_leaves(child; prefix=current_path.parts, parent_value=current_value))
         end

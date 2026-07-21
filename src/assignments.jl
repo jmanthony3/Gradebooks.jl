@@ -157,11 +157,27 @@ Project(        name, value, due, questions=nothing; is_group=false) = Assignmen
 "Convenience function constructing `Assignment` for a quiz."
 Quiz(           name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryQuiz,          is_group, questions, string_2codename(name))
 
-isattendance(x::Assignment) = x.category == CategoryAttendance
-isexam(x::Assignment)  = x.category == CategoryExam
-ishomework(x::Assignment) = x.category == CategoryHomework
-isother(x::Assignment) = x.category == CategoryOther
-ispaper(x::Assignment) = x.category == CategoryPaper
-ispresentation(x::Assignment) = x.category == CategoryPresentation
-isproject(x::Assignment)  = x.category == CategoryProject
-isquiz(x::Assignment) = x.category == CategoryQuiz
+isattendance(x)                         = false
+isattendance(x::AssignmentCategory)     = x == CategoryAttendance
+isattendance(x::Assignment)             = isattendance(x.category)
+isexam(x)                               = false
+isexam(x::AssignmentCategory)           = x == CategoryExam
+isexam(x::Assignment)                   = isexam(x.category)
+ishomework(x)                           = false
+ishomework(x::AssignmentCategory)       = x == CategoryHomework
+ishomework(x::Assignment)               = ishomework(x.category)
+isother(x)                              = false
+isother(x::AssignmentCategory)          = x == CategoryOther
+isother(x::Assignment)                  = isother(x.category)
+ispaper(x)                              = false
+ispaper(x::AssignmentCategory)          = x == CategoryPaper
+ispaper(x::Assignment)                  = ispaper(x.category)
+ispresentation(x)                       = false
+ispresentation(x::AssignmentCategory)   = x == CategoryPresentation
+ispresentation(x::Assignment)           = ispresentation(x.category)
+isproject(x)                            = false
+isproject(x::AssignmentCategory)        = x == CategoryProject
+isproject(x::Assignment)                = isproject(x.category)
+isquiz(x)                               = false
+isquiz(x::AssignmentCategory)           = x == CategoryQuiz
+isquiz(x::Assignment)                   = isquiz(x.category)
