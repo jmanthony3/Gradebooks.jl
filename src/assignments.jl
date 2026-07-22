@@ -2,6 +2,7 @@ export Question, Rubric
 public AssignmentCategory
 export Assignment, Attendance, Exam, Homework, Paper, Presentation, Project, Quiz
 export isattendance, isexam, ishomework, isother, ispaper, ispresentation, isproject, isquiz
+export ExtensionGrant
 
 
 
@@ -181,3 +182,12 @@ isproject(x::Assignment)                = isproject(x.category)
 isquiz(x)                               = false
 isquiz(x::AssignmentCategory)           = x == CategoryQuiz
 isquiz(x::Assignment)                   = isquiz(x.category)
+
+
+struct ExtensionGrant
+    assignment::Assignment
+    due::DateTime
+    granted::DateTime
+    reason::String
+    notes::String
+end

@@ -36,8 +36,9 @@ LeafPath(parts::Vector{Symbol}) = LeafPath(Tuple(parts))
 LeafPath() = LeafPath(())
 
 
-include("people.jl")
+include("accommodations.jl")
 include("assignments.jl")
+include("people.jl")
 
 
 # const _PATH_CACHE = Dict{UInt,LeafPath}()
@@ -138,13 +139,13 @@ Course(code, number, name; credits=COURSE_CREDITS, assignments=Assignment[]) = C
 
 
 @enum AcademicCalendarType begin
-    Semester
-    Quarter
-    Trimester
-    Block
-    Session
-    Module
-    Other
+    CalendarSemester
+    CalendarQuarter
+    CalendarTrimester
+    CalendarBlock
+    CalendarSession
+    CalendarModule
+    CalendarOther
 end
 
 "Calendrical discretization of academic year."

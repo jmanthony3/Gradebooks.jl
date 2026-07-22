@@ -10,8 +10,11 @@ using ColorSchemes
 
 
 numeric_value(x::Real) = Float64(x)
-numeric_value(x::Credit) = x.value
+numeric_value(x::Credit) = Float64(x.value)
+numeric_value(x::LetterGrade) = Float64(x.quality_points)
 numeric_value(x::Grade) = Float64(x.submission.score.earned)
+numeric_value(x::AttendanceStatus) = ispresent(x) ? 1 : (isexcused(x) ? 0.66 : (islate(x) || istardy(x) ? 0.33 : (isabsent(x) ? 0 : NaN)))
+numeric_value(x::AttendanceRecord) = numeric_value(x.status)
 numeric_value(x) = NaN
 
 function column_bounds(df::DataFrame, j::Int)
@@ -153,7 +156,25 @@ function total_for_grade(g, flat_leaves, assignment; display_credits=DISPLAY_CRE
 end
 
 function build_assignment_display(gb::Gradebook, grades::Vector{Grade}, assignment::Assignment; student_filter=nothing, teams=Team[], display_credits=DISPLAY_CREDITS)
-    students_idx = !isnothing(student_filter) ? student_filter : (1:nrow(gb.total))
+    students_idx = if !isnothing(student_filter)
+        sort(if isa(student_filter, Vector{Int})
+            student_filter
+        elseif isa(student_filter, Roster)
+            map(s->gb.class.roster.index.by_id[s.person.id], student_filter.students)
+        elseif isa(student_filter, Vector{Student})
+            map(s->gb.class.roster.index.by_id[s.person.id], student_filter)
+        elseif isa(student_filter, Vector{String})
+            sort(filter(!isnothing, map(s->try
+                gb.class.roster.index.by_id[get_student(s, gb.class.roster).person.id]
+            catch
+                nothing
+            end, student_filter)))
+        else
+            error("Could not insert student filter which must be provided as roster or vector of integers, students, or string identifiers")
+        end)
+    else
+        (1:nrow(gb.total))
+    end
     grades = grades[students_idx]
     # collect all leaf nodes once, with a unique display codename
     # flat_leaves = vcat((leaf_items(q; prefix=assignment.codename, parent_value=assignment.value) for q in assignment.questions)...)
@@ -243,28 +264,39 @@ function build_gradebook_display(gb::Gradebook;
     assignments = if viewing_attendance
         !isnothing(assignment_filter) ? gb.class.lectures[assignment_filter] : gb.class.lectures
     else
-        !isnothing(assignment_filter) ? gb.class.course.assignments[assignment_filter] : gb.class.course.assignments[findall(!isattendance, gb.class.course.assignments)]
+        !isnothing(assignment_filter) ? gb.class.course.assignments[assignment_filter] : gb.class.course.assignments
     end
-    students_idx = !isnothing(student_filter) ? student_filter : (1:nrow(gb.total))
+    students_idx = if !isnothing(student_filter)
+        sort(if isa(student_filter, Vector{Int})
+            student_filter
+        elseif isa(student_filter, Roster)
+            map(s->gb.class.roster.index.by_id[s.person.id], student_filter.students)
+        elseif isa(student_filter, Vector{Student})
+            map(s->gb.class.roster.index.by_id[s.person.id], student_filter)
+        elseif isa(student_filter, Vector{String})
+            filter(!isnothing, map(s->try
+                gb.class.roster.index.by_id[get_student(s, gb.class.roster).person.id]
+            catch
+                nothing
+            end, student_filter))
+        else
+            error("Could not insert student filter which must be provided as roster or vector of integers, students, or string identifiers")
+        end)
+    else
+        (1:nrow(gb.total))
+    end
 
     cols = map(a->a.codename, assignments)
     df_raw = gb.raw[students_idx, Cols(cols...)]
     df_penalty = gb.penalty[students_idx, Cols(cols...)]
     df_total = gb.total[students_idx, Cols(cols...)]
 
-    df_total.Raw = if viewing_attendance
-        # map(eachrow(df_raw)) do row
-        map(map(i->df_raw[i, filter(j->isassigned(Matrix(df_raw), i, j), 1:ncol(df_raw))], students_idx)) do row
-            count(ispresent, row)
-        end
-    else
-        map(eachrow(df_raw)) do row
-            sum(row[c].submission.score.earned for c in cols)
-        end
+    df_total.Raw = map(map(i->df_raw[i, filter(j->isassigned(Matrix(df_raw), i, j), 1:ncol(df_raw))], 1:nrow(df_raw))) do row
+        viewing_attendance ? count(ispresent, row) : mapreduce(r->r.submission.score.earned, +, row)
     end
 
-    df_total.Penalty = map(eachrow(df_penalty)) do row
-        sum(row[c] for c in cols)
+    df_total.Penalty = map(eachrow(!viewing_attendance && isnothing(assignment_filter) ? gb.penalty[students_idx, :] : df_penalty)) do row
+        sum(row)
     end
 
     df_total.Total = if viewing_attendance
@@ -299,6 +331,10 @@ function build_gradebook_display(gb::Gradebook;
             credit2lettergrade(p)
         end
 
+        df.GPA = map(df.Letter) do ℓ
+            ℓ.quality_points
+        end
+
         df.Missing = map(df.Total) do t
             Point(total_possible - t.value)
         end
@@ -310,20 +346,20 @@ function build_gradebook_display(gb::Gradebook;
 
     if !viewing_attendance
         df.Extension = map(gb.class.roster.students[students_idx]) do student
-            get(student.notes, "Extension", "")
+            get(student.notes, "Extension", length(student.extension_history) > 0 ? string(length(student.extension_history)) : "")
         end
 
         df.Accommodation = map(gb.class.roster.students[students_idx]) do student
-            get(student.notes, "Accommodation", "")
+            get(student.notes, "Accommodation", !isempty(student.accommodations) ? map(a->a.type, student.accommodations) : "")
         end
     end
 
     column_labels = if !viewing_attendance
         [
             names(df), # vcat(map(x->x.codename, filter(!isattendance, gb.class.course.assignments)), fill("", 9)),
-            vcat(map(x->repr(x.category)[20:end], assignments), fill("", 9)),
-            vcat(map(x->x.is_group ? "Group" : "Individual", assignments), fill("", 9)),
-            vcat(map(x->repr(typeof(x).types[2]), assignments), fill("", 9)),
+            vcat(map(x->repr(x.category)[20:end], assignments), fill("", 10)),
+            vcat(map(x->x.is_group ? "Group" : "Individual", assignments), fill("", 10)),
+            vcat(map(x->repr(typeof(x).types[2]), assignments), fill("", 10)),
         ]
     else
         [
@@ -386,9 +422,16 @@ function view_gradebook(
         row_labels=row_labels,
         summary_row_labels=["Worth", "Due"], # , "Average (Point)", "Average (Percent)"],
         summary_rows=[
-            (matrix, j)->j <= length(assignments) ? assignments[j].value : "",
-            (matrix, j)->j <= length(assignments) ? assignments[j].due : "",
-            # (matrix, j)->j <= length(assignments) ? Point(sum(df[:, j])/length(df[:, j])) : 0.0,
+            (matrix, j)->j <= length(assignments) ? assignments[j].value : ( # all cells before summary columns
+                j == length(assignments) + 1 ? mapreduce(a->a.value, +, assignments[begin:end-(includes_bonus ? 1 : 0)]) : ( # raw
+                    j == length(assignments) + 3 ? mapreduce(a->a.value, +, assignments[begin:end-(includes_bonus ? 1 : 0)]) : ( # total
+                        ""))),
+            (matrix, j)->j <= length(assignments) ? assignments[j].due : (j == length(assignments) + 1 ? gb.class.term.finish : ""),
+            # (matrix, j)->j <= length(assignments) + 3 ? Point(sum(df[:, j])/length(df[:, j])) : ( # all cells + raw, penalty, and total
+            #     j <= length(assignments) + 5 ? credit2lettergrade(Percent(sum(df[:, j-2])/length(df[:, j-2]); normalized=false)) : ( # letter
+            #         j <= length(assignments) + 6 ? mapreduce(ℓ->ℓ.quality_points, +, df[:, j-1])/length(df[:, j-1]) : ( # gpa
+            #             j <= length(assignments) + 8 ? sum(df[:, j])/length(df[:, j]) : ( # missing and absent
+            #                 "")))),
             # (matrix, j)->j <= length(assignments) ? Percent(float(sum(df[:, j]))/length(df[:, j]) / assignments[j].value.value; normalized=false) : 0.0
         ],
         invert_cols=Set(["Missing", "Penalty", "Absent"])
@@ -445,9 +488,9 @@ function view_attendance(
         row_labels=row_labels,
         summary_row_labels=["Due", "Present", "Present (Average)"],
         summary_rows=[
-            (matrix, j)->j <= length(records) ? Date(records[j].due) : Date(0),
-            (matrix, j)->j <= length(records) ? count(ispresent, df[:, j]) : 0,
-            (matrix, j)->j <= length(records) ? count(ispresent, df[:, j])/length(df[:, j]) : 0
+            (matrix, j)->j <= length(records) ? Date(records[j].due) : "",
+            (matrix, j)->j <= length(records) ? count(ispresent, df[:, j]) : "",
+            (matrix, j)->j <= length(records) ? count(ispresent, df[:, j])/length(df[:, j]) : ""
         ],
         invert_cols=Set(["Missing", "Absent"])
     )

@@ -1,10 +1,10 @@
 export make_person_name, make_person_codename
 export AbstractPerson, Person
 export Instructor
-export EnrollmentStatus, Student
+export EnrollmentStatus, Student, has_extended_test_time, get_test_time_multiplier, has_modified_attendance, get_attendance_modifier
 public StudentIndex
 export Roster, student_candidates, get_student
-export update
+export update, grant_extension
 export EmailClients, get_emails
 export Team, team_candidates, get_team
 
@@ -68,6 +68,8 @@ end
 @kwdef struct Student <: AbstractPerson
     person::Person
     discipline::String = ""
+    accommodations::Vector{Accommodation} = Accommodation[]
+    extension_history::Vector{ExtensionGrant} = ExtensionGrant[]
     enrollment_status::EnrollmentStatus = Active
     final_grade::Union{LetterGrade, Nothing} = nothing
     withdrawal_date::Union{Date, Nothing} = nothing
@@ -75,6 +77,11 @@ end
     notes::Dict{Symbol,Any} = Dict()
 end
 Student(name_given::String, name_family::String; kwargs...) = Student(; person=Person(; name_given=name_given, name_family=name_family, collect(pairs(kwargs))[findall(fn->fn ∈ fieldnames(Person), keys(kwargs))]...), collect(pairs(kwargs))[findall(fn->fn ∉ fieldnames(Person), keys(kwargs))]...)
+
+has_extended_test_time(s::Student) = any(a->a.type == AccommodationExtendedTestTime, s.accommodations)
+get_test_time_multiplier(s::Student) = maximum((a.multiplier for a in s.accommodations if a.type == AccommodationExtendedTestTime); init=1.0)
+has_modified_attendance(s::Student) = any(a->a.type == AccommodationModifiedAttendance, s.accommodations)
+get_attendance_modifier(s::Student) = maximum((a.multiplier for a in s.accommodations if a.type == AccommodationModifiedAttendance); init=0.0)
 
 
 struct StudentIndex
@@ -191,6 +198,14 @@ function update(roster::Roster, student::Union{Student, String}; threshold=STRIN
 end
 
 
+function grant_extension(student::Student, assignment::Assignment, due::DateTime, granted::DateTime=now(), reason::String=""; notes::String="")
+    grant = ExtensionGrant(assignment, due, granted, reason, notes)
+    history = student.extension_history
+    push!(history, grant)
+    return update(student; extension_history=history)
+end
+
+
 @enum EmailClients Outlook Gmail Apple Thunderbird Proton
 
 "Gets emails from all students in `roster`. If `search` is not nothing, then returns a search string for email clients."
@@ -226,6 +241,7 @@ struct Team <: AbstractGradebookNode
 end
 Team(name, roster::Roster) = Team(name, roster, name)
 Team(name, students::Vector{Student}) = Team(name, Roster(students))
+Team(name, students::Vector{String}, roster::Roster) = Team(name, Roster(map(s->get_student(s, roster), students)))
 
 
 get_student(identifier::String, team::Team; threshold=STRING_MATCH_THRESHOLD) = get_student(identifier, team.roster; threshold=threshold)
