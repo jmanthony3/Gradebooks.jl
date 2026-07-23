@@ -1,6 +1,6 @@
 export Question, Rubric
-public AssignmentCategory
-export Assignment, Attendance, Exam, Homework, Paper, Presentation, Project, Quiz
+# public AssignmentCategory
+export Assignment, Attendance, Exam, Homework, Other, Paper, Presentation, Project, Quiz
 export isattendance, isexam, ishomework, isother, ispaper, ispresentation, isproject, isquiz
 export ExtensionGrant
 
@@ -16,6 +16,7 @@ struct Question <: AbstractGradebookNode
     value::Credit
     parts::Union{Nothing, Vector{Question}}
     codename::Symbol
+
     function Question(name, value, parts, codename)
         if !isnothing(parts)
             if any(p->isa(p, Rubric), parts)
@@ -33,16 +34,11 @@ struct Question <: AbstractGradebookNode
         codename = if isa(codename, Symbol)
             codename
         elseif isa(codename, AbstractString)
-            string_2codename(codename)
+            string2codename(codename)
         else
             error("`codename` must be of type Symbol or AbstractString")
         end
         pieces = isa(parts, Rubric) ? parts.metrics : parts
-        # if !isnothing(pieces)
-        #     for (i, part) in enumerate(pieces)
-        #         pieces[i] = Question(part.name, part.value, part.parts, Symbol(uppercase("$(codename)_$(isa(part.codename, Symbol) ? part.codename : string_2codename(part.codename))")))
-        #     end
-        # end
         return new(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), value, pieces, codename)
     end
 end
@@ -54,6 +50,7 @@ struct Rubric <: AbstractGradebookNode
     name::String
     metrics::Vector{Question}
     codename::Symbol
+
     function Rubric(name, metrics, codename)
         if all(x->isa(x.value, Percent), metrics)
             total = mapreduce(x->x.value.value, +, metrics; init=0.0)
@@ -67,7 +64,7 @@ struct Rubric <: AbstractGradebookNode
         codename = if isa(codename, Symbol)
             codename
         elseif isa(codename, AbstractString)
-            string_2codename(codename)
+            string2codename(codename)
         else
             error("`codename` must be of type Symbol or AbstractString")
         end
@@ -79,14 +76,14 @@ Rubric(source::Question, metrics::Vector{Question}) = Rubric(source.name, metric
 
 
 @enum AssignmentCategory begin
-    CategoryAttendance
-    CategoryExam
-    CategoryHomework
-    CategoryOther
-    CategoryPaper
-    CategoryPresentation
-    CategoryProject
-    CategoryQuiz
+    Attendance_Assignment
+    Exam_Assignment
+    Homework_Assignment
+    Other_Assignment
+    Paper_Assignment
+    Presentation_Assignment
+    Project_Assignment
+    Quiz_Assignment
 end
 
 """
@@ -102,6 +99,7 @@ struct Assignment <: AbstractGradebookNode
     is_group::Bool
     questions::Vector{Question}
     codename::Symbol
+
     function Assignment(name, value, due, category, is_group, questions, codename)
         if isnothing(questions)
             questions = [Question(name, value)]
@@ -126,7 +124,7 @@ struct Assignment <: AbstractGradebookNode
         codename = if isa(codename, Symbol)
             codename
         elseif isa(codename, AbstractString)
-            string_2codename(codename)
+            string2codename(codename)
         else
             error("`codename` must be of type Symbol or AbstractString")
         end
@@ -135,52 +133,52 @@ struct Assignment <: AbstractGradebookNode
 end
 
 "Convenience function constructing `Assignment` to track attendance."
-Attendance(     name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryAttendance,    is_group, questions, string_2codename(name))
+Attendance(     name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Attendance_Assignment,    is_group, questions, string2codename(name))
 
 "Convenience function constructing `Assignment` for an exam."
-Exam(           name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryExam,          is_group, questions, string_2codename(name))
+Exam(           name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Exam_Assignment,          is_group, questions, string2codename(name))
 
 "Convenience function constructing `Assignment` for homework."
-Homework(       name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryHomework,      is_group, questions, string_2codename(name))
+Homework(       name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Homework_Assignment,      is_group, questions, string2codename(name))
 
 "Convenience function constructing `Assignment` for some other academic item: e.g., extra credit."
-Other(          name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryOther,         is_group, questions, string_2codename(name))
+Other(          name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Other_Assignment,         is_group, questions, string2codename(name))
 
 "Convenience function constructing `Assignment` for a paper."
-Paper(          name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryPaper,         is_group, questions, string_2codename(name))
+Paper(          name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Paper_Assignment,         is_group, questions, string2codename(name))
 
 "Convenience function constructing `Assignment` for a presentation."
-Presentation(   name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryPresentation,  is_group, questions, string_2codename(name))
+Presentation(   name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Presentation_Assignment,  is_group, questions, string2codename(name))
 
 "Convenience function constructing `Assignment` for a project."
-Project(        name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryProject,       is_group, questions, string_2codename(name))
+Project(        name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Project_Assignment,       is_group, questions, string2codename(name))
 
 "Convenience function constructing `Assignment` for a quiz."
-Quiz(           name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, CategoryQuiz,          is_group, questions, string_2codename(name))
+Quiz(           name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Quiz_Assignment,          is_group, questions, string2codename(name))
 
 isattendance(x)                         = false
-isattendance(x::AssignmentCategory)     = x == CategoryAttendance
+isattendance(x::AssignmentCategory)     = x == Attendance_Assignment
 isattendance(x::Assignment)             = isattendance(x.category)
 isexam(x)                               = false
-isexam(x::AssignmentCategory)           = x == CategoryExam
+isexam(x::AssignmentCategory)           = x == Exam_Assignment
 isexam(x::Assignment)                   = isexam(x.category)
 ishomework(x)                           = false
-ishomework(x::AssignmentCategory)       = x == CategoryHomework
+ishomework(x::AssignmentCategory)       = x == Homework_Assignment
 ishomework(x::Assignment)               = ishomework(x.category)
 isother(x)                              = false
-isother(x::AssignmentCategory)          = x == CategoryOther
+isother(x::AssignmentCategory)          = x == Other_Assignment
 isother(x::Assignment)                  = isother(x.category)
 ispaper(x)                              = false
-ispaper(x::AssignmentCategory)          = x == CategoryPaper
+ispaper(x::AssignmentCategory)          = x == Paper_Assignment
 ispaper(x::Assignment)                  = ispaper(x.category)
 ispresentation(x)                       = false
-ispresentation(x::AssignmentCategory)   = x == CategoryPresentation
+ispresentation(x::AssignmentCategory)   = x == Presentation_Assignment
 ispresentation(x::Assignment)           = ispresentation(x.category)
 isproject(x)                            = false
-isproject(x::AssignmentCategory)        = x == CategoryProject
+isproject(x::AssignmentCategory)        = x == Project_Assignment
 isproject(x::Assignment)                = isproject(x.category)
 isquiz(x)                               = false
-isquiz(x::AssignmentCategory)           = x == CategoryQuiz
+isquiz(x::AssignmentCategory)           = x == Quiz_Assignment
 isquiz(x::Assignment)                   = isquiz(x.category)
 
 

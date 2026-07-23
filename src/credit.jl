@@ -1,4 +1,4 @@
-export AbstractCredit, Point, Percent, pt, pct, Credit, Mark
+export AbstractCredit, Point, pt, Percent, pct, Credit, Mark
 
 
 
@@ -33,12 +33,12 @@ Percent(0.0083)
 struct Percent <: AbstractCredit
     value::Float64
 
-    function Percent(x::Float64; normalized::Bool=true)
+    function Percent(x::Float64; normalize::Bool=true)
         value = Float64(x)
-        return new(normalized ? value / 100 : value)
+        return new(normalize ? value / 100 : value)
     end
 end
-Percent(x::Real, normalized::Bool=true) = Percent(Float64(x); normalized=normalized)
+Percent(x::Real, normalize::Bool=true) = Percent(Float64(x); normalize=normalize)
 
 "Shorthand construction with unit-like syntax: e.g., `Percent(5.3)` ≡ `5.3pct`."
 const pct = Percent

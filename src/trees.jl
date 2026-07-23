@@ -19,34 +19,34 @@ AbstractTrees.children(node::Grade) = node.submission
 AbstractTrees.children(node::Gradebook) = vcat(node.class.course.assignments, node.class.lectures, node.class.roster.students)
 
 
-function wrap_with_ids(node::Question, path::Vector{Symbol} = Symbol[])
-    new_path = vcat(path, node.codename)
-    wrapped_parts = hasproperty(node, :parts) && !isnothing(node.parts) && !isempty(node.parts) ? map(node.parts) do p
-        wrap_with_ids(p, new_path)
-    end : ()
-    return GradebookNode(Question(node.name, node.codename, node.value, wrapped_parts), LeafPath(new_path))
-end
+# function wrap_with_ids(node::Question, path::Vector{Symbol} = Symbol[])
+#     new_path = vcat(path, node.codename)
+#     wrapped_parts = hasproperty(node, :parts) && !isnothing(node.parts) && !isempty(node.parts) ? map(node.parts) do p
+#         wrap_with_ids(p, new_path)
+#     end : ()
+#     return GradebookNode(Question(node.name, node.codename, node.value, wrapped_parts), LeafPath(new_path))
+# end
 
-function wrap_with_ids(node::Assignment, path::Vector{Symbol} = Symbol[])
-    new_path = vcat(path, node.codename)
-    wrapped_questions = map(node.questions) do q
-        wrap_with_ids(q, new_path)
-    end
-    return GradebookNode(Assignment(node.name, node.codename, node.value, node.category, wrapped_questions), LeafPath(new_path))
-end
+# function wrap_with_ids(node::Assignment, path::Vector{Symbol} = Symbol[])
+#     new_path = vcat(path, node.codename)
+#     wrapped_questions = map(node.questions) do q
+#         wrap_with_ids(q, new_path)
+#     end
+#     return GradebookNode(Assignment(node.name, node.codename, node.value, node.category, wrapped_questions), LeafPath(new_path))
+# end
 
-function find_node(tree::Gradebook, target_id::LeafPath)
-    for assignment in tree.class.course.assignments
-        for node in AbstractTrees.PreOrderDFS(assignment)
-            if node.id == target_id
-                return node
-            end
-        end
-    end
-    error("Node not found: $target_id")
-end
+# function find_node(tree::Gradebook, target_id::LeafPath)
+#     for assignment ∈ tree.class.course.assignments
+#         for node ∈ AbstractTrees.PreOrderDFS(assignment)
+#             if node.id == target_id
+#                 return node
+#             end
+#         end
+#     end
+#     error("Node not found: $target_id")
+# end
 
-find_node(tree::Vector{Assignment}, codename_path::Vector{Symbol}) = find_node(tree, LeafPath(codename_path))
+# find_node(tree::Vector{Assignment}, codename_path::Vector{Symbol}) = find_node(tree, LeafPath(codename_path))
 
 
 # AbstractTrees.printnode(io::IO, node::AbstractGradebookNode) = print(io, node.name)

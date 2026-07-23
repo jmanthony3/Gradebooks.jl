@@ -3,19 +3,19 @@ export AccommodationType, Accommodation
 
 
 @enum AccommodationType begin
-    AccommodationExtendedAssignmentTime
-    AccommodationExtendedTestTime          # with multiplier: 1.5x, 2.0x, etc.
-    AccommodationModifiedAttendance
-    AccommodationNoteTakingAssistance
-    AccommodationAudioRecordingPermission
-    AccommodationPreferentialSeating
-    AccommodationStepOutPermission
-    AccommodationTestingCenterRequired
-    AccommodationScribeRequired
-    AccommodationLaptopForExams
-    AccommodationVirtualAttendance
-    AccommodationPriorityRegistration
-    AccommodationOther
+    ExtendedAssignmentTime
+    ExtendedTestTime          # with multiplier: 1.5x, 2.0x, etc.
+    ModifiedAttendance
+    NoteTakingAssistance
+    AudioRecordingPermission
+    PreferentialSeating
+    StepOutPermission
+    TestingCenterRequired
+    ScribeRequired
+    LaptopForExams
+    VirtualAttendance
+    PriorityRegistration
+    Other_Accommodation
 end
 
 struct Accommodation
@@ -26,5 +26,5 @@ struct Accommodation
     source_date::Date                # when ODAS letter was received
 end
 function Accommodation(type::AccommodationType; details="", multiplier=1.0, notes="", source_date=today())
-    Accommodation(type, details, multiplier, notes, source_date)
+    return Accommodation(type, details, multiplier, notes, source_date)
 end

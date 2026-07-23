@@ -1,7 +1,9 @@
 export DATE_FORMAT, set_date_format, get_date_format
-export INSTITUTION, set_institution, get_institution
+export INSTITUTION_NAME, set_institution_name, get_institution_name
 export INSTITUTION_EMAILDOMAIN, set_institution_emaildomain, get_institution_emaildomain
 export COURSE_QUALITYPOINTS_A, set_course_qualitypoints_a, get_course_qualitypoints_a
+export COURSE_QUALITYPOINTS_APLUS, set_course_qualitypoints_aplus, get_course_qualitypoints_aplus
+export COURSE_QUALITYPOINTS_PLUSMINUS, set_course_qualitypoints_plusminus, get_course_qualitypoints_plusminus
 export COURSE_POINT_SYSTEM, set_course_point_system, get_course_point_system
 export COURSE_POINT_SCALE, set_course_point_scale, get_course_point_scale
 export COURSE_POINT_SCALE_PLUSMINUS, set_course_point_scale_plusminus, get_course_point_scale_plusminus
@@ -21,7 +23,7 @@ using Preferences
 const DATE_FORMAT = @load_preference("DATE_FORMAT", "MMDDYYYY")
 
 function set_date_format(format::String)
-    if !(format in ["MMDDYYYY", "DDMMYYYY"])
+    if !(format ∈ ["MMDDYYYY", "DDMMYYYY"])
         @error "Invalid `DATE_FORMAT`. Please choose from: [\"MMDDYYYY\", \"DDMMYYYY\"]"
     end
     @set_preferences!("DATE_FORMAT" => format)
@@ -33,14 +35,14 @@ get_date_format() = @load_preference("DATE_FORMAT")
 
 
 "Institution name: e.g., \"Liberty University\" or \"Massachussettes Institute of Technology\"."
-const INSTITUTION = @load_preference("INSTITUTION")
+const INSTITUTION_NAME = @load_preference("INSTITUTION_NAME")
 
-function set_institution(org::String)
-    @set_preferences!("INSTITUTION" => org)
-    @info("New `INSTITUTION` set; restart your Julia session for this change to take effect!")
+function set_institution_name(org::String)
+    @set_preferences!("INSTITUTION_NAME" => org)
+    @info("New `INSTITUTION_NAME` set; restart your Julia session for this change to take effect!")
 end
 
-get_institution() = @load_preference("INSTITUTION")
+get_institution_name() = @load_preference("INSTITUTION_NAME")
 
 
 "Email domain: e.g., `\"liberty.edu\" or \"mit.edu\". This helps if searching by username instead of full email addresses."
@@ -186,7 +188,7 @@ get_string_match_threshold() = @load_preference("STRING_MATCH_THRESHOLD")
 const DISPLAY_CREDITS = @load_preference("DISPLAY_CREDITS", :auto)
 
 function set_display_credits(display::Symbol)
-    if !(display in Symbol.(instances(DISPLAY_CREDITS_TYPES)))
+    if !(display ∈ Symbol.(instances(DISPLAY_CREDITS_TYPES)))
         @error "Invalid `DISPLAY_CREDITS`. Please choose from symbols:" DISPLAY_CREDITS_TYPES
     end
     @set_preferences!("DISPLAY_CREDITS" => string(display))

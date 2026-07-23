@@ -1,4 +1,4 @@
-export string_sanitize, string_2uppercase_symbol, string_2codename
+# export string_sanitize, string2uppercase_symbol, string2codename
 export update
 
 
@@ -7,10 +7,10 @@ export update
 string_sanitize(s::AbstractString) = replace(Base.string(s), r"[^[:alnum:]]+" => "")
 
 "Converts string to an uppercase symbol."
-string_2uppercase_symbol(s::AbstractString) = isa(s, Symbol) ? s : Symbol(uppercase(string_sanitize(s)))
+string2uppercase_symbol(s::AbstractString) = isa(s, Symbol) ? s : Symbol(uppercase(string_sanitize(s)))
 
 "Codifies string like one reads the title of a book but includes LaTeX-style exceptions with `{` and `}` pairs."
-function string_2codename(s::AbstractString)
+function string2codename(s::AbstractString)
     articles = ["a", "an", "the"]
     conjuctions = ["for", "and", "nor", "but", "or", "yet", "so"]
     prepositions = ["of", "in", "for", "with", "on", "at", "from", "into", "during", "through", "without", "under", "over", "above", "below", "to"]
@@ -21,8 +21,9 @@ function string_2codename(s::AbstractString)
         @error "After sanitization, no remaining tokens begin with a letter." tokens
         error("Could not parse input, s=", s)
     end
-    return string_2uppercase_symbol(join(map(t->(first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : (isdigit(first(t)) ? t : first(filter(!ispunct, t))), tokens[firstword_idx:end])))
+    return string2uppercase_symbol(join(map(t->(first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : (isdigit(first(t)) ? t : first(filter(!ispunct, t))), tokens[firstword_idx:end])))
 end
+
 
 "Modifies the field(s) of an immutable `struct` and returns a new one."
 function _update(x; kwargs...)

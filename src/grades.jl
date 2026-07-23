@@ -1,5 +1,4 @@
-export Evaluation, Score, Submission, Grade, grade
-export islate, latepenalty
+export Evaluation, Score, score, Submission, Grade, grade, islate, latepenalty
 
 
 
@@ -13,6 +12,7 @@ struct Evaluation <: AbstractGradebookNode
     mark::Mark
     path::LeafPath
     comment::String
+
     function Evaluation(question, mark, path, comment)
         if question.parts !== nothing
             @warn "Evaluating question without specifying a part" question
@@ -22,110 +22,37 @@ struct Evaluation <: AbstractGradebookNode
 end
 Evaluation(question, mark::Mark, path=Symbol[]; comment="") = Evaluation(question, mark, LeafPath(path), comment)
 Evaluation(question, mark::Credit, path=Symbol[]; comment="") = Evaluation(question, Mark(mark), LeafPath(path), comment)
-# Evaluation(question, mark::Mark, path::LeafPath=LeafPath(); comment="") = Evaluation(question, mark, path, comment)
-# Evaluation(question, mark::Credit, path::LeafPath=LeafPath(); comment="") = Evaluation(question, Mark(mark), path, comment)
 
 "Compares `earned` points to `value` with `percent` and letter grade."
 struct Score <: AbstractGradebookNode
     earned::Point
     value::Point
-    percent::Percent
-    letter::LetterGrade
     comment::String
 end
-Score(percentage::Percent, value::Point; comment="") = Score(percentage*value, value, percentage, credit2lettergrade(percentage), comment)
-Score(points::T, value::T; comment="") where {T<:Point} = Score(points, value, Percent(points.value / value.value; normalized=false), credit2lettergrade(Percent(points.value / value.value; normalized=false)), comment)
-Score(points::T, value::T; comment="") where {T<:Real} = ((p, v) = Point.([points, value]); Score(p, v, Percent(p.value / v.value; normalized=false), credit2lettergrade(Percent(p.value / v.value; normalized=false)), comment))
+Score(percentage::Percent, value::Point; comment="") = Score(percentage*value, value, comment)
+Score(points::T, value::T; comment="") where {T<:Point} = Score(points, value, comment)
+Score(points::T, value::T; comment="") where {T<:Real} = Score(Point.([points, value])..., comment)
 
-# # Score(assignment::Assignment, tallies::Vararg{Tally{T,M,V}}) where {T<:AbstractScore,M<:AbstractMark,V<:AbstractScore} = Score(assignment.value, tally(tallies...)) # mapreduce(tally, +, [tallies...]))
-# # Score(assignment::Assignment, tallies::Vector{<:Tally}; comment="") = Score(mapreduce(tally, +, filter(!isempty, map(y->filter(x->isa(x.mark, y), tallies), [Grant, Subtract]))), assignment.value; comment=comment)
-# Score(assignment::Assignment, tallies::Vector{<:Evaluation}; comment="") = Score(only(tally(tallies)), assignment.value; comment=comment)
-# Score(assignment::Assignment, tallies::Vararg{<:Evaluation}; comment="") = Score(assignment, collect(tallies); comment=comment)
-# # function tally(assignment::Assignment, tallies::Vector{<:Union{<:AbstractMark, Tuple{<:AbstractMark, String}}})
-# Score(assignment::Assignment, marks::Vector{<:Mark}; comment="") = Score(assignment, map(x->Evaluation(assignment.questions[x[1]], x[2]), enumerate(marks)); comment=comment)
-# function Score(assignment::Assignment, marks::Vector{Union{<:Mark,<:Vector{<:Mark}}}; comment="")
-#     score = Score(Point(0.0), zero(typeof(assignment.value)); comment=comment)
-#     score_f(x) = mapreduce(z->Score(tally(map(i->Evaluation(assignment.questions[x][i], marks[x][i]), z)), mapreduce(i->assignment.questions[x][i].value, +, z); comment=comment), +, map(y->findall(typeof.(marks[x]) .== y), union(typeof.(marks[x]))))
-#     score_g(x) = mapreduce(z->Score(tally(z[1]), z[2]; comment=comment), +, zip(map(i->map(y->Evaluation(y[1], y[2]), zip(assignment.questions[i].metrics, marks[i])), x), mapreduce(i->assignment.questions[i].source.value, +, x)))
-#     score_h(x) = mapreduce(score_g, +, map(y->x[findall(typeof.(marks[x]) .== y)], union(typeof.(marks[x]))))
-#     marks_idx = findall(x->isa(x, Mark), marks)
-#     vectormarks_idx = findall(x->isa(x, Vector{<:Mark}), marks)
-#     if !isempty(marks_idx)
-#         score += score_f(marks_idx)
-#     end
-#     if !isempty(vectormarks_idx)
-#         score += score_h(vectormarks_idx)
-#     end
-#     return score
-# end
-# function Score(assignment::Assignment, marks::Vector{Any}; comment="")
-#     try
-#         return Score(assignment, Vector{Union{<:Mark,<:Vector{<:Mark}}}(marks))
-#     catch e
-#         @error e
-#     end
-# end
+function Base.getproperty(s::Score, sym::Symbol)
+    if sym == :percent
+        return getfield(s, :earned) / getfield(s, :value)
+    elseif sym == :letter
+        return credit2lettergrade(getfield(s, :earned) / getfield(s, :value))
+    else
+        return getfield(s, sym)
+    end
+end
 
-# function Score(item::Assignment, mark::Union{Mark, Credit}; comment="")
-#     question = if length(item.questions) == 1
-#         item.questions[1]
-#     else
-#         @warn "Evaluating entire assignment without specifying a question." item=item
-#         Question(item.name, item.value)
-#     end
-#     return Score(item, Evaluation(question, isa(mark, Credit) ? Mark(mark) : mark, comment))
-# end
+Base.propertynames(s::Score) = (:earned, :value, :percent, :letter, :comment)
+
 "Resolves evaluations to total points earned which may be calculated from percent earned against assignment part value."
-function Score(assignment::Assignment, evaluations::Vector{Evaluation})
-    # earned = zero(Point)
-    # for evaluation in evaluations
-    #     delta = evaluation.mark.delta
-    #     if isa(delta, Point)
-    #         earned += delta
-    #     elseif isa(delta, Percent)
-    #         if isa(evaluation.target, Question)
-    #             if isa(evaluation.target.value, Point)
-    #                 earned += delta * evaluation.target.value
-    #             elseif isa(evaluation.target.value, Percent)
-    #                 earned += delta * evaluation.target.value * assignment.value
-    #             else
-    #                 @error "Question values must be of type `Point` or `Percent`" question=evaluation.target
-    #                 error("Unsupported type")
-    #             end
-    #         elseif isa(evaluation.target, Rubric)
-    #             for metric in evaluation.target.metrics
-    #                 if isa(metric.value, Point)
-    #                     earned += delta * metric.value
-    #                 elseif isa(metric.value, Percent)
-    #                     try
-    #                         earned += delta * metric.value * assignment.value
-    #                     catch
-    #                         @error "Unclear how combination resolves to points" assignment=assignment target=evaluation.target mark=evaluation.mark metric=metric
-    #                         error("Ambiguous evaluation")
-    #                     end
-    #                 else
-    #                     @error "Rubric metrics must be of type `Point` or `Percent`" metric
-    #                     error("Unsupported type")
-    #                 end
-    #             end
-    #         end
-    #     else
-    #         @error "Mark must be of type `Point` or `Percent`" typeof(delta)
-    #         error("Unsupported type")
-    #     end
-    # end
-    # percent = Percent(earned.value / assignment.value.value; normalized=false)
-    # return Score(earned, assignment.value, percent, credit2lettergrade(percent), join(map(x->x.comment, evaluations), "\n"))
-    flat_leaves = flatten_leaves(assignment; parent_value=assignment.value)
-    # all_leaves = [leaf for (_, leaf, _, _) in flat_leaves]
-    # total_values = map(g -> total_for_grade(g, flat_leaves, assignment; display_credits=display_credits), grades)
+function score(assignment::Assignment, evaluations::Vector{Evaluation})
     points = 0.0
-    for (path, leaf, parent_value, current_value) in flat_leaves
+    for (path, leaf, parent_value, current_value) ∈ rake_leaves(assignment; parent_value=assignment.value)
         score = leaf_score(path, leaf, evaluations, parent_value, current_value; display_credits="point")
         points += score.value
     end
-    percent = Percent(points / assignment.value.value; normalized=false)
-    return Score(Point(points), assignment.value, percent, credit2lettergrade(percent), join(filter(!isnothing, map(x->x.comment, evaluations)), "\n"))
+    return Score(Point(points), assignment.value, join(filter(!isnothing, map(x->x.comment, evaluations)), "\n"))
 end
 
 
@@ -134,7 +61,6 @@ struct Submission <: AbstractGradebookNode
     submitted::AbstractDateTime
     score::Score
     evaluations::Vector{Evaluation}
-    # Submission(assignment, submitted, score) = new(assignment, parse_datetime(submitted), score)
     Submission(submitted, score, evaluations) = new(parse_datetime(submitted), score, evaluations)
 end
 
@@ -145,12 +71,6 @@ struct Grade <: AbstractGradebookNode
     assignment::Assignment
     submission::Submission
 end
-# function Grade(identifier, roster, assignment, submitted, evaluations::Vector{Evaluation})
-#     return Grade(get_student(identifier, roster), assignment, Submission(submitted, Score(assignment, evaluations), evaluations))
-# end
-# function Grade(identifier, roster, assignment, submitted, marks::Vector{Union{Mark, Credit}})
-#     return Grade(identifier, roster, assignment, submitted, map(x->Evaluation(assignment.questions[x[1]], isa(x[2][1], Credit) ? Mark(x[2][1]) : x[2][1]; comment=x[2][2]), enumerate(marks)))
-# end
 
 
 isattendance(x::Grade)     = isattendance(x.assignment)
@@ -231,7 +151,7 @@ function resolve_point_value(node, parent_value::Percent)
 end
 
 function trace_leaf_resolution(node, parent_value; prefix=())
-    path = leaf_path(node; prefix=prefix)
+    path = LeafPath(node; prefix=prefix)
     resolved = resolve_leaf_point_value(node, parent_value)
     return (
         path = path,
@@ -259,34 +179,34 @@ function get_leaves(node::Question, nodevalue::Point)
         [(node, base)]
     else
         leaves = Tuple{Question, Point}[]
-        append!(leaves, [get_leaves(part, base) for part in node.parts]...)
+        append!(leaves, [get_leaves(part, base) for part ∈ node.parts]...)
         leaves
     end
 end
 
 function get_leaves(node::Vector{Question}, nodevalue::Point)
-    reduce(vcat, [get_leaves(leaf, nodevalue) for leaf in node])
+    reduce(vcat, [get_leaves(leaf, nodevalue) for leaf ∈ node])
 end
 
 function get_leaves(node::Rubric, nodevalue::Point)
-    return [(metric, get_leafvalue(metric, nodevalue)) for metric in node.metrics]
+    return [(metric, get_leafvalue(metric, nodevalue)) for metric ∈ node.metrics]
 end
 
 function distribute_scalar_mark!(evaluations::Vector{Evaluation}, items, mark::Mark, nodevalue::Point, prefix=())
     leaves = get_leaves(items, nodevalue)
     if isa(mark.delta, Percent)
         # same fraction of each leaf
-        for (leaf, _) in leaves
+        for (leaf, _) ∈ leaves
             push!(evaluations, Evaluation(leaf, mark, LeafPath(tuple(prefix..., leaf.codename)), mark.comment))
         end
     else
-        total = sum(weight.value for (_, weight) in leaves)
+        total = sum(weight.value for (_, weight) ∈ leaves)
         if total == 0.0
-            for (leaf, _) in leaves
+            for (leaf, _) ∈ leaves
                 push!(evaluations, Evaluation(leaf, Mark(Point(0.0)), LeafPath(tuple(prefix..., leaf.codename)), mark.comment))
             end
         else
-            for (leaf, weight) in leaves
+            for (leaf, weight) ∈ leaves
                 share = weight.value / total
                 leaf_points = Point(mark.delta.value * share)
                 push!(evaluations, Evaluation(leaf, Mark(leaf_points), LeafPath(tuple(prefix..., leaf.codename)), mark.comment))
@@ -303,7 +223,7 @@ function expand!(evaluations::Vector{Evaluation}, items, marks, nodevalue::Point
         return distribute_scalar_mark!(evaluations, items, mark, nodevalue, prefix)
     elseif marks isa AbstractVector || marks isa Tuple
         if length(marks) == length(items)
-            for (item, mark) in zip(items, marks)
+            for (item, mark) ∈ zip(items, marks)
                 child_prefix = tuple(prefix..., item.codename)
                 if !isnothing(children(item)) && !isempty(children(item))
                     expand!(evaluations, children(item), mark, get_leafvalue(item, nodevalue), child_prefix)
@@ -312,7 +232,7 @@ function expand!(evaluations::Vector{Evaluation}, items, marks, nodevalue::Point
                     if isa(item, Question)
                         push!(evaluations, Evaluation(item, mark_obj, LeafPath(child_prefix), comment))
                     elseif isa(item, Rubric)
-                        for metric in item.metrics
+                        for metric ∈ item.metrics
                             metric_path = tuple(child_prefix..., metric.codename)
                             metric_mark, metric_comment = normalize_mark(mark)
                             push!(evaluations, Evaluation(metric, metric_mark, LeafPath(metric_path), metric_comment))
@@ -333,7 +253,7 @@ end
 function grade(identifier, roster, assignment, submitted, marks; threshold=STRING_MATCH_THRESHOLD)
     evaluations = Evaluation[]
     expand!(evaluations, assignment.questions, marks, Point(assignment.value), (assignment.codename,))
-    submission = Submission(submitted, Score(assignment, evaluations), evaluations)
+    submission = Submission(submitted, score(assignment, evaluations), evaluations)
     return Grade(get_student(identifier, roster; threshold=threshold), assignment, submission)
 end
 

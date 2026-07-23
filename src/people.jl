@@ -1,9 +1,12 @@
 export make_person_name, make_person_codename
 export AbstractPerson, Person
 export Instructor
-export EnrollmentStatus, Student, has_extended_test_time, get_test_time_multiplier, has_modified_attendance, get_attendance_modifier
+# export EnrollmentStatus
+export Student
+export has_extended_test_time, get_test_time_multiplier, has_modified_attendance, get_attendance_modifier
+export isactive, iswithdrawn, isincomplete, isgraduated
 public StudentIndex
-export Roster, student_candidates, get_student
+export Roster, get_student
 export update, grant_extension
 export EmailClients, get_emails
 export Team, team_candidates, get_team
@@ -20,7 +23,7 @@ using StringDistances
 make_person_name(given, family; title="", suffix="", nickname="") = join(filter(!isnothing, [(isempty(title) ? nothing : (title=strip(title); last(title) == '.' ? title : "$title.")), given, (isempty(nickname) ? nothing : "\"$nickname\""), family]), " ") * (suffix == "" ? "" : (first(suffix) == ',' ? suffix : ", $suffix"))
 
 "Helper function to construct codename: e.g., `make_person_codename(Joby, Anthony)` ⟶ \":JA\""
-make_person_codename(given, family; nickname="") = string_2uppercase_symbol(join(map(s->first(s, 1), [!isempty(nickname) ? nickname : given, family])))
+make_person_codename(given, family; nickname="") = string2uppercase_symbol(join(map(s->first(s, 1), [!isempty(nickname) ? nickname : given, family])))
 
 
 abstract type AbstractPerson <: AbstractGradebookNode end
@@ -40,10 +43,11 @@ abstract type AbstractPerson <: AbstractGradebookNode end
     id::String                      = ""
     name::String                    = ""
     codename::Symbol                = Symbol("")
+
     function Person(name_given, name_family, name_title, name_suffix, name_preferred, name_initials, name_aliases, email, phone, organization, id, name, codename)
-        _organization = isempty(organization) ? (!isnothing(INSTITUTION) ? INSTITUTION : "") : organization
+        _organization = isempty(organization) ? (!isnothing(INSTITUTION_NAME) ? INSTITUTION_NAME : "") : organization
         _name = make_person_name(name_given, name_family; title=name_title, suffix=name_suffix, nickname=name_preferred)
-        _codename = !isempty(string(name_initials)) ? (isa(name_initials, Symbol) ? name_initials : string_2uppercase_symbol(name_initials)) : make_person_codename(name_given, name_family; nickname=name_preferred)
+        _codename = !isempty(string(name_initials)) ? (isa(name_initials, Symbol) ? name_initials : string2uppercase_symbol(name_initials)) : make_person_codename(name_given, name_family; nickname=name_preferred)
         new(name_given, name_family, name_title, name_suffix, name_preferred, _codename,
             name_aliases, email, phone, _organization, id, _name, _codename)
     end
@@ -78,10 +82,23 @@ end
 end
 Student(name_given::String, name_family::String; kwargs...) = Student(; person=Person(; name_given=name_given, name_family=name_family, collect(pairs(kwargs))[findall(fn->fn ∈ fieldnames(Person), keys(kwargs))]...), collect(pairs(kwargs))[findall(fn->fn ∉ fieldnames(Person), keys(kwargs))]...)
 
-has_extended_test_time(s::Student) = any(a->a.type == AccommodationExtendedTestTime, s.accommodations)
-get_test_time_multiplier(s::Student) = maximum((a.multiplier for a in s.accommodations if a.type == AccommodationExtendedTestTime); init=1.0)
-has_modified_attendance(s::Student) = any(a->a.type == AccommodationModifiedAttendance, s.accommodations)
-get_attendance_modifier(s::Student) = maximum((a.multiplier for a in s.accommodations if a.type == AccommodationModifiedAttendance); init=0.0)
+has_extended_test_time(s::Student) = any(a->a.type == ExtendedTestTime, s.accommodations)
+get_test_time_multiplier(s::Student) = maximum((a.multiplier for a ∈ s.accommodations if a.type == ExtendedTestTime); init=1.0)
+has_modified_attendance(s::Student) = any(a->a.type == ModifiedAttendance, s.accommodations)
+get_attendance_modifier(s::Student) = maximum((a.multiplier for a ∈ s.accommodations if a.type == ModifiedAttendance); init=0.0)
+
+isactive(x)                         = false
+isactive(x::EnrollmentStatus)       = x == Active
+isactive(x::Student)                = isactive(x.enrollment_status)
+iswithdrawn(x)                      = false
+iswithdrawn(x::EnrollmentStatus)    = x == Withdrawn
+iswithdrawn(x::Student)             = iswithdrawn(x.enrollment_status)
+isincomplete(x)                     = false
+isincomplete(x::EnrollmentStatus)   = x == Incomplete
+isincomplete(x::Student)            = isincomplete(x.enrollment_status)
+isgraduated(x)                      = false
+isgraduated(x::EnrollmentStatus)    = x == Graduated
+isgraduated(x::Student)             = isgraduated(x.enrollment_status)
 
 
 struct StudentIndex
@@ -95,11 +112,11 @@ end
 "One time construction of `students` in class roster for fast, dictionary lookups of vector positions from any field of `Person`."
 function StudentIndex(students::Vector{Student})
     idx = StudentIndex(Dict(), Dict(), Dict(), Dict(), Dict())
-    for (i, s) in enumerate(students)
+    for (i, s) ∈ enumerate(students)
         haskey(idx.by_email, s.person.email) || (idx.by_email[s.person.email] = i)
         haskey(idx.by_id, s.person.id) || (idx.by_id[s.person.id] = i)
         haskey(idx.by_codename, s.person.codename) || (idx.by_codename[s.person.codename] = i)
-        for alias in s.person.name_aliases
+        for alias ∈ s.person.name_aliases
             haskey(idx.by_alias, alias) || (idx.by_alias[alias] = i)
         end
         haskey(idx.by_name, s.person.name) || (idx.by_name[s.person.name] = i)
@@ -107,12 +124,30 @@ function StudentIndex(students::Vector{Student})
     return idx
 end
 
-"Special type for `Vector{Student}` coupled with `StudentIndex`."
+"Special type of `Vector{Student}`."
 struct Roster <: AbstractGradebookNode
     students::Vector{Student}
     index::StudentIndex
 end
 Roster(students) = Roster(students, StudentIndex(students))
+
+function Base.getproperty(r::Roster, sym::Symbol)
+    if sym == :by_email
+        return getfield(getfield(r, :index), sym)
+    elseif sym == :by_id
+        return getfield(getfield(r, :index), sym)
+    elseif sym == :by_codename
+        return getfield(getfield(r, :index), sym)
+    elseif sym == :by_alias
+        return getfield(getfield(r, :index), sym)
+    elseif sym == :by_name
+        return getfield(getfield(r, :index), sym)
+    else
+        return getfield(r, sym)
+    end
+end
+
+Base.propertynames(r::Roster) = (:students, :by_email, :by_id, :by_codename, :by_alias, :by_name)
 
 
 function student_candidates(s::Student)
@@ -155,7 +190,7 @@ function get_student(identifier::String, roster::Roster; threshold=STRING_MATCH_
         family_idx[given_idx]
         # if is username without "@<organization>.<domain>"
     elseif occursin('@', identifier)
-        roster.index.by_email[identifier]
+        roster.by_email[identifier]
     else
         q = lowercase(string_sanitize(identifier))
         findall(s -> any(c -> lowercase(string_sanitize(c)) == q, student_candidates(s)), roster.students)
@@ -166,8 +201,8 @@ function get_student(identifier::String, roster::Roster; threshold=STRING_MATCH_
         error("Ambiguous student match for $(identifier): $(map(x->x.person.email, roster.students[exact]))")
     else # fallback to fuzzy logic
         scores = Tuple{Student, String, Int}[]
-        for s in roster.students
-            for c in student_candidates(s)
+        for s ∈ roster.students
+            for c ∈ student_candidates(s)
                 push!(scores, (s, c, Levenshtein()(q, lowercase(string_sanitize(c)))))
             end
         end
@@ -193,15 +228,14 @@ end
 
 function update(roster::Roster, student::Union{Student, String}; threshold=STRING_MATCH_THRESHOLD, kwargs...)
     s = isa(student, String) ? get_student(student, roster; threshold=threshold) : student
-    roster.students[roster.index.by_id[s.person.id]] = update(s; kwargs...)
+    roster.students[roster.by_id[s.person.id]] = update(s; kwargs...)
     return Roster(roster.students)
 end
 
 
 function grant_extension(student::Student, assignment::Assignment, due::DateTime, granted::DateTime=now(), reason::String=""; notes::String="")
-    grant = ExtensionGrant(assignment, due, granted, reason, notes)
     history = student.extension_history
-    push!(history, grant)
+    push!(history, ExtensionGrant(assignment, due, granted, reason, notes))
     return update(student; extension_history=history)
 end
 
@@ -211,7 +245,7 @@ end
 "Gets emails from all students in `roster`. If `search` is not nothing, then returns a search string for email clients."
 function get_emails(roster::Roster; search::Union{Nothing, EmailClients}=nothing)
     emails = []
-    for student in roster.students
+    for student ∈ roster.students
         email = student.email
         username, domain = split(email, "@")
         if domain != INSTITUTION_EMAILDOMAIN
@@ -228,11 +262,12 @@ struct Team <: AbstractGradebookNode
     name::String
     roster::Roster
     codename::Symbol
+
     function Team(name, roster, codename)
         codename = if isa(codename, Symbol)
             codename
         elseif isa(codename, String)
-            string_2codename(codename)
+            string2codename(codename)
         else
             error("`codename` must be of type Symbol or String.")
         end
@@ -262,8 +297,8 @@ function get_team(identifier::String, teams::Vector{Team}; threshold=STRING_MATC
         error("Ambiguous team match for $(identifier): $(map(x -> x.name, teams[exact]))")
     else # fallback to fuzzy logic
         scores = Tuple{Team, String, Int}[]
-        for t in teams
-            for c in team_candidates(t)
+        for t ∈ teams
+            for c ∈ team_candidates(t)
                 push!(scores, (t, c, Levenshtein()(q, lowercase(string_sanitize(c)))))
             end
         end

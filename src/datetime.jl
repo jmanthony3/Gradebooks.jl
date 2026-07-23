@@ -1,8 +1,8 @@
 public DAYSOFWEEKSYMBOLCODES, DAYSYMBOLCODEMAP
 export MWF, TR
 export MIDNIGHT
-public frequency2codesymbols
-public safe_datetime_stamp, parse_time, parse_date, parse_datetime
+# public frequency2codesymbols
+# public safe_datetime_stamp, parse_time, parse_date, parse_datetime
 
 
 
@@ -39,14 +39,14 @@ function frequency2codesymbols(input)::Vector{Symbol}
     if isnothing(input)
         return Symbol[]
     elseif isa(input, Symbol)
-        if string_2codename(input) == :MWF
+        if string2codename(input) == :MWF
             return MWF
-        elseif string_2codename(input) == :TR
+        elseif string2codename(input) == :TR
             return TR
         else
             s = uppercase(string(input))
             days = Symbol[]
-            for c in s
+            for c ∈ s
                 day = get(DAYSYMBOLCODEMAP, c, nothing)
                 if isnothing(day)
                     error("Unknown day code $c in :$s")
@@ -59,7 +59,7 @@ function frequency2codesymbols(input)::Vector{Symbol}
         end
     elseif input isa AbstractVector
         days = Symbol[]
-        for item in input
+        for item ∈ input
             if isa(item, Symbol) || isa(item, Char) || isa(item, AbstractString)
                 key = uppercasefirst(string(item))
                 day = get(DAYSYMBOLCODEMAP, key, nothing)
@@ -68,8 +68,8 @@ function frequency2codesymbols(input)::Vector{Symbol}
                 else
                     push!(days, day)
                 end
-            # elseif isa(item, Integer)
-            #     push!(days, DAYSOFWEEKSYMBOLCODES[item])
+            elseif isa(item, Integer)
+                push!(days, DAYSOFWEEKSYMBOLCODES[item])
             else
                 error("Unsupported meeting day type: $(typeof(item))")
             end
@@ -147,12 +147,7 @@ end
 "Magically converts `d` to `Dates.Date`. Defaults to ISO 8601. (Uses `DATE_FORMAT` preference.)"
 function parse_date(d)
     if isa(d, Date)
-        d = if Year(d) == Year(1)
-            Date(Year(now()), month(d), day(d))
-        else
-            d
-        end
-        return d
+        return Year(d) == Year(1) ? Date(Year(now()), month(d), day(d)) : d
     elseif isa(d, String)
         try
             return Date(d, ISODateFormat)
@@ -181,13 +176,7 @@ function parse_date(d)
                     end
                     parse = parse_date_g(dateformats[i])
                 end
-                d = parse
-                d = if Year(d) == Year(1)
-                    Date(Year(now()), month(d), day(d))
-                else
-                    d
-                end
-                return d
+                return Year(parse) == Year(1) ? Date(Year(now()), month(parse), day(parse)) : parse
             catch
                 error("Could not parse datetime=$d")
             end
@@ -204,11 +193,7 @@ function parse_datetime(dt)
     if isa(dt, DateTime) || isa(dt, Millisecond)
         return dt
     elseif isa(dt, Date)
-        d = if Year(dt) == Year(1)
-            Date(Year(now()), month(dt), day(dt))
-        else
-            dt
-        end
+        d = Year(dt) == Year(1) ? Date(Year(now()), month(dt), day(dt)) : dt
         return DateTime(d, MIDNIGHT)
     elseif isa(dt, String)
         try
@@ -249,17 +234,7 @@ function parse_datetime(dt)
                         end
                         parse = parse_datetime_g(datetimeformats[i])
                     end
-                    dt′ = parse
-                    # d = if Dates.value(Time(d)) == 0
-                    #     DateTime(Date(d), MIDNIGHT)
-                    # else
-                    #     d
-                    # end
-                    return if Year(dt′) == Year(1)
-                        DateTime(Date(Year(now()), month(dt′), day(dt′)), Time(dt′))
-                    else
-                        dt′
-                    end
+                    return Year(parse) == Year(1) ? DateTime(Date(Year(now()), month(parse), day(parse)), Time(parse)) : parse
                 catch
                     error("Could not parse datetime=$dt")
                 end

@@ -3,78 +3,13 @@ import DataFrames: DataFrame
 
 
 
-# const Dictable = Union{Credit,LetterGrade,Person,Assignment,Course}
-# const Indictable = Union{Class,Submission,Grade}
-
-# convert(::Type{Dict}, x::Dictable) = (fns = fieldnames(x); Dict(zip(fns, getfield.(x, fns))))
-# convert(::Type{DataFrame}, x::Dictable) = DataFrame(Dict(x))
-
-
-# function +(a::DataFrame, b::DataFrame)
-#     if allequal(names, [a, b])
-#         c = deepcopy(a)
-#         for name in names(a)
-#             c[!, name] .= a[!, name] + b[!, name]
-#         end
-#         return c
-#     else
-#         names_itx = intersect(names(a), names(b))
-#         @error "Not all names of `a` occur in `b`" a=names(a)[findall(n->n ∉ names_itx, names(a))] b=names(b)[findall(n->n ∉ names_itx, names(b))]
-#         error("Cannot perform operation")
-#     end
-# end
-
-# function -(a::DataFrame, b::DataFrame)
-#     if allequal(names, [a, b])
-#         c = deepcopy(a)
-#         for name in names(a)
-#             c[!, name] .= a[!, name] - b[!, name]
-#         end
-#         return c
-#     else
-#         names_itx = intersect(names(a), names(b))
-#         @error "Not all names of `a` occur in `b`" a=names(a)[findall(n->n ∉ names_itx, names(a))] b=names(b)[findall(n->n ∉ names_itx, names(b))]
-#         error("Cannot perform operation")
-#     end
-# end
-
-# function *(a::DataFrame, b::DataFrame)
-#     if allequal(names, [a, b])
-#         c = deepcopy(a)
-#         for name in names(a)
-#             c[!, name] .= a[!, name] * b[!, name]
-#         end
-#         return c
-#     else
-#         names_itx = intersect(names(a), names(b))
-#         @error "Not all names of `a` occur in `b`" a=names(a)[findall(n->n ∉ names_itx, names(a))] b=names(b)[findall(n->n ∉ names_itx, names(b))]
-#         error("Cannot perform operation")
-#     end
-# end
-
-# function /(a::DataFrame, b::DataFrame)
-#     if allequal(names, [a, b])
-#         c = deepcopy(a)
-#         for name in names(a)
-#             c[!, name] .= a[!, name] / b[!, name]
-#         end
-#         return c
-#     else
-#         names_itx = intersect(names(a), names(b))
-#         @error "Not all names of `a` occur in `b`" a=names(a)[findall(n->n ∉ names_itx, names(a))] b=names(b)[findall(n->n ∉ names_itx, names(b))]
-#         error("Cannot perform operation")
-#     end
-# end
-
-
-
 ## credit.jl
     *(x::Real, ::Type{Point}) = Point(Float64(x))
 
     +(a::Point, b::Point) = Point(a.value + b.value)
     -(a::Point, b::Point) = Point(a.value - b.value)
     # *(a::Point, b::Point) = Point(a.x * b.x)
-    /(a::Point, b::Point) = Percent(a.value / b.value; normalized=false)
+    /(a::Point, b::Point) = Percent(a.value / b.value; normalize=false)
     ==(a::Point, b::Point) = a.value == b.value
     <(a::Point, b::Point) = a.value < b.value
     <=(a::Point, b::Point) = a.value <= b.value
@@ -107,8 +42,8 @@ import DataFrames: DataFrame
 
     *(x::Real, ::Type{Percent}) = Percent(Float64(x))
 
-    +(a::Percent, b::Percent) = Percent(a.value + b.value; normalized=false)
-    -(a::Percent, b::Percent) = Percent(a.value - b.value; normalized=false)
+    +(a::Percent, b::Percent) = Percent(a.value + b.value; normalize=false)
+    -(a::Percent, b::Percent) = Percent(a.value - b.value; normalize=false)
     *(a::Percent, b::Percent) = Percent(100a.value * 100b.value)
     /(a::Percent, b::Percent) = Percent(100a.value / 100b.value)
     ==(a::Percent, b::Percent) = a.value == b.value
@@ -117,8 +52,8 @@ import DataFrames: DataFrame
     >(a::Percent, b::Percent) = a.value > b.value
     >=(a::Percent, b::Percent) = a.value >= b.value
     isless(a::Percent, b::Percent) = a.value < b.value
-    zero(::Type{Percent}) = Percent(0.0; normalized=false)
-    one(::Type{Percent}) = Percent(1.0; normalized=false)
+    zero(::Type{Percent}) = Percent(0.0; normalize=false)
+    one(::Type{Percent}) = Percent(1.0; normalize=false)
     float(x::Percent) = x.value
     convert(::Type{Float64}, x::Percent) = x.value
     # convert(::Type{Char}, x::Percent) = (x >= 0.90 ? 'A' : (x >= 0.80 ? 'B' : (x >= 0.70 ? 'C' : (x >= 0.60 ? 'D' : 'F'))))
@@ -129,7 +64,7 @@ import DataFrames: DataFrame
         state > length(x.value) && return nothing
         return x.value[state], state + 1
     end
-    parse(::Type{Percent}, s::AbstractString) = Percent(parse(Float64, s); normalized=false)
+    parse(::Type{Percent}, s::AbstractString) = Percent(parse(Float64, s); normalize=false)
     show(io::IO, x::Percent) = print(io, round(100x.value; digits=COURSE_POINT_DECIMALPLACES), " %")
 
 
@@ -245,9 +180,9 @@ show(io::IO, x::LeafPath) = print(io, string(x))
     end
     # show(io::IO, x::Team) = print(io, x.name, " (", x.codename, "):", first(x.roster.students))
 
-    ==(::Person, ::Any) = false
-    ==(::Instructor, ::Any) = false
-    ==(::Student, ::Any) = false
+    # ==(::Person, ::Any) = false
+    # ==(::Instructor, ::Any) = false
+    # ==(::Student, ::Any) = false
 
     "Convert a vector of Student structs into a DataFrame, with one column per field."
     function DataFrame(students::Vector{Student})
@@ -255,21 +190,21 @@ show(io::IO, x::LeafPath) = print(io, string(x))
             DataFrame()
         else
             DataFrame(
-                name_given          = [s.person.name_given for s in students],
-                name_family         = [s.person.name_family for s in students],
-                name_title          = [s.person.name_title for s in students],
-                name_suffix         = [s.person.name_suffix for s in students],
-                name_preferred      = [s.person.name_preferred for s in students],
-                name_initials       = [s.person.name_initials for s in students],
-                email               = [s.person.email for s in students],
-                phone               = [s.person.phone for s in students],
-                organization        = [s.person.organization for s in students],
-                id                  = [s.person.id for s in students],
-                codename            = [s.person.codename for s in students],
-                discipline          = [s.discipline for s in students],
-                enrollment_status   = [s.enrollment_status for s in students],
-                final_grade         = [s.final_grade for s in students],
-                withdrawal_date     = [s.withdrawal_date for s in students],
+                name_given          = [s.person.name_given for s ∈ students],
+                name_family         = [s.person.name_family for s ∈ students],
+                name_title          = [s.person.name_title for s ∈ students],
+                name_suffix         = [s.person.name_suffix for s ∈ students],
+                name_preferred      = [s.person.name_preferred for s ∈ students],
+                name_initials       = [s.person.name_initials for s ∈ students],
+                email               = [s.person.email for s ∈ students],
+                phone               = [s.person.phone for s ∈ students],
+                organization        = [s.person.organization for s ∈ students],
+                id                  = [s.person.id for s ∈ students],
+                codename            = [s.person.codename for s ∈ students],
+                discipline          = [s.discipline for s ∈ students],
+                enrollment_status   = [s.enrollment_status for s ∈ students],
+                final_grade         = [s.final_grade for s ∈ students],
+                withdrawal_date     = [s.withdrawal_date for s ∈ students],
             )
         end
     end
@@ -355,9 +290,9 @@ show(io::IO, x::LeafPath) = print(io, string(x))
 
 
 ## grades.jl
-    +(a::Score, b::Score) = ((e, v) = (a.earned + b.earned, a.value + b.value); p = e / v; Score(e, v, p, credit2lettergrade(p), join(map(x->x.comment, [a, b]), "\n")))
+    +(a::Score, b::Score) = Score(a.earned + b.earned, a.value + b.value, join(map(x->x.comment, [a, b]), "\n"))
     # +(a::Score, b::Score...) = a + reduce(+, b)
-    -(a::Score, b::Score) = ((e, v) = (a.earned - b.earned, a.value - b.value); p = e / v; Score(e, v, p, credit2lettergrade(p), join(map(x->x.comment, [a, b]), "\n")))
+    -(a::Score, b::Score) = Score(a.earned - b.earned, a.value - b.value, join(map(x->x.comment, [a, b]), "\n"))
     # -(a::Score, b::Score...) = a + reduce(-, b)
     # *(a::Score, b::Score) = Score(a.x * b.x)
     # /(a::Score, b::Score) = Score(a.x / b.x)

@@ -41,11 +41,10 @@ istardy(r::AttendanceStatus)        = r == Tardy
 istardy(r::AttendanceRecord)        = istardy(r.status)
 
 function record!(gb, student, lecture, record)
-    if student.enrollment_status == Active && (isnothing(student.final_grade) || student.final_grade ∉ [FN, W, I])
-        i = gb.class.roster.index.by_id[student.person.id]
+    if isactive(student) && (isnothing(student.final_grade) || student.final_grade ∉ [FN, W, I])
+        i = gb.class.roster.by_id[student.person.id]
         gb.raw[i, lecture.codename] = record
         t = count(isabsent, gb.raw[i, :][filter(j->isassigned(gb.raw[!, j], i), length(gb.class.course.assignments) .+ (1:length(gb.class.lectures)))]) # + count(==(0), Matrix(att.raw_score[occursin.(key, att.raw_score[!, "Email"]), :]))
-        # p = Point(t <= ATTENDANCE_LIMIT ? 0 : ((t - ATTENDANCE_LIMIT) * ATTENDANCE_PENALTY))
         p = Point(isabsent(record) && t > (ATTENDANCE_LIMIT + get_attendance_modifier(student)) ? ATTENDANCE_PENALTY : 0.0)
         gb.penalty[i, lecture.codename] = p
         gb.total[i, lecture.codename] = record
@@ -74,11 +73,9 @@ function attendance_record!(gb::Gradebook, date_stamp::Union{Date, String}, date
     date_stamp = parse_date(date_stamp)
     date_lecture = parse_date(date_lecture)
     lecture = gb.class.lectures[findlast(x->x<=date_lecture, map(y->Date(y.due), gb.class.lectures))]
-    # grades_post!(gb, map(x->grade(x[1], gb.class.roster, lecture, date_lecture, length(x) == 3 ? AttendanceRecord(x[2], date_stamp, x[3]) : AttendanceRecord(x[2], date_stamp))), marks)
-    # attendance_idx = filter(!isnothing, indexin(assignments, filter(x->x.category !== :attendance, gb.class.course.assignments)))
-    for mark in marks
+    for mark ∈ marks
         if length(mark) <= 2 && any(x->isa(x, AttendanceStatus), mark) && !(any(x->isa(try
-                    get_student(x, gb.class.roster; threshold=threshold)
+                    get_student(x, gb; threshold=threshold)
                 catch
                     false
                 end, Student), mark))
@@ -86,23 +83,23 @@ function attendance_record!(gb::Gradebook, date_stamp::Union{Date, String}, date
             record = length(mark) == 2 ? AttendanceRecord(mark[which_record_idx], date_stamp, mark[which_record_idx == 1 ? 2 : 1]) : AttendanceRecord(only(mark), date_stamp)
             map(s->record!(gb, s, lecture, record), gb.class.roster.students)
         elseif length(mark) <= 3 && any(x->isa(x, AttendanceStatus), mark) && any(x->isa(try
-                    get_student(x, gb.class.roster; threshold=threshold)
+                    get_student(x, gb; threshold=threshold)
                 catch
                     false
                 end, Student), mark)
             which_record_idx = findfirst(x->isa(x, AttendanceStatus), mark)
-            which_student_idx = findfirst(x->isa(get_student(x, gb.class.roster; threshold=threshold), Student), mark)
+            which_student_idx = findfirst(x->isa(get_student(x, gb; threshold=threshold), Student), mark)
             record = if length(mark) == 3
                 which_comment_idx = findfirst(x->x ∉ [which_record_idx, which_student_idx], [1, 2, 3])
                 AttendanceRecord(mark[which_record_idx], date_stamp, mark[which_comment_idx])
             elseif length(mark) == 2
                 AttendanceRecord(mark[which_record_idx], date_stamp)
             else
-                error("foo")
+                error("Could not parse mark for which is student, stamp, or comment: $mark")
             end
-            record!(gb, get_student(mark[which_student_idx], gb.class.roster), lecture, record)
+            record!(gb, get_student(mark[which_student_idx], gb), lecture, record)
         else
-            error("bar")
+            error("Could not parse mark for which is student, stamp, or comment: $mark")
         end
     end
     return nothing
@@ -113,7 +110,7 @@ Maps string input to `AttendanceStatus` value.
 
 ## Example
 ```
-function attendance_status_from_string(x::AbstractString)
+function attendance_status_map_from_string(x::AbstractString)
     s = lowercase(strip(x))
     return if s == "present"
         Present
@@ -142,36 +139,17 @@ If using this method, make sure to implement `attendance_status_map_from_string(
 function attendance_record!(gb::Gradebook, date_stamp::Union{Date, String}, regex::Regex, dir::String; date_row::Int=1, use_last=true, threshold=STRING_MATCH_THRESHOLD)
     lecture_dates = map(x->Date(x.due), gb.class.lectures)
     course_exports = sort(filter(x->occursin(regex, basename(x)), readdir(dir; join=true)))
-    for course_export in course_exports[use_last ? [end] : begin:end]
-        # @show basename(course_export)
+    for course_export ∈ course_exports[use_last ? [end] : begin:end]
         submissions_df = CSV.read(course_export, DataFrame)
         attendance_records_idx = findall(x->any(x .== string.(findall(x->!ismissing(x) && isa(parse_datetime(string_sanitize(x)), AbstractDateTime), submissions_df[date_row, :]))), names(submissions_df))
         attendance_records = map(x->parse_datetime(string_sanitize(x)), collect(submissions_df[date_row, attendance_records_idx]))
-        # submissions_df = submissions_df[!, names(submissions_df)[vcat(1:(first(attendance_records_idx)-1), attendance_records_idx)]]
-        # dates = map(x->x[1:findfirst('T', x)-1], collect(submissions_df[1, :])[2:end][findall(x->(length(x)==25 && occursin('T', x)), collect(submissions_df[1, :])[2:end])])
-        # submissions_df = DataFrame(Matrix(submissions_df)[findfirst(!ismissing, submissions_df[!, "Email"]):end, begin:end-(length(collect(submissions_df[1, :])[2:end]) - length(dates))], ["Email", dates...])
-        # first_column, first_row = 0, 0
-        # for i in 1:(first(attendance_records_idx)-1)
-        #     submissions_df[!, i] = convert.(String, submissions_df[!, i])
-        #     if first_column == 0
-        #         for (j, val) in enumerate(submissions_df[!, i])
-        #             try
-        #                 get_student(val, gb.class.roster; threshold=threshold)
-        #             catch
-        #             else
-        #                 first_column, first_row = i, j
-        #                 break
-        #             end
-        #         end
-        #     end
-        # end
         first_column, first_row = 0, 0
-        for i in 1:(first(attendance_records_idx)-1)
+        for i ∈ 1:(first(attendance_records_idx)-1)
             submissions_df[!, i] = convert.(String, map(x -> ismissing(x) ? "" : x, submissions_df[!, i]))
             if first_column == 0
-                for (j, val) in enumerate(submissions_df[!, i])
+                for (j, val) ∈ enumerate(submissions_df[!, i])
                     try
-                        get_student(val, gb.class.roster; threshold=threshold)
+                        get_student(val, gb; threshold=threshold)
                         first_row = j
                         break
                     catch
@@ -194,16 +172,13 @@ function attendance_record!(gb::Gradebook, date_stamp::Union{Date, String}, rege
         if first_column == 0
             error("Could not find a column whose non-empty values all identify students in the roster.")
         end
-        for i in attendance_records_idx
-            # submissions_df[!, i] = convert.(AttendanceStatus, attendance_status_map_from_string.(submissions_df[!, i]))
+        for i ∈ attendance_records_idx
             submissions_df[!, i] = convert.(String, submissions_df[!, i])
         end
-        # submissions_df[!, 2] = convert.(Points, (map(x->ismissing(x) ? 0.0 : x, submissions_df[!, 2])))
-        # select!(submissions_df, ["Email", sort(names(submissions_df)[2:end])...])
         attendance_records_idx .-= first_column - 1
         submissions_df = submissions_df[first_row:end, first_column:end]
 
-        for (i, attendance_record) in zip(attendance_records_idx, attendance_records)
+        for (i, attendance_record) ∈ zip(attendance_records_idx, attendance_records)
             if !isnothing(findfirst(Date(attendance_record) .== lecture_dates))
                 marks = map(x->(x[1], attendance_status_map_from_string(x[2]), "3rd Party"), eachrow(submissions_df[!, [1, i]]))
                 attendance_record!(gb, date_stamp, Date(attendance_record), marks; threshold=threshold)
@@ -218,9 +193,8 @@ end
 "Calculates number of `Absent` for each student and records penalties."
 function attendance_update!(gb::Gradebook)
     df = select(gb.raw, map(x->x.codename, gb.class.lectures))
-    for (i, row) in enumerate(eachrow(df))
-        for j in 1:1:ncol(df)
-            # t = count(==(Absent), gb.raw[i, :][filter(j->isassigned(gb.raw[!, j], i), length(gb.class.course.assignments) .+ (1:length(gb.class.lectures)))]) # + count(==(0), Matrix(att.raw_score[occursin.(key, att.raw_score[!, "Email"]), :]))
+    for (i, row) ∈ enumerate(eachrow(df))
+        for j ∈ 1:1:ncol(df)
             t = count(isabsent, row[filter(k->isassigned(gb.raw[!, length(gb.class.course.assignments)+k], i), 1:j)]) # + count(==(0), collect(row)[begin:j])
             p = Point(isassigned(df[!, j], i) && isabsent(row[j]) && t > (ATTENDANCE_LIMIT + get_attendance_modifier(gb.class.roster.students[i])) ? ATTENDANCE_PENALTY : 0.0)
             gb.penalty[i, gb.class.lectures[j].codename] = p

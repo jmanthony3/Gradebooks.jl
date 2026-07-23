@@ -1,4 +1,5 @@
-export GradeLevel, determine_level, quality_points
+# export GradeLevel
+public gradelevel2string, gradelevel2qualitypoints
 export LetterGrade, Aplus, A, Aminus, Bplus, B, Bminus, Cplus, C, Cminus, Dplus, D, Dminus, F, FN, W, I
 export credit2lettergrade, gpa
 
@@ -6,88 +7,88 @@ export credit2lettergrade, gpa
 
 "Grade levels for predicate filtering and sorting."
 @enum GradeLevel begin
-    GradeAplus
-    GradeA
-    GradeAminus
-    GradeBplus
-    GradeB
-    GradeBminus
-    GradeCplus
-    GradeC
-    GradeCminus
-    GradeDplus
-    GradeD
-    GradeDminus
-    GradeF
-    GradeFN          # Failure for Non-attendance
-    GradeW           # Withdrawn
-    GradeI           # Incomplete
+    GradeLevel_Aplus
+    GradeLevel_A
+    GradeLevel_Aminus
+    GradeLevel_Bplus
+    GradeLevel_B
+    GradeLevel_Bminus
+    GradeLevel_Cplus
+    GradeLevel_C
+    GradeLevel_Cminus
+    GradeLevel_Dplus
+    GradeLevel_D
+    GradeLevel_Dminus
+    GradeLevel_F
+    GradeLevel_FN          # failure for non-attendance
+    GradeLevel_W           # withdrawn
+    GradeLevel_I           # incomplete
 end
 
-"Maps string to grade level."
-function determine_level(g::GradeLevel)::String
-    g == GradeAplus    && return "A+"
-    g == GradeA        && return "A"
-    g == GradeAminus   && return "A-"
-    g == GradeBplus    && return "B+"
-    g == GradeB        && return "B"
-    g == GradeBminus   && return "B-"
-    g == GradeCplus    && return "C+"
-    g == GradeC        && return "C"
-    g == GradeCminus   && return "C-"
-    g == GradeDplus    && return "D+"
-    g == GradeD        && return "D"
-    g == GradeDminus   && return "D-"
-    g == GradeF        && return "F"
-    g == GradeFN       && return "FN"
-    g == GradeW        && return "W"
-    g == GradeI        && return "I"
+"Maps grade level to string."
+function gradelevel2string(lvl::GradeLevel)::String
+    lvl == GradeLevel_Aplus    && return "A+"
+    lvl == GradeLevel_A        && return "A"
+    lvl == GradeLevel_Aminus   && return "A-"
+    lvl == GradeLevel_Bplus    && return "B+"
+    lvl == GradeLevel_B        && return "B"
+    lvl == GradeLevel_Bminus   && return "B-"
+    lvl == GradeLevel_Cplus    && return "C+"
+    lvl == GradeLevel_C        && return "C"
+    lvl == GradeLevel_Cminus   && return "C-"
+    lvl == GradeLevel_Dplus    && return "D+"
+    lvl == GradeLevel_D        && return "D"
+    lvl == GradeLevel_Dminus   && return "D-"
+    lvl == GradeLevel_F        && return "F"
+    lvl == GradeLevel_FN       && return "FN"
+    lvl == GradeLevel_W        && return "W"
+    lvl == GradeLevel_I        && return "I"
     @warn "Must be" GradeLevel
-    error("Input not recognized: g=$g")
+    error("Input not recognized: g=$lvl")
 end
 
 "Calculates quality point weight of `LetterGrade` according to preferences `COURSE_QUALITYPOINTS_A`, `COURSE_QUALITYPOINTS_PLUSMINUS`, and `COURSE_QUALITYPOINTS_APLUS`."
-function quality_points(lvl::GradeLevel)
-    return if   lvl == GradeF || lvl == GradeFN
+function gradelevel2qualitypoints(lvl::GradeLevel)
+    return if   lvl == GradeLevel_F || lvl == GradeLevel_FN
         0
-    elseif      lvl == GradeI || lvl == GradeW
+    elseif      lvl == GradeLevel_I || lvl == GradeLevel_W
         NaN
     elseif COURSE_QUALITYPOINTS_PLUSMINUS == 0
-        if      lvl ∈ (GradeAplus, GradeA, GradeAminus)
+        if      lvl ∈ (GradeLevel_Aplus, GradeLevel_A, GradeLevel_Aminus)
             COURSE_QUALITYPOINTS_A - 0
-        elseif  lvl ∈ (GradeBplus, GradeB, GradeBminus)
+        elseif  lvl ∈ (GradeLevel_Bplus, GradeLevel_B, GradeLevel_Bminus)
             COURSE_QUALITYPOINTS_A - 1
-        elseif  lvl ∈ (GradeCplus, GradeC, GradeCminus)
+        elseif  lvl ∈ (GradeLevel_Cplus, GradeLevel_C, GradeLevel_Cminus)
             COURSE_QUALITYPOINTS_A - 2
-        elseif  lvl ∈ (GradeDplus, GradeD, GradeDminus)
+        elseif  lvl ∈ (GradeLevel_Dplus, GradeLevel_D, GradeLevel_Dminus)
             COURSE_QUALITYPOINTS_A - 3
         else
             throw(ArgumentError("Unsupported grade level: $lvl"))
         end
     else
-        if      lvl == GradeAplus
+        if      lvl == GradeLevel_Aplus
             COURSE_QUALITYPOINTS_APLUS
-        elseif  lvl == GradeA
+        elseif  lvl == GradeLevel_A
             COURSE_QUALITYPOINTS_A
-        elseif  lvl == GradeAminus
+        elseif  lvl == GradeLevel_Aminus
             COURSE_QUALITYPOINTS_A - 0 - COURSE_QUALITYPOINTS_PLUSMINUS
-        elseif  lvl == GradeBplus
+        elseif  lvl == GradeLevel_Bplus
             COURSE_QUALITYPOINTS_A - 1 + COURSE_QUALITYPOINTS_PLUSMINUS
-        elseif  lvl == GradeB
+        elseif  lvl == GradeLevel_B
             COURSE_QUALITYPOINTS_A - 1
-        elseif  lvl == GradeBminus
+        elseif  lvl == GradeLevel_Bminus
             COURSE_QUALITYPOINTS_A - 1 - COURSE_QUALITYPOINTS_PLUSMINUS
-        elseif  lvl == GradeCplus
+        elseif  lvl == GradeLevel_Cplus
             COURSE_QUALITYPOINTS_A - 2 + COURSE_QUALITYPOINTS_PLUSMINUS
-        elseif  lvl == GradeC
+        elseif  lvl == GradeLevel_C
             COURSE_QUALITYPOINTS_A - 2
-        elseif  lvl == GradeCminus
+        elseif  lvl == GradeLevel_Cminus
             COURSE_QUALITYPOINTS_A - 2 - COURSE_QUALITYPOINTS_PLUSMINUS
-        elseif  lvl == GradeDplus
+        elseif  lvl == GradeLevel_Dplus
             COURSE_QUALITYPOINTS_A - 3 + COURSE_QUALITYPOINTS_PLUSMINUS
-        elseif  lvl == GradeD
+        elseif  lvl == GradeLevel_D
             COURSE_QUALITYPOINTS_A - 3
-        elseif  lvl == GradeDminus
+        elseif  lvl == GradeLevel_Dminus
             COURSE_QUALITYPOINTS_A - 3 - COURSE_QUALITYPOINTS_PLUSMINUS
         else
             throw(ArgumentError("Unsupported grade level: $lvl"))
@@ -96,35 +97,39 @@ function quality_points(lvl::GradeLevel)
 end
 
 
-"""
-    LetterGrade
-
-A validated 1- or 2-character academic letter grade (e.g. "A", "A+", "B-", "FN", "I", "W", etc.).
-Enforces length and provides nice printing/conversion.
-"""
+"Letter grade (e.g., A or B+) earned for course item."
 struct LetterGrade
     level::GradeLevel
-    string::String
-    quality_points::Real
 end
-LetterGrade(g::GradeLevel) = LetterGrade(g, determine_level(g), quality_points(g))
 
-const Aplus     = LetterGrade(GradeAplus)
-const A         = LetterGrade(GradeA)
-const Aminus    = LetterGrade(GradeAminus)
-const Bplus     = LetterGrade(GradeBplus)
-const B         = LetterGrade(GradeB)
-const Bminus    = LetterGrade(GradeBminus)
-const Cplus     = LetterGrade(GradeCplus)
-const C         = LetterGrade(GradeC)
-const Cminus    = LetterGrade(GradeCminus)
-const Dplus     = LetterGrade(GradeDplus)
-const D         = LetterGrade(GradeD)
-const Dminus    = LetterGrade(GradeDminus)
-const F         = LetterGrade(GradeF)
-const FN        = LetterGrade(GradeFN)
-const W         = LetterGrade(GradeW)
-const I         = LetterGrade(GradeI)
+function Base.getproperty(letter::LetterGrade, sym::Symbol)
+    if sym == :string
+        return gradelevel2string(getfield(letter, :level))
+    elseif sym == :quality_points
+        return gradelevel2qualitypoints(getfield(letter, :level))
+    else
+        return getfield(letter, sym)
+    end
+end
+
+Base.propertynames(ℓ::LetterGrade) = (:level, :string, :quality_points)
+
+const Aplus     = LetterGrade(GradeLevel_Aplus)
+const A         = LetterGrade(GradeLevel_A)
+const Aminus    = LetterGrade(GradeLevel_Aminus)
+const Bplus     = LetterGrade(GradeLevel_Bplus)
+const B         = LetterGrade(GradeLevel_B)
+const Bminus    = LetterGrade(GradeLevel_Bminus)
+const Cplus     = LetterGrade(GradeLevel_Cplus)
+const C         = LetterGrade(GradeLevel_C)
+const Cminus    = LetterGrade(GradeLevel_Cminus)
+const Dplus     = LetterGrade(GradeLevel_Dplus)
+const D         = LetterGrade(GradeLevel_D)
+const Dminus    = LetterGrade(GradeLevel_Dminus)
+const F         = LetterGrade(GradeLevel_F)
+const FN        = LetterGrade(GradeLevel_FN)
+const W         = LetterGrade(GradeLevel_W)
+const I         = LetterGrade(GradeLevel_I)
 
 
 "Converts `Credit` to `LetterGrade` according to preferences `COURSE_POINT_SCALE` and `COURSE_POINT_SCALE_PLUSMINUS`."

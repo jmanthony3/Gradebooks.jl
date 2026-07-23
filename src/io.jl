@@ -126,9 +126,29 @@ end
 function flatten_lettergrade(lg::LetterGrade)
     return Dict(
         "kind" => "LetterGrade",
-        "level" => lg.level,
-        "string" => lg.string,
-        "quality_points" => lg.quality_points
+        "level" => lg.level
+    )
+end
+
+function flatten_accommodation(a::Accommodation)
+    return Dict(
+        "kind" => "Accommodation",
+        "type" => a.type,
+        "details" => a.details,
+        "multiplier" => a.multiplier,
+        "notes" => a.notes,
+        "source_date" => a.source_date,
+    )
+end
+
+function flatten_extensiongrant(a::ExtensionGrant)
+    return Dict(
+        "kind" => "ExtensionGrant",
+        "assignment" => flatten_assignment(a.assignment),
+        "due" => a.due,
+        "granted" => a.granted,
+        "reason" => a.reason,
+        "notes" => a.notes,
     )
 end
 
@@ -137,6 +157,8 @@ function flatten_student(s::Student)
         "kind" => "Student",
         "person" => flatten_person(s.person),
         "discipline" => s.discipline,
+        "accommodations" => flatten_accommodation.(s.accommodations),
+        "extension_history" => flatten_extensiongrant.(s.extension_history),
         "enrollment_status" => string(s.enrollment_status),
         "final_grade" => isnothing(s.final_grade) ? nothing : flatten_lettergrade(s.final_grade),
         "withdrawal_date" => s.withdrawal_date,
@@ -163,10 +185,6 @@ function flatten_class(c::Class)
         "time_start" => c.time_start,
         "time_finish" => c.time_finish,
         "time_duration" => c.time_duration,
-        "lectures" => flatten_assignment(c.lectures),
-        "codename_short" => c.codename_short,
-        "codename_long" => c.codename_long,
-        "primary_instructor" => flatten_instructor(c.primary_instructor),
         "instructors" => flatten_instructor.(c.instructors),
         "roster" => flatten_student.(c.roster.students),
         "teams" => flatten_team.(c.teams)
@@ -178,8 +196,6 @@ function flatten_score(s::Score)
         "kind" => "Score",
         "earned" => s.earned,
         "value" => s.value,
-        "percent" => s.percent,
-        "letter" => flatten_lettergrade(s.letter),
         "comment" => s.comment
     )
 end
@@ -249,7 +265,7 @@ function flatten_dataframe(df::DataFrame)
     return Dict(
         "kind" => "DataFrame",
         "columns" => String.(names(df)),
-        "rows" => [[flatten_cell(df[i, j]) for j in 1:ncol(df)] for i in 1:nrow(df)]
+        "rows" => [[flatten_cell(df[i, j]) for j ∈ 1:ncol(df)] for i ∈ 1:nrow(df)]
     )
 end
 
@@ -378,14 +394,37 @@ function rebuild_lettergrade_from_dict(d)
     end
 end
 
+function rebuild_accommodation_from_dict(d)
+    type = findfirst(x->string(x)==d["type"], instances(AccommodationType))
+    return Accommodation(
+        instances(AccommodationType)[type],
+        d["details"],
+        parse(Float64, d["multiplier"]),
+        d["notes"],
+        parse_date(d["source_date"]),
+    )
+end
+
+function rebuild_extensiongrant_from_dict(d)
+    return ExtensionGrant(
+        rebuild_assignment_from_dict(d["assignment"]),
+        parse_datetime(d["due"]),
+        parse_datetime(d["granted"]),
+        d["reason"],
+        d["notes"],
+    )
+end
+
 function rebuild_student_from_dict(d)
     status = findfirst(x->string(x)==d["enrollment_status"], instances(EnrollmentStatus))
     if !isnothing(status)
-        return Dict(
+        return Student(
             rebuild_person_from_dict(d["person"]),
             d["discipline"],
+            (d["accommodations"] == "nothing" ? Accommodation[] : rebuild_accommodation_from_dict.(d["accommodations"])),
+            (d["extension_history"] == "nothing" ? ExtensionGrant[] : rebuild_extensiongrant_from_dict.(d["extension_history"])),
             instances(EnrollmentStatus)[status],
-            rebuild_lettergrade_from_dict(d["final_grade"]),
+            (d["final_grade"] == "nothing" ? nothing : rebuild_lettergrade_from_dict(d["final_grade"])),
             (d["withdrawal_date"] == "nothing" ? nothing : parse_datetime(d["withdrawal_date"])),
             d["notes"]
         )
@@ -415,10 +454,6 @@ function rebuild_class_from_dict(d)
         parse_time(d["time_start"]),
         parse_time(d["time_finish"]),
         parse_time(d["time_duration"]),
-        rebuild_assignment_from_dict.(d["lectures"]),
-        Symbol(d["codename_short"]),
-        Symbol(d["codename_long"]),
-        rebuild_instructor_from_dict(d["primary_instructor"]),
         rebuild_instructor_from_dict.(d["instructors"]),
         rebuild_roster_from_dict(d["roster"]),
         rebuild_team_from_dict.(d["teams"])
@@ -429,8 +464,6 @@ function rebuild_score_from_dict(d)
     return Score(
         parse(Point, d["earned"]),
         parse(Point, d["value"]),
-        parse(Percent, d["percent"]),
-        rebuild_lettergrade_from_dict(d["letter"]),
         d["comment"],
     )
 end
@@ -512,14 +545,14 @@ end
 function rebuild_dataframe_from_dict(d, assignments::Vector{Assignment}, students::Vector{Student})
     cols = Symbol.(d["columns"])
     rows = get(d, "rows", [])
-    assignment_lookup = Dict(string(a.codename) => a for a in assignments)
+    assignment_lookup = Dict(string(a.codename) => a for a ∈ assignments)
 
     out = Dict{Symbol, Vector{Any}}()
-    for (j, col) in enumerate(cols)
+    for (j, col) ∈ enumerate(cols)
         colname = string(col)
         assignment = get(assignment_lookup, colname, nothing)
         values = Vector{Any}()
-        for (i, row) in enumerate(rows)
+        for (i, row) ∈ enumerate(rows)
             push!(values, rebuild_cell_from_dict(row[j], assignment, students[i]))
         end
         out[col] = values

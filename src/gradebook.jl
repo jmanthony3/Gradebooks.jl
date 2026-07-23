@@ -1,4 +1,6 @@
-export Gradebook, grades_post!, grades_sync!
+export Gradebook
+public post_grade!
+export grades_post!, grades_sync!
 
 
 
@@ -15,26 +17,27 @@ mutable struct Gradebook <: AbstractGradebookNode
     total::DataFrame
 end
 function Gradebook(class::Class)
-    names = vcat([string(a.codename) for a in class.course.assignments], [string(a.codename) for a in class.lectures])
-    df_raw, df_penalty, df_total = DataFrame(), DataFrame(), DataFrame() # zeros(length(class.roster), length(names)), names)
-    for i in 1:1:length(class.course.assignments)
-        # df[!, i] = convert.(Grade, df[!, i])
+    df_raw, df_penalty, df_total = DataFrame(), DataFrame(), DataFrame()
+    for i ∈ 1:1:length(class.course.assignments)
         insertcols!(df_raw, class.course.assignments[i].codename=>Vector{Grade}(undef, length(class.roster)))
-        insertcols!(df_penalty, class.course.assignments[i].codename=>Vector{Point}(undef, length(class.roster)))
+        # insertcols!(df_penalty, class.course.assignments[i].codename=>Vector{Point}(undef, length(class.roster)))
+        insertcols!(df_penalty, class.course.assignments[i].codename=>fill(Point(0.0), length(class.roster)))
         insertcols!(df_total, class.course.assignments[i].codename=>Vector{Grade}(undef, length(class.roster)))
     end
-    for i in 1:1:length(class.lectures)
-        # df[!, i] = convert.(AttendanceRecord, df[!, i])
+    for i ∈ 1:1:length(class.lectures)
         insertcols!(df_raw, class.lectures[i].codename=>Vector{AttendanceRecord}(undef, length(class.roster)))
-        insertcols!(df_penalty, class.lectures[i].codename=>Vector{Point}(undef, length(class.roster)))
+        # insertcols!(df_penalty, class.lectures[i].codename=>Vector{Point}(undef, length(class.roster)))
+        insertcols!(df_penalty, class.lectures[i].codename=>fill(Point(0.0), length(class.roster)))
         insertcols!(df_total, class.lectures[i].codename=>Vector{AttendanceRecord}(undef, length(class.roster)))
     end
-    # return Gradebook(class, Grade[], deepcopy(df), deepcopy(df), deepcopy(df))
     return Gradebook(class, Grade[], df_raw, df_penalty, df_total)
 end
 
+get_student(identifier::String, gb::Gradebook; threshold=STRING_MATCH_THRESHOLD) = get_student(identifier, gb.class.roster; threshold=threshold)
+
+"Posts `grade` to gradebook."
 function post_grade!(gb::Gradebook, grade::Grade)
-    i = gb.class.roster.index.by_id[grade.student.person.id]
+    i = gb.class.roster.by_id[grade.student.person.id]
     gb.raw[i, grade.assignment.codename] = grade
     p = Point(grade.assignment.value * latepenalty(grade))
     gb.penalty[i, grade.assignment.codename] = p
@@ -52,19 +55,13 @@ This applies a scalar grade onto the entire assignment and risks erasing evaluat
 """
 function grades_post!(gb::Gradebook, grades::Vector{Grade})
     gb.grades = grades
-    # nonattendance_idx = filter(!isnothing, indexin(assignments, filter(isattendance, gb.class.course.assignments)))
     students = gb.class.roster.students
-    for grade in filter(g->g.student.enrollment_status == Active && all(g.student.final_grade .!= [FN, W, I]), grades)
-        i, j = gb.class.roster.index.by_id[grade.student.person.id], length(gb.class.course.assignments)
-        # gb.raw[i, grade.assignment.codename] = grade
-        # p = Point(grade.assignment.value * latepenalty(grade))
-        # gb.penalty[i, grade.assignment.codename] = p
-        # gb.total[i, grade.assignment.codename] = max(grade - grade.submission.score.earned, grade - p)
+    for grade ∈ filter(g->isactive(g.student) && (isnothing(g.student.final_grade) || all(g.student.final_grade .!= [FN, W, I])), grades)
+        i, j = gb.class.roster.by_id[grade.student.person.id], length(gb.class.course.assignments)
         post_grade!(gb, grade)
         x, y = zero(Point), zero(Point)
-        for (_, g) in enumerate(gb.total[i, :][filter(k->isassigned(gb.raw[!, k], i), 1:j)])
+        for (_, g) ∈ enumerate(gb.total[i, :][filter(k->isassigned(gb.raw[!, k], i), 1:j)])
             x += g.submission.score.earned.value
-            # y += gb.class.course.assignments[i].value
             y += g.assignment.value
         end
         students[i] = update(grade.student; final_grade=credit2lettergrade(x, y))
@@ -95,7 +92,7 @@ function grades_post!(gb::Gradebook, assignments::Vector{Assignment}, src::Strin
     end
     submissions_df = CSV.read(src, DataFrame)
     cols = fill(false, ncol(submissions_df))
-    for assignment in assignments
+    for assignment ∈ assignments
         cols .= false
         cols[find_submission_col(submissions_df, assignment; threshold=threshold)] = true
         submissions_df′ = submissions_df[!, Cols(by, cols)]
@@ -103,7 +100,7 @@ function grades_post!(gb::Gradebook, assignments::Vector{Assignment}, src::Strin
         submissions_df′[!, 1] = convert.(String, submissions_df′[!, 1])
         submissions_df′[!, 2] = convert.(Point, (map(x->ismissing(x) ? 0.0 : (isa(x, String) ? parse(x, Float64) : x), submissions_df′[!, 2])))
         grades = Grade[]
-        for row in eachrow(submissions_df′)
+        for row ∈ eachrow(submissions_df′)
             push!(grades, grade(row[1], gb.class.roster, assignment, assignment.due, row[2]; threshold=threshold))
         end
         grades_post!(gb, grades)
@@ -111,5 +108,5 @@ function grades_post!(gb::Gradebook, assignments::Vector{Assignment}, src::Strin
     return nothing
 end
 
-"Syncs current field value of gb.grades to gradebook."
+"Syncs current field value of `gb.grades` to gradebook."
 grades_sync!(gb::Gradebook) = grades_post!(gb, gb.grades)
