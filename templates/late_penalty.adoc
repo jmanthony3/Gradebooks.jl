@@ -1,0 +1,36 @@
+= Late Penalty Appeal: {{ course_code }} | {{ student_name }} ({{ student_id }})
+{{ instructor_name }}, {{ instructor_jobtitle }}, {{ instructor_organization }} <{{ instructor_email }}>
+:templateauthor: Dr. Joby M. Anthony III
+:templateauthorinitials: JMA3
+:templatedate: {{ report_date }}
+:revnumber: v1
+:revdate: {{ report_date }}
+:description: Summary of late work and appeal rationale.
+
+.Abstract
+****
+Course:: {{ course_code }} — {{ course_name }}
+Section:: {{ class_section }}
+Semester:: {{ class_semester }}
+
+Student:: {{ student_name }} ({{ student_id }})
+Assignment:: {{ assignment_name }}
+Due Date:: {{ assignment_due }}
+Submitted:: {{ submission_date }}
+Late Period:: {{ late_period }}
+Penalty Applied:: {{ penalty_applied }}
+****
+
+.Reason for Appeal
+{{ appeal_reason }}
+
+.Submission Evidence
+{% for e in evidence %}
+- {{ e.name }}
+{% endfor %}
+
+.Explanatory Notes
+{{ notes }}
+
+.Instructor Decision
+{{ instructor_decision }}

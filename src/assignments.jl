@@ -1,108 +1,191 @@
-export string2codename
-export AssignmentType, Group, Individual
-export AbstractAssignment, AbstractAttendance, AbstractExam, AbstractHomework, AbstractPaper, AbstractPresentation, AbstractProject, AbstractQuiz
-export Assignment, Attendance, Exam, Homework, Paper, Presentation, Project, Quiz
-export Submission, Grade
-export islate, late_penalty
+export Question, Rubric
+# public AssignmentCategory
+export Assignment, Attendance, Exam, Homework, Other, Paper, Presentation, Project, Quiz
+export isattendance, isexam, ishomework, isother, ispaper, ispresentation, isproject, isquiz
+export ExtensionGrant
 
 
-abstract type AbstractAssignment end
-abstract type AssignmentType end
-abstract type Group <: AssignmentType end
-abstract type Individual <: AssignmentType end
-abstract type AbstractAttendance{T<:Individual} <: AbstractAssignment end
-abstract type AbstractExam{T<:AssignmentType} <: AbstractAssignment end
-abstract type AbstractHomework{T<:AssignmentType} <: AbstractAssignment end
-abstract type AbstractPaper{T<:AssignmentType} <: AbstractAssignment end
-abstract type AbstractPresentation{T<:AssignmentType} <: AbstractAssignment end
-abstract type AbstractProject{T<:AssignmentType} <: AbstractAssignment end
-abstract type AbstractQuiz{T<:AssignmentType} <: AbstractAssignment end
 
-function string2codename(s)
-    articles = ["a", "an", "the"]
-    conjuctions = ["for", "and", "nor", "but", "or", "yet", "so"]
-    prepositions = ["of", "in", "for", "with", "on", "at", "from", "into", "during", "through", "without", "under", "over", "above", "below", "to"]
-    forbidden = vcat(articles, conjuctions, prepositions)
-    tokens = filter(!isempty, filter(s->lowercase(s) ∉ forbidden, split(filter(cn->!ispunct(cn) || cn ∈ ['{', '}'], s), " ")))
-    firstword_idx = findfirst(t->(first(t) == '{' ? true : isletter(first(t))), tokens)
-    if isnothing(firstword_idx)
-        @error "After sanitization, no remaining tokens begin with a letter." s tokens
-    end
-    return uppercase2symbol(mapreduce(t->(first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : (isdigit(first(t)) ? t : first(filter(!ispunct, t))), *, tokens[firstword_idx:end]))
-end
+using Dates: DateTime
 
-struct Assignment{T<:AbstractAssignment, Y<:AssignmentType}
+
+
+"As the leaf in course-assignment tree model, can be nested for questions with parts or rubric categories."
+struct Question <: AbstractGradebookNode
     name::String
-    value::Points
-    due::DateTime
-    questions::Vector{Question}
-    # class::Class
+    value::Credit
+    parts::Union{Nothing, Vector{Question}}
     codename::Symbol
-    function Assignment{T,Y}(name, value, due_date, questions, codename) where {T<:AbstractAssignment, Y<:AssignmentType}
-        if mapreduce(x->x.value, +, questions) ∉ [value, Percentage(1.0)]
-            @error "Value distribution of questions does not equal assignment" Σq=mapreduce(x->x.value, +, questions) assignment=(name, value)
+
+    function Question(name, value, parts, codename)
+        if !isnothing(parts)
+            if any(p->isa(p, Rubric), parts)
+                @error "Question parts cannot be of type `Rubric`" parts
+                error("Invalid type")
+            elseif !(all(p->isa(p.value, Point), parts) || all(p->isa(p.value, Percent), parts))
+                @error "Question parts must be of type `Point` or `Percent`" parts
+                error("Heterogeneous vector")
+            end
+            value_p = mapreduce(x->x.value.value, +, parts; init=0.0)
+            if isa(first(parts).value, Percent) ? !(isapprox(value_p, 1.0; atol=1e-6)) : (typeof(first(parts).value) == typeof(value) ? (value_p != value.value) : true)
+                @warn "Value distribution of question parts does not equal question value" Σp=value_p question=(name, value)
+            end
         end
         codename = if isa(codename, Symbol)
             codename
-        elseif isa(codename, String)
+        elseif isa(codename, AbstractString)
             string2codename(codename)
         else
-            @error "`codename` must be of type Symbol or String."
+            error("`codename` must be of type Symbol or AbstractString")
         end
-        return new{T,Y}(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), Points(value), parse_datetime(due_date), questions, uppercase2symbol(codename))
+        pieces = isa(parts, Rubric) ? parts.metrics : parts
+        return new(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), value, pieces, codename)
     end
 end
-Attendance(::Type{Y}, name, value, due_date, questions, codename) where {Y<:Individual}         = Assignment{AbstractAttendance, Y}(name, value, due_date, questions, codename)
-Exam(::Type{Y}, name, value, due_date, questions, codename) where {Y<:AssignmentType}           = Assignment{AbstractExam, Y}(name, value, due_date, questions, codename)
-Homework(::Type{Y}, name, value, due_date, questions, codename) where {Y<:AssignmentType}       = Assignment{AbstractHomework, Y}(name, value, due_date, questions, codename)
-Paper(::Type{Y}, name, value, due_date, questions, codename) where {Y<:AssignmentType}          = Assignment{AbstractPaper, Y}(name, value, due_date, questions, codename)
-Presentation(::Type{Y}, name, value, due_date, questions, codename) where {Y<:AssignmentType}   = Assignment{AbstractPresentation, Y}(name, value, due_date, questions, codename)
-Project(::Type{Y}, name, value, due_date, questions, codename) where {Y<:AssignmentType}        = Assignment{AbstractProject, Y}(name, value, due_date, questions, codename)
-Quiz(::Type{Y}, name, value, due_date, questions, codename) where {Y<:AssignmentType}           = Assignment{AbstractQuiz, Y}(name, value, due_date, questions, codename)
-Attendance(Y, name, value, due_date, questions)                                                 = Attendance(Y, name, value, due_date, questions, name)
-Exam(Y, name, value, due_date, questions)                                                       = Exam(Y, name, value, due_date, questions, name)
-Homework(Y, name, value, due_date, questions)                                                   = Homework(Y, name, value, due_date, questions, name)
-Paper(Y, name, value, due_date, questions)                                                      = Paper(Y, name, value, due_date, questions, name)
-Presentation(Y, name, value, due_date, questions)                                               = Presentation(Y, name, value, due_date, questions, name)
-Project(Y, name, value, due_date, questions)                                                    = Project(Y, name, value, due_date, questions, name)
-Quiz(Y, name, value, due_date, questions)                                                       = Quiz(Y, name, value, due_date, questions, name)
-
-# Score(assignment::Assignment, tallies::Vararg{Tally{T,M,V}}) where {T<:AbstractScore,M<:AbstractMark,V<:AbstractScore} = Score(assignment.value, tally(tallies...)) # mapreduce(tally, +, [tallies...]))
-# Score(assignment::Assignment, tallies::Vector{<:Tally}; comment="") = Score(mapreduce(tally, +, filter(!isempty, map(y->filter(x->isa(x.mark, y), tallies), [Grant, Subtract]))), assignment.value; comment=comment)
-Score(assignment::Assignment, tallies::Vector{<:Tally}; comment="") = Score(tally(tallies), assignment.value; comment=comment)
-Score(assignment::Assignment, tallies::Vararg{<:Tally}; comment="") = Score(assignment, collect(tallies); comment=comment)
-# function tally(assignment::Assignment, tallies::Vector{<:Union{<:AbstractMark, Tuple{<:AbstractMark, String}}})
-Score(assignment::Assignment, marks::Vector{<:AbstractMark}; comment="") = Score(assignment, map(x->Tally(assignment.questions[x[1]], x[2]), enumerate(marks)); comment=comment)
+Question(name, value, parts=nothing) = Question(name, value, parts, name)
 
 
-struct Submission # {T<:Assignment}
-    # assignment::Assignment
-    submitted::Union{DateTime, Dates.CompoundPeriod, Millisecond}
-    score::Score
-    # Submission(assignment, submitted, score) = new(assignment, parse_datetime(submitted), score)
-    Submission(submitted, score) = new(parse_datetime(submitted), score)
+"Weight distributions to calculate grade from evaluations."
+struct Rubric <: AbstractGradebookNode
+    name::String
+    metrics::Vector{Question}
+    codename::Symbol
+
+    function Rubric(name, metrics, codename)
+        if all(x->isa(x.value, Percent), metrics)
+            total = mapreduce(x->x.value.value, +, metrics; init=0.0)
+            if !isapprox(total, 1.0; atol=1e-6)
+                @warn "Rubric metric values do not sum to 100%" Σmetrics=100total
+            end
+        else
+            @error "Rubric metrics must be of type `Percent`" metrics
+            error("Heterogeneous vector")
+        end
+        codename = if isa(codename, Symbol)
+            codename
+        elseif isa(codename, AbstractString)
+            string2codename(codename)
+        else
+            error("`codename` must be of type Symbol or AbstractString")
+        end
+        return new(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), metrics, codename)
+    end
+end
+Rubric(name::String, metrics::Vector{Question}) = Rubric(name, metrics, name)
+Rubric(source::Question, metrics::Vector{Question}) = Rubric(source.name, metrics)
+
+
+@enum AssignmentCategory begin
+    Attendance_Assignment
+    Exam_Assignment
+    Homework_Assignment
+    Other_Assignment
+    Paper_Assignment
+    Presentation_Assignment
+    Project_Assignment
+    Quiz_Assignment
 end
 
+"""
+Is branch in course-assignment tree model always composed of at least one leaf question, even if not given.
 
-struct Grade # {T<:Assignment}
-    # class::Class
-    # instructor::Instructor
-    student::Student
+`is_group` switches whether assignment should be completed individually.
+"""
+struct Assignment <: AbstractGradebookNode
+    name::String
+    value::Point
+    due::DateTime
+    category::AssignmentCategory
+    is_group::Bool
+    questions::Vector{Question}
+    codename::Symbol
+
+    function Assignment(name, value, due, category, is_group, questions, codename)
+        if isnothing(questions)
+            questions = [Question(name, value)]
+        else
+            value_q, question_or_rubric = if any(q->isa(q, Question), questions)
+                mapreduce(x->x.value.value, +, filter(x->isa(x, Question), questions); init=0.0), true
+            elseif any(q->isa(q, Rubric), questions)
+                mapreduce(x->x.source.value.value, +, filter(x->isa(x, Rubric), questions); init=0.0), false
+            end
+            if question_or_rubric && any(q->isa(q, Rubric), questions)
+                value_q += mapreduce(x->x.source.value.value, +, filter(x->isa(x, Rubric), questions); init=0.0)
+            end
+            value_first = if question_or_rubric
+                first(filter(x->isa(x, Question), questions)).value
+            else
+                first(filter(x->isa(x, Rubric), questions)).source.value
+            end
+            if isa(value_first, Percent) ? !(isapprox(value_q, 1.0; atol=1e-6)) : (typeof(value_first) == typeof(value) ? (value_q != value.value) : true)
+                @warn "Value distribution of questions does not equal assignment value" Σq=value_q assignment=(name, value)
+            end
+        end
+        codename = if isa(codename, Symbol)
+            codename
+        elseif isa(codename, AbstractString)
+            string2codename(codename)
+        else
+            error("`codename` must be of type Symbol or AbstractString")
+        end
+        return new(join(map(t->(first(t, 2) == "\\{" && last(t, 2) == "\\}") ? "{$(t[begin+2:end-2])}" : ((first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : t), split(name, " ")), " "), Point(value), parse_datetime(due), category, is_group, questions, codename)
+    end
+end
+
+"Convenience function constructing `Assignment` to track attendance."
+Attendance(     name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Attendance_Assignment,    is_group, questions, string2codename(name))
+
+"Convenience function constructing `Assignment` for an exam."
+Exam(           name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Exam_Assignment,          is_group, questions, string2codename(name))
+
+"Convenience function constructing `Assignment` for homework."
+Homework(       name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Homework_Assignment,      is_group, questions, string2codename(name))
+
+"Convenience function constructing `Assignment` for some other academic item: e.g., extra credit."
+Other(          name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Other_Assignment,         is_group, questions, string2codename(name))
+
+"Convenience function constructing `Assignment` for a paper."
+Paper(          name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Paper_Assignment,         is_group, questions, string2codename(name))
+
+"Convenience function constructing `Assignment` for a presentation."
+Presentation(   name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Presentation_Assignment,  is_group, questions, string2codename(name))
+
+"Convenience function constructing `Assignment` for a project."
+Project(        name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Project_Assignment,       is_group, questions, string2codename(name))
+
+"Convenience function constructing `Assignment` for a quiz."
+Quiz(           name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Quiz_Assignment,          is_group, questions, string2codename(name))
+
+isattendance(x)                         = false
+isattendance(x::AssignmentCategory)     = x == Attendance_Assignment
+isattendance(x::Assignment)             = isattendance(x.category)
+isexam(x)                               = false
+isexam(x::AssignmentCategory)           = x == Exam_Assignment
+isexam(x::Assignment)                   = isexam(x.category)
+ishomework(x)                           = false
+ishomework(x::AssignmentCategory)       = x == Homework_Assignment
+ishomework(x::Assignment)               = ishomework(x.category)
+isother(x)                              = false
+isother(x::AssignmentCategory)          = x == Other_Assignment
+isother(x::Assignment)                  = isother(x.category)
+ispaper(x)                              = false
+ispaper(x::AssignmentCategory)          = x == Paper_Assignment
+ispaper(x::Assignment)                  = ispaper(x.category)
+ispresentation(x)                       = false
+ispresentation(x::AssignmentCategory)   = x == Presentation_Assignment
+ispresentation(x::Assignment)           = ispresentation(x.category)
+isproject(x)                            = false
+isproject(x::AssignmentCategory)        = x == Project_Assignment
+isproject(x::Assignment)                = isproject(x.category)
+isquiz(x)                               = false
+isquiz(x::AssignmentCategory)           = x == Quiz_Assignment
+isquiz(x::Assignment)                   = isquiz(x.category)
+
+
+struct ExtensionGrant
     assignment::Assignment
-    submission::Submission
+    due::DateTime
+    granted::DateTime
+    reason::String
+    notes::String
 end
-# Grade(student, submission) = Grade(student, submission.assignment, submission)
-Grade(student, assignment::Assignment, submitted, tallies::Vararg{Tally{T,M,V}}) where {T<:AbstractScore,M<:AbstractMark,V<:AbstractScore} = Grade(student, assignment, Submission(submitted, Score(assignment.value, map(tally, tallies))))
-
-
-islate(x::Millisecond) = x > Millisecond(0)
-islate(x::Dates.CompoundPeriod) = x > Millisecond(0)
-function islate(a::T, b::T) where {T<:DateTime}
-    # x = canonicalize(a - b)
-    # return x >= Millisecond(0.0) ? false : late_penalty(x)
-    return islate(a - b)
-end
-islate(x::Submission) = islate(x.submitted, x.assignment.due)
-
-late_penalty(x::Millisecond) = Percentage(x < Day(7) ? 0.05 : (x < Day(14) ? 0.10 : 1.0))
-late_penalty(x::Dates.CompoundPeriod) = Percentage(x < Day(7) ? 0.05 : (x < Day(14) ? 0.10 : 1.0))

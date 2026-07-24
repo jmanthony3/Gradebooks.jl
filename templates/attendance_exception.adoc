@@ -1,0 +1,32 @@
+= Attendance Exception Request: {{ course_code }} | {{ student_name }} ({{ student_id }})
+{{ instructor_name }}, {{ instructor_jobtitle }}, {{ instructor_organization }} <{{ instructor_email }}>
+:templateauthor: Dr. Joby M. Anthony III
+:templateauthorinitials: JMA3
+:templatedate: {{ report_date }}
+:revnumber: v1
+:revdate: {{ report_date }}
+:description: Attendance exception request and supporting documentation.
+
+.Abstract
+****
+Course:: {{ course_code }} — {{ course_name }}
+Section:: {{ class_section }}
+Semester:: {{ class_semester }}
+
+Student:: {{ student_name }}
+Student ID:: {{ student_id }}
+
+Requested Exception Period:: {{ exception_period }}
+Reason:: {{ exception_reason }}
+****
+
+.Supporting Documentation
+{% for e in evidence %}
+- {{ e.name }}
+{% endfor %}
+
+.Instructor Notes
+{{ notes }}
+
+.Decision
+{{ decision }}

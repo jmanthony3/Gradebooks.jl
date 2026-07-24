@@ -1,646 +1,483 @@
-export view_gradebook, view_attendance
+export view_gradebook, view_assignment, view_attendance
 
 
 
-# using Plots; gr()
-using RecipesBase
-using PrettyTables, Colors, ColorSchemes
-
-# default(
-#     fontfamily="Computer Modern",
-#     linewidth=1,
-#     framestyle=:box,
-#     label=nothing,
-#     grid=false)
-# scalefontsizes(1.3)
+using DataFrames
+using PrettyTables
+using Colors
+using ColorSchemes
 
 
 
-@userplot ViewGradebook
-# @userplot ViewAttendance
+numeric_value(x::Real) = Float64(x)
+numeric_value(x::Credit) = Float64(x.value)
+numeric_value(x::LetterGrade) = Float64(x.quality_points)
+numeric_value(x::Grade) = Float64(x.submission.score.earned)
+numeric_value(x::AttendanceStatus) = ispresent(x) ? 1 : (isexcused(x) ? 0.66 : (islate(x) || istardy(x) ? 0.33 : (isabsent(x) ? 0 : NaN)))
+numeric_value(x::AttendanceRecord) = numeric_value(x.status)
+numeric_value(x) = NaN
 
-@recipe f(::Type{Gradebook}, gb::Gradebook) = gb.data
-
-function view_gradebook(gb::Gradebook, assignments::Vector{Assignment})
-    final_grades = zeros((nrow(gb.total), 1))
-    for (i, row) in enumerate(eachrow(gb.total))
-        final_grades[i] = (collect(select(DataFrame(row), Not(["ID", "Preferred", "Last", "Team", "Email"]))[1, :]) |> sum)
-    end
-
-    data = gb.total[!, Cols(["ID", "Preferred", "Last", "Team", "Email"], map(x->x.codename, assignments))]
-    insertcols!(data, "Total"=>Points.(vec(final_grades)))
-    insertcols!(data, "Percent"=>Percentage.(vec(final_grades ./ sum(map(x->x.value, collect(assignments))))))
-    insertcols!(data, "Letter"=>score2letter.(Percentage.(vec(final_grades ./ sum(map(x->x.value, collect(assignments)))))))
-    insertcols!(data, "Missing"=>Points.(abs.(vec(final_grades) .- mapreduce(x->x.value, +, assignments))))
-    row_labels = [join(collect(row[1:5]), " ") for row in eachrow(data)]
-    column_labels = [
-        names(data),
-        vcat(fill("", 5), map(x->repr(typeof(x).parameters[1])[9:end], assignments)..., ["Course", "Course", "Course", "Course"]),
-        vcat(fill("", 5), map(x->typeof(x).parameters[2], assignments)..., ["Individual", "Individual", "Individual", "Individual"]),
-        vcat(fill("", 5), map(x->typeof(x).types[2], assignments)..., ["Points", "Percentage", "Letter", "Points"]),
-    ]
-    # Function to determine color based on value
-    function gradient_highlighter(_, data, i, j)
-        if 5 < j <= ncol(data)
-            val = if j < ncol(data) - 1
-                (data[i, j] == 0.0 ? 0.0 : data[i, j] / maximum(data[:, j]))
-            elseif j == ncol(data)
-                1.0 - (data[i, j] == 0.0 ? 0.0 : data[i, j] / maximum(data[:, j]))
-            else
-                (data[i, j] == 0.0 ? 0.0 : data[i, j-1] / maximum(data[:, j-1]))
-            end
-            # Map value (assuming 0-1 range) to a color from a scheme
-            color = get(colorschemes[:RdYlGn], val) # , :extrema)
-            hex_color = "#" * hex(color)
-            return ["background-color"=>hex_color]
-        else
-            return false
-        end
-    end
-    hl_data = HtmlHighlighter(
-            (data, i, j) -> (j >= 6), # && (data[i, j] > 0.0),
-            gradient_highlighter
-            # ["color"=>"blue", "font-weight"=>"bold"]
-        )
-    hl_total = HtmlHighlighter(
-            (data, i, j) -> (j == ncol(data)-3),
-            ["font-weight"=>"bold"]
-        )
-    hl_percent = HtmlHighlighter(
-            (data, i, j) -> (j == ncol(data)-2),
-            ["font-weight"=>"italic"]
-        )
-    hl_letter = HtmlHighlighter(
-            (data, i, j) -> (j == ncol(data)-1), # && (data[i, j] > 0.0),
-            gradient_highlighter
-            # ["color"=>"blue", "font-weight"=>"bold"]
-        )
-    hl_missing = HtmlHighlighter(
-            (data, i, j) -> (j == ncol(data)), # && (data[i, j] > 0.0),
-            gradient_highlighter
-            # ["color"=>"blue", "font-weight"=>"bold"]
-        )
-    p = PrettyTable(
-        data;
-        title           = "$(gb.who.codename_long): $(gb.who.course.name)",
-        subtitle        = "Class Gradebook",
-        row_labels      = row_labels,
-        column_labels   = column_labels,
-        summary_row_labels=["Worth", "Due", "Average (Points)", "Average (Percentage)"], # , "S.Dev", "Running Average (Percentage)"],
-        summary_rows    = [
-            (matrix, j)->j == ncol(data)-3 ? mapreduce(x->x.value, +, assignments) : ((5 < j <= length(assignments)+5) ? assignments[j - 5].value : ""),
-            (matrix, j)->(5 < j <= length(assignments)+5) ? assignments[j - 5].due : "",
-            (matrix, j)->j == ncol(data)-3 ? Points.(sum(data[:, j])/length(data[:, j])) : (
-                j == ncol(data)-2 ? (Points.(sum(data[:, j-1])/length(data[:, j-1])) / mapreduce(x->x.value, +, assignments)) : (
-                    j == ncol(data)-1 ? score2letter(Points.(sum(data[:, j-2])/length(data[:, j-2])) / mapreduce(x->x.value, +, assignments)) : (
-                        j == ncol(data) ? Points.(sum(data[:, j])/length(data[:, j])) : (
-                            (5 < j <= length(assignments)+5) ? Points.(sum(data[:, j])/length(data[:, j])) : "")))),
-            (matrix, j)->(5 < j <= length(assignments)+5) ? Percentage.(Points.(sum(data[:, j])/length(data[:, j]))/assignments[j - 5].value) : "",
-            # (data, i, j)->,
-            # (data, i, j)->
-        ],
-        style           = HtmlTableStyle(; first_line_column_label = ["font-weight"=>"bold"], column_label = ["color"=>"gray", "font-style"=>"italic"]),
-        highlighters    = [hl_data, hl_total, hl_percent, hl_letter, hl_missing],
-        table_format    = HtmlTableFormat("""
-    .table-wrapper {
-    overflow: auto; /* Enables scrolling within the container */
-    max-height: 400px; /* Optional: Sets a maximum height for vertical scrolling */
-    max-width: 600px; /* Optional: Sets a maximum width for horizontal scrolling */
-    }
-
-    /* Make the header row sticky at the top */
-    thead th {
-    position: sticky;
-    top: 0;
-    background-color: #f1f1f1; /* Add a background color */
-    z-index: 2; /* Ensures headers are above body cells when scrolling vertically */
-    }
-
-    /* Make the first column sticky on the left */
-    tbody td:first-child,
-    tbody th:first-child { /* Use th if your first column cells are headers */
-    position: sticky;
-    left: 0;
-    background-color: #f9f9f9; /* Add a background color */
-    z-index: 1; /* Ensures the first column is above other body cells when scrolling horizontally */
-    }
-
-    /* Ensure the top-left corner cell (header of the first column) is above everything */
-    thead th:first-child {
-    z-index: 3; /* Must be the highest z-index */
-    }
-
-    /* Optional: Add borders and spacing for better visual separation */
-    table {
-    border-collapse: separate;
-    border-spacing: 0;
-    }
-    td, th {
-    padding: 10px;
-    border: 1px solid #ddd;
-    }
-    """, ""),
-        backend         = :html,
-        stand_alone     = true
-    )
-    out = joinpath([pwd(), "gradebook", "build", "gradebook.html"])
-    mkpath(dirname(out))
-    open(out, "w") do io
-        write(io, repr(p))
-    end
-    # run(`cmd /c start $out`)
+function column_bounds(df::DataFrame, j::Int)
+    vals = filter(!isnan, map(numeric_value, df[:, j]))
+    return isempty(vals) ? (0.0, 1.0) : (minimum(vals), maximum(vals))
 end
 
-function view_gradebook(gb::Gradebook, att::Gradebook, assignments::Vector{Assignment})
-    final_grades = zeros((nrow(gb.total), 1))
-    for (i, row) in enumerate(eachrow(gb.total))
-        final_grades[i] = (collect(select(DataFrame(row), Not(["ID", "Preferred", "Last", "Team", "Email"]))[1, :]) |> sum) - att.penalty[i, end]
+function color_for_value(_, data, i, j)
+    v = data[i, j]
+    nv = numeric_value(v)
+    lo, hi = column_bounds(data, j)
+    c = if isnan(nv)
+        "#ffffff"
+    elseif lo == hi
+        "#" * hex(get(colorschemes[:RdYlGn], 1))
+    else
+        s = clamp((nv - lo) / (hi - lo), 0, 1)
+        "#" * hex(get(colorschemes[:RdYlGn], s))
     end
-
-    data = gb.total[!, Cols(["ID", "Preferred", "Last", "Team", "Email"], map(x->x.codename, assignments))]
-    insertcols!(data, "Total"=>Points.(vec(final_grades)))
-    insertcols!(data, "Percent"=>Percentage.(vec(final_grades ./ sum(map(x->x.value, collect(assignments))))))
-    insertcols!(data, "Letter"=>score2letter.(Percentage.(vec(final_grades ./ sum(map(x->x.value, collect(assignments)))))))
-    insertcols!(data, "Missing"=>Points.(abs.(vec(final_grades) .- mapreduce(x->x.value, +, assignments))))
-    row_labels = [join(collect(row[1:5]), " ") for row in eachrow(data)]
-    column_labels = [
-        names(data),
-        vcat(fill("", 5), map(x->repr(typeof(x).parameters[1])[9:end], assignments)..., ["Course", "Course", "Course", "Course"]),
-        vcat(fill("", 5), map(x->typeof(x).parameters[2], assignments)..., ["Individual", "Individual", "Individual", "Individual"]),
-        vcat(fill("", 5), map(x->typeof(x).types[2], assignments)..., ["Points", "Percentage", "Letter", "Points"]),
-    ]
-    # Function to determine color based on value
-    function gradient_highlighter(_, data, i, j)
-        if 5 < j <= ncol(data)
-            val = if j < ncol(data) - 1
-                (data[i, j] == 0.0 ? 0.0 : data[i, j] / maximum(data[:, j]))
-            elseif j == ncol(data)
-                1.0 - (data[i, j] == 0.0 ? 0.0 : data[i, j] / maximum(data[:, j]))
-            else
-                (data[i, j] == 0.0 ? 0.0 : data[i, j-1] / maximum(data[:, j-1]))
-            end
-            # Map value (assuming 0-1 range) to a color from a scheme
-            color = get(colorschemes[:RdYlGn], val) # , :extrema)
-            hex_color = "#" * hex(color)
-            return ["background-color"=>hex_color]
-        else
-            return false
-        end
-    end
-    hl_data = HtmlHighlighter(
-            (data, i, j) -> (j >= 6), # && (data[i, j] > 0.0),
-            gradient_highlighter
-            # ["color"=>"blue", "font-weight"=>"bold"]
-        )
-    hl_total = HtmlHighlighter(
-            (data, i, j) -> (j == ncol(data)-3),
-            ["font-weight"=>"bold"]
-        )
-    hl_percent = HtmlHighlighter(
-            (data, i, j) -> (j == ncol(data)-2),
-            ["font-weight"=>"italic"]
-        )
-    hl_letter = HtmlHighlighter(
-            (data, i, j) -> (j == ncol(data)-1), # && (data[i, j] > 0.0),
-            gradient_highlighter
-            # ["color"=>"blue", "font-weight"=>"bold"]
-        )
-    hl_missing = HtmlHighlighter(
-            (data, i, j) -> (j == ncol(data)), # && (data[i, j] > 0.0),
-            gradient_highlighter
-            # ["color"=>"blue", "font-weight"=>"bold"]
-        )
-    p = PrettyTable(
-        data;
-        title           = "$(gb.who.codename_long): $(gb.who.course.name)",
-        subtitle        = "Class Gradebook",
-        row_labels      = row_labels,
-        column_labels   = column_labels,
-        summary_row_labels=["Worth", "Due", "Average (Points)", "Average (Percentage)"], # , "S.Dev", "Running Average (Percentage)"],
-        summary_rows    = [
-            (matrix, j)->j == ncol(data)-3 ? mapreduce(x->x.value, +, assignments) : ((5 < j <= length(assignments)+5) ? assignments[j - 5].value : ""),
-            (matrix, j)->(5 < j <= length(assignments)+5) ? assignments[j - 5].due : "",
-            (matrix, j)->j == ncol(data)-3 ? Points.(sum(data[:, j])/length(data[:, j])) : (
-                j == ncol(data)-2 ? (Points.(sum(data[:, j-1])/length(data[:, j-1])) / mapreduce(x->x.value, +, assignments)) : (
-                    j == ncol(data)-1 ? score2letter(Points.(sum(data[:, j-2])/length(data[:, j-2])) / mapreduce(x->x.value, +, assignments)) : (
-                        j == ncol(data) ? Points.(sum(data[:, j])/length(data[:, j])) : (
-                            (5 < j <= length(assignments)+5) ? Points.(sum(data[:, j])/length(data[:, j])) : "")))),
-            (matrix, j)->(5 < j <= length(assignments)+5) ? Percentage.(Points.(sum(data[:, j])/length(data[:, j]))/assignments[j - 5].value) : "",
-            # (data, i, j)->,
-            # (data, i, j)->
-        ],
-        style           = HtmlTableStyle(; first_line_column_label = ["font-weight"=>"bold"], column_label = ["color"=>"gray", "font-style"=>"italic"]),
-        highlighters    = [hl_data, hl_total, hl_percent, hl_letter, hl_missing],
-        table_format    = HtmlTableFormat("""
-    .table-wrapper {
-    overflow: auto; /* Enables scrolling within the container */
-    max-height: 400px; /* Optional: Sets a maximum height for vertical scrolling */
-    max-width: 600px; /* Optional: Sets a maximum width for horizontal scrolling */
-    }
-
-    /* Make the header row sticky at the top */
-    thead th {
-    position: sticky;
-    top: 0;
-    background-color: #f1f1f1; /* Add a background color */
-    z-index: 2; /* Ensures headers are above body cells when scrolling vertically */
-    }
-
-    /* Make the first column sticky on the left */
-    tbody td:first-child,
-    tbody th:first-child { /* Use th if your first column cells are headers */
-    position: sticky;
-    left: 0;
-    background-color: #f9f9f9; /* Add a background color */
-    z-index: 1; /* Ensures the first column is above other body cells when scrolling horizontally */
-    }
-
-    /* Ensure the top-left corner cell (header of the first column) is above everything */
-    thead th:first-child {
-    z-index: 3; /* Must be the highest z-index */
-    }
-
-    /* Optional: Add borders and spacing for better visual separation */
-    table {
-    border-collapse: separate;
-    border-spacing: 0;
-    }
-    td, th {
-    padding: 10px;
-    border: 1px solid #ddd;
-    }
-    """, ""),
-        backend         = :html,
-        stand_alone     = true
-    )
-    out = joinpath([pwd(), "gradebook", "build", "gradebook.html"])
-    mkpath(dirname(out))
-    open(out, "w") do io
-        write(io, repr(p))
-    end
-    # run(`cmd /c start $out`)
+    return ["background-color" => c]
 end
 
-function view_gradebook(gb::Gradebook, att::Gradebook, identifier::String, assignments::Vector{Assignment})
-    final_grades = zeros((nrow(gb.total), 1))
-    for (i, row) in enumerate(eachrow(gb.total))
-        final_grades[i] = (collect(select(DataFrame(row), Not(["ID", "Preferred", "Last", "Team", "Email"]))[1, :]) |> sum) - att.penalty[i, end]
+function color_for_value_invert(_, data, i, j)
+    v = data[i, j]
+    nv = numeric_value(v)
+    lo, hi = column_bounds(data, j)
+    c = if isnan(nv)
+        "#ffffff"
+    elseif lo == hi
+        "#" * hex(get(colorschemes[:RdYlGn], 1))
+    else
+        s = 1 - clamp((nv - lo) / (hi - lo), 0, 1)
+        "#" * hex(get(colorschemes[:RdYlGn], s))
     end
-
-    data = gb.total[!, Cols(["ID", "Preferred", "Last", "Team", "Email"], map(x->x.codename, assignments))]
-    insertcols!(data, "Total"=>Points.(vec(final_grades)))
-    insertcols!(data, "Percent"=>Percentage.(vec(final_grades ./ sum(map(x->x.value, collect(assignments))))))
-    insertcols!(data, "Letter"=>score2letter.(Percentage.(vec(final_grades ./ sum(map(x->x.value, collect(assignments)))))))
-    insertcols!(data, "Missing"=>Points.(abs.(vec(final_grades) .- mapreduce(x->x.value, +, assignments))))
-    row_labels = [join(collect(row[1:5]), " ") for row in eachrow(data)]
-    column_labels = [
-        names(data),
-        vcat(fill("", 5), map(x->repr(typeof(x).parameters[1])[9:end], assignments)..., ["Course", "Course", "Course", "Course"]),
-        vcat(fill("", 5), map(x->typeof(x).parameters[2], assignments)..., ["Individual", "Individual", "Individual", "Individual"]),
-        vcat(fill("", 5), map(x->typeof(x).types[2], assignments)..., ["Points", "Percentage", "Letter", "Points"]),
-    ]
-    # Function to determine color based on value
-    function gradient_highlighter(_, data, i, j)
-        if 5 < j <= ncol(data)
-            val = if j < ncol(data) - 1
-                (data[i, j] == 0.0 ? 0.0 : data[i, j] / maximum(data[:, j]))
-            elseif j == ncol(data)
-                1.0 - (data[i, j] == 0.0 ? 0.0 : data[i, j] / maximum(data[:, j]))
-            else
-                (data[i, j] == 0.0 ? 0.0 : data[i, j-1] / maximum(data[:, j-1]))
-            end
-            # Map value (assuming 0-1 range) to a color from a scheme
-            color = get(colorschemes[:RdYlGn], val) # , :extrema)
-            hex_color = "#" * hex(color)
-            return ["background-color"=>hex_color]
-        else
-            return false
-        end
-    end
-    hl_data = HtmlHighlighter(
-            (data, i, j) -> (j >= 6), # && (data[i, j] > 0.0),
-            gradient_highlighter
-            # ["color"=>"blue", "font-weight"=>"bold"]
-        )
-    hl_total = HtmlHighlighter(
-            (data, i, j) -> (j == ncol(data)-3),
-            ["font-weight"=>"bold"]
-        )
-    hl_percent = HtmlHighlighter(
-            (data, i, j) -> (j == ncol(data)-2),
-            ["font-weight"=>"italic"]
-        )
-    hl_letter = HtmlHighlighter(
-            (data, i, j) -> (j == ncol(data)-1), # && (data[i, j] > 0.0),
-            gradient_highlighter
-            # ["color"=>"blue", "font-weight"=>"bold"]
-        )
-    hl_missing = HtmlHighlighter(
-            (data, i, j) -> (j == ncol(data)), # && (data[i, j] > 0.0),
-            gradient_highlighter
-            # ["color"=>"blue", "font-weight"=>"bold"]
-        )
-    p = PrettyTable(
-        data[occursin.(get_student(gb.who.roster, identifier).email, data[!, "Email"]), :];
-        title           = "$(gb.who.codename_long): $(gb.who.course.name)",
-        subtitle        = "Class Gradebook",
-        row_labels      = [row_labels[findfirst(occursin.(get_student(gb.who.roster, identifier).email, data[!, "Email"]))]],
-        column_labels   = column_labels,
-        summary_row_labels=["Worth", "Due", "Average (Points)", "Average (Percentage)"], # , "S.Dev", "Running Average (Percentage)"],
-        summary_rows    = [
-            (matrix, j)->j == ncol(data)-3 ? mapreduce(x->x.value, +, assignments) : ((5 < j <= length(assignments)+5) ? assignments[j - 5].value : ""),
-            (matrix, j)->(5 < j <= length(assignments)+5) ? assignments[j - 5].due : "",
-            (matrix, j)->j == ncol(data)-3 ? Points.(sum(data[:, j])/length(data[:, j])) : (
-                j == ncol(data)-2 ? (Points.(sum(data[:, j-1])/length(data[:, j-1])) / mapreduce(x->x.value, +, assignments)) : (
-                    j == ncol(data)-1 ? score2letter(Points.(sum(data[:, j-2])/length(data[:, j-2])) / mapreduce(x->x.value, +, assignments)) : (
-                        j == ncol(data) ? Points.(sum(data[:, j])/length(data[:, j])) : (
-                            (5 < j <= length(assignments)+5) ? Points.(sum(data[:, j])/length(data[:, j])) : "")))),
-            (matrix, j)->(5 < j <= length(assignments)+5) ? Percentage.(Points.(sum(data[:, j])/length(data[:, j]))/assignments[j - 5].value) : "",
-            # (data, i, j)->,
-            # (data, i, j)->
-        ],
-        style           = HtmlTableStyle(; first_line_column_label = ["font-weight"=>"bold"], column_label = ["color"=>"gray", "font-style"=>"italic"]),
-        highlighters    = [hl_data, hl_total, hl_percent, hl_letter, hl_missing],
-        table_format    = HtmlTableFormat("""
-    .table-wrapper {
-    overflow: auto; /* Enables scrolling within the container */
-    max-height: 400px; /* Optional: Sets a maximum height for vertical scrolling */
-    max-width: 600px; /* Optional: Sets a maximum width for horizontal scrolling */
-    }
-
-    /* Make the header row sticky at the top */
-    thead th {
-    position: sticky;
-    top: 0;
-    background-color: #f1f1f1; /* Add a background color */
-    z-index: 2; /* Ensures headers are above body cells when scrolling vertically */
-    }
-
-    /* Make the first column sticky on the left */
-    tbody td:first-child,
-    tbody th:first-child { /* Use th if your first column cells are headers */
-    position: sticky;
-    left: 0;
-    background-color: #f9f9f9; /* Add a background color */
-    z-index: 1; /* Ensures the first column is above other body cells when scrolling horizontally */
-    }
-
-    /* Ensure the top-left corner cell (header of the first column) is above everything */
-    thead th:first-child {
-    z-index: 3; /* Must be the highest z-index */
-    }
-
-    /* Optional: Add borders and spacing for better visual separation */
-    table {
-    border-collapse: separate;
-    border-spacing: 0;
-    }
-    td, th {
-    padding: 10px;
-    border: 1px solid #ddd;
-    }
-    """, ""),
-        backend         = :html,
-        stand_alone     = true
-    )
-    out = joinpath([pwd(), "gradebook", "build", "gradebook.html"])
-    mkpath(dirname(out))
-    open(out, "w") do io
-        write(io, repr(p))
-    end
-    # run(`cmd /c start $out`)
+    return ["background-color" => c]
 end
 
-function view_attendance(att::Gradebook, lectures::Vector{Assignment})
-    number_of_elective_absences = zeros((nrow(att.raw_score), 1))
-    for (i, row) in enumerate(eachrow(att.raw_score))
-        number_of_elective_absences[i] = count(==(0), collect(select(DataFrame(row), Not(["ID", "Preferred", "Last", "Email"]))[1, :]))
+function per_column_highlighters(df::DataFrame; invert_cols=Set{String}())
+    df_names = names(df)
+    hls = HtmlHighlighter[]
+    for j ∈ 1:ncol(df)
+        push!(hls, HtmlHighlighter(
+            (data, i, jj) -> jj == j,
+            (df_names[j] ∈ invert_cols) ? color_for_value_invert : color_for_value
+        ))
     end
-    data = att.raw_score
-    insertcols!(data, "Total"=>vec(number_of_elective_absences))
-    # insertcols!(data, "Percent"=>Percentage.(vec(final_grades ./ sum(map(x->x.value, collect(assignments)[1:assignment_range_b])))))
-    # insertcols!(data, "Letter"=>score2letter.(Percentage.(vec(final_grades ./ sum(map(x->x.value, collect(assignments)[1:assignment_range_b]))))))
-    row_labels = [join(collect(row[1:4]), " ") for row in eachrow(data)]
-    column_labels = [
-        names(data),
-        vcat(fill("", 4), map(x->repr(typeof(x).parameters[1])[9:end], lectures[1:ncol(data)-5])..., ["Course"]),
-        vcat(fill("", 4), map(x->typeof(x).parameters[2], lectures[1:ncol(data)-5])..., ["Individual"]),
-        vcat(fill("", 4), map(x->typeof(x).types[2], lectures[1:ncol(data)-5])..., ["Points"]),
-    ]
-    # Function to determine color based on value
-    function gradient_highlighter(_, data, i, j)
-        if 4 < j <= ncol(data)
-            val = if j != ncol(data)
-                (isinf(data[i, j].val) ? -1 : data[i, j])
-            else
-                (isinf(data[i, j].val) ? -1 : data[i, j-1])
-            end
-            # Map value (assuming 0-1 range) to a color from a scheme
-            color = get(colorschemes[:RdYlGn], (val + 1) / 2) # , :extrema)
-            hex_color = "#" * hex(color)
-            return ["background-color"=>hex_color]
-        else
-            return false
-        end
-    end
-    hl_data = HtmlHighlighter(
-            (data, i, j) -> (ncol(data) > j && j >= 5), # && (data[i, j] > 0.0),
-            gradient_highlighter
-            # ["color"=>"blue", "font-weight"=>"bold"]
-        )
-    hl_total = HtmlHighlighter(
-            (data, i, j) -> (j == ncol(data)) && (data[i, j] > 0.0),
-            ["background-color"=>"red", "font-weight"=>"bold"]
-        )
-    # hl_percent = HtmlHighlighter(
-    #         (data, i, j) -> (j == ncol(data)-1),
-    #         ["font-weight"=>"italic"]
-    #     )
-    # hl_letter = HtmlHighlighter(
-    #     (data, i, j) -> (j == ncol(data)), # && (data[i, j] > 0.0),
-    #     gradient_highlighter
-    #     # ["color"=>"blue", "font-weight"=>"bold"]
-    # )
-    p = PrettyTable(
-        data;
-        title           = "$(att.who.codename_long): $(att.who.course.name)",
-        subtitle        = "Class Attendance",
-        row_labels      = row_labels,
-        column_labels   = column_labels,
-        summary_row_labels=["Worth", "Due", "Average (Points)", "Average (Percentage)"], # , "S.Dev", "Running Average (Percentage)"],
-        summary_rows    = [
-            (data, j)->(4 < j <= length(lectures)+4) ? lectures[j - 4].value : "",
-            (data, j)->(4 < j <= length(lectures)+4) ? lectures[j - 4].due : "",
-            (data, j)->(4 < j <= length(lectures)+4) ? Points.(sum(data[:, j])/length(data[:, j])) : "",
-            (data, j)->(4 < j <= length(lectures)+4) ? Percentage.(Points.(sum(data[:, j])/length(data[:, j]))/lectures[j - 4].value) : "",
-            # (data, i, j)->,
-            # (data, i, j)->
-        ],
-        style           = HtmlTableStyle(; first_line_column_label = ["font-weight"=>"bold"], column_label = ["color"=>"gray", "font-style"=>"italic"]),
-        highlighters    = [hl_data, hl_total],
-        table_format    = HtmlTableFormat("""
-    .table-wrapper {
-    overflow: auto; /* Enables scrolling within the container */
-    max-height: 400px; /* Optional: Sets a maximum height for vertical scrolling */
-    max-width: 600px; /* Optional: Sets a maximum width for horizontal scrolling */
-    }
-
-    /* Make the header row sticky at the top */
-    thead th {
-    position: sticky;
-    top: 0;
-    background-color: #f1f1f1; /* Add a background color */
-    z-index: 2; /* Ensures headers are above body cells when scrolling vertically */
-    }
-
-    /* Make the first column sticky on the left */
-    tbody td:first-child,
-    tbody th:first-child { /* Use th if your first column cells are headers */
-    position: sticky;
-    left: 0;
-    background-color: #f9f9f9; /* Add a background color */
-    z-index: 1; /* Ensures the first column is above other body cells when scrolling horizontally */
-    }
-
-    /* Ensure the top-left corner cell (header of the first column) is above everything */
-    thead th:first-child {
-    z-index: 3; /* Must be the highest z-index */
-    }
-
-    /* Optional: Add borders and spacing for better visual separation */
-    table {
-    border-collapse: separate;
-    border-spacing: 0;
-    }
-    td, th {
-    padding: 10px;
-    border: 1px solid #ddd;
-    }
-    """, ""),
-        backend         = :html,
-        stand_alone     = true
-    )
-    out = joinpath([pwd(), "gradebook", "build", "attendance.html"])
-    mkpath(dirname(out))
-    open(out, "w") do io
-        write(io, repr(p))
-    end
-    # run(`cmd /c start $out`)
+    return hls
 end
 
-function view_attendance(att::Gradebook, identifier::String, lectures::Vector{Assignment})
-    number_of_elective_absences = zeros((nrow(att.raw_score), 1))
-    for (i, row) in enumerate(eachrow(att.raw_score))
-        number_of_elective_absences[i] = count(==(0), collect(select(DataFrame(row), Not(["ID", "Preferred", "Last", "Email"]))[1, :]))
-    end
-    data = att.raw_score
-    insertcols!(data, "Total"=>vec(number_of_elective_absences))
-    # insertcols!(data, "Percent"=>Percentage.(vec(final_grades ./ sum(map(x->x.value, collect(assignments)[1:assignment_range_b])))))
-    # insertcols!(data, "Letter"=>score2letter.(Percentage.(vec(final_grades ./ sum(map(x->x.value, collect(assignments)[1:assignment_range_b]))))))
-    row_labels = [join(collect(row[1:4]), " ") for row in eachrow(data)]
-    column_labels = [
-        names(data),
-        vcat(fill("", 4), map(x->repr(typeof(x).parameters[1])[9:end], lectures[1:ncol(data)-5])..., ["Course"]),
-        vcat(fill("", 4), map(x->typeof(x).parameters[2], lectures[1:ncol(data)-5])..., ["Individual"]),
-        vcat(fill("", 4), map(x->typeof(x).types[2], lectures[1:ncol(data)-5])..., ["Points"]),
-    ]
-    # Function to determine color based on value
-    function gradient_highlighter(_, matrix, i, j)
-        if 4 < j <= ncol(matrix)
-            val = if j != ncol(matrix)
-                (isinf(matrix[i, j].val) ? -1 : data[i, j])
-            else
-                (isinf(matrix[i, j].val) ? -1 : data[i, j-1])
-            end
-            # Map value (assuming 0-1 range) to a color from a scheme
-            color = get(colorschemes[:RdYlGn], (val + 1) / 2) # , :extrema)
-            hex_color = "#" * hex(color)
-            return ["background-color"=>hex_color]
-        else
-            return false
-        end
-    end
-    hl_data = HtmlHighlighter(
-            (data, i, j) -> (ncol(data) > j && j >= 5), # && (data[i, j] > 0.0),
-            gradient_highlighter
-            # ["color"=>"blue", "font-weight"=>"bold"]
-        )
-    hl_total = HtmlHighlighter(
-            (data, i, j) -> (j == ncol(data)) && (data[i, j] > 0.0),
-            ["background-color"=>"red", "font-weight"=>"bold"]
-        )
-    # hl_percent = HtmlHighlighter(
-    #         (data, i, j) -> (j == ncol(data)-1),
-    #         ["font-weight"=>"italic"]
-    #     )
-    # hl_letter = HtmlHighlighter(
-    #     (data, i, j) -> (j == ncol(data)), # && (data[i, j] > 0.0),
-    #     gradient_highlighter
-    #     # ["color"=>"blue", "font-weight"=>"bold"]
-    # )
+function render_table(
+    df::DataFrame;
+    title="",
+    subtitle="",
+    output_path="",
+    column_labels=nothing,
+    row_labels=nothing,
+    summary_row_labels=nothing,
+    summary_rows=nothing,
+    invert_cols=Set{String}(),
+    style=nothing
+)
     p = PrettyTable(
-        data[occursin.(get_student(att.who.roster, identifier).email, data[!, "Email"]), :];
-        title           = "$(att.who.codename_long): $(att.who.course.name)",
-        subtitle        = "Class Attendance",
-        row_labels      = [row_labels[findfirst(occursin.(get_student(att.who.roster, identifier).email, data[!, "Email"]))]],
-        column_labels   = column_labels,
-        summary_row_labels=["Worth", "Due", "Average (Points)", "Average (Percentage)"], # , "S.Dev", "Running Average (Percentage)"],
-        summary_rows    = [
-            (matrix, j)->(4 < j <= length(lectures)+4) ? lectures[j - 4].value : "",
-            (matrix, j)->(4 < j <= length(lectures)+4) ? lectures[j - 4].due : "",
-            (matrix, j)->(4 < j <= length(lectures)+4) ? Points.(sum(data[:, j])/length(data[:, j])) : "",
-            (matrix, j)->(4 < j <= length(lectures)+4) ? Percentage.(Points.(sum(data[:, j])/length(data[:, j]))/lectures[j - 4].value) : "",
-            # (data, i, j)->,
-            # (data, i, j)->
-        ],
-        style           = HtmlTableStyle(; first_line_column_label = ["font-weight"=>"bold"], column_label = ["color"=>"gray", "font-style"=>"italic"]),
-        highlighters    = [hl_data, hl_total],
-        table_format    = HtmlTableFormat("""
-    .table-wrapper {
-    overflow: auto; /* Enables scrolling within the container */
-    max-height: 400px; /* Optional: Sets a maximum height for vertical scrolling */
-    max-width: 600px; /* Optional: Sets a maximum width for horizontal scrolling */
-    }
-
-    /* Make the header row sticky at the top */
-    thead th {
-    position: sticky;
-    top: 0;
-    background-color: #f1f1f1; /* Add a background color */
-    z-index: 2; /* Ensures headers are above body cells when scrolling vertically */
-    }
-
-    /* Make the first column sticky on the left */
-    tbody td:first-child,
-    tbody th:first-child { /* Use th if your first column cells are headers */
-    position: sticky;
-    left: 0;
-    background-color: #f9f9f9; /* Add a background color */
-    z-index: 1; /* Ensures the first column is above other body cells when scrolling horizontally */
-    }
-
-    /* Ensure the top-left corner cell (header of the first column) is above everything */
-    thead th:first-child {
-    z-index: 3; /* Must be the highest z-index */
-    }
-
-    /* Optional: Add borders and spacing for better visual separation */
-    table {
-    border-collapse: separate;
-    border-spacing: 0;
-    }
-    td, th {
-    padding: 10px;
-    border: 1px solid #ddd;
-    }
-    """, ""),
-        backend         = :html,
-        stand_alone     = true
+        df;
+        title=title,
+        subtitle=subtitle,
+        column_labels=column_labels,
+        row_labels=row_labels,
+        summary_row_labels=summary_row_labels,
+        summary_rows=summary_rows,
+        highlighters=per_column_highlighters(df; invert_cols=invert_cols),
+        style=!isnothing(style) ? style : HtmlTableStyle(),
+        backend=:html,
+        stand_alone=true
     )
-    out = joinpath([pwd(), "gradebook", "build", "attendance.html"])
-    mkpath(dirname(out))
-    open(out, "w") do io
+
+    mkpath(dirname(output_path))
+    open(output_path, "w") do io
         write(io, repr(p))
     end
-    # run(`cmd /c start $out`)
+
+    return nothing
+end
+
+function resolve_display_value(earned::Point, item, parent_value; display_credits=DISPLAY_CREDITS)
+    leaf_value = resolve_leaf_point_value(item, parent_value)
+
+    if display_credits == "point"
+        return earned
+    elseif display_credits == "percent"
+        return Percent(earned.value / leaf_value.value; normalize=false)
+    elseif display_credits == "auto"
+        if isa(item.value, Percent)
+            return Percent(earned.value / leaf_value.value; normalize=false)
+        else
+            return earned
+        end
+    else
+        return earned
+    end
+end
+
+function leaf_score(path, item, evs, parent_value, current_value; display_credits=DISPLAY_CREDITS)
+    idx = findfirst(e -> e.path == path, evs)
+    earned = if isnothing(idx)
+        Point(0.0)
+    else
+        ev = evs[idx]
+        δ = ev.mark.delta
+        if isa(δ, Point)
+            δ
+        elseif isa(δ, Percent)
+            Point(current_value.value * δ.value)
+        else
+            Point(0.0)
+        end
+    end
+    return resolve_display_value(earned, item, parent_value; display_credits=display_credits)
+end
+
+function total_for_grade(g, flat_leaves, assignment; display_credits=DISPLAY_CREDITS)
+    points = 0.0
+    for (path, leaf, parent_value, current_value) ∈ flat_leaves
+        score = leaf_score(path, leaf, g.submission.evaluations, parent_value, current_value; display_credits="point")
+        points += score.value
+    end
+
+    return if display_credits == "percent"
+        Percent(points / assignment.value.value; normalize=false)
+    else
+        Point(points)
+    end
+end
+
+function build_assignment_display(gb::Gradebook, grades::Vector{Grade}, assignment::Assignment; student_filter=nothing, teams=Team[], display_credits=DISPLAY_CREDITS)
+    students_idx = if !isnothing(student_filter)
+        sort(if isa(student_filter, Vector{Int})
+            student_filter
+        elseif isa(student_filter, Roster)
+            map(s->gb.class.roster.by_id[s.person.id], student_filter.students)
+        elseif isa(student_filter, Vector{Student})
+            map(s->gb.class.roster.by_id[s.person.id], student_filter)
+        elseif isa(student_filter, Vector{String})
+            sort(filter(!isnothing, map(s->try
+                gb.class.roster.by_id[get_student(s, gb.class.roster).person.id]
+            catch
+                nothing
+            end, student_filter)))
+        else
+            error("Could not insert student filter which must be provided as roster or vector of integers, students, or string identifiers")
+        end)
+    else
+        (1:nrow(gb.total))
+    end
+    grades = grades[students_idx]
+    # collect all leaf nodes once, with a unique display codename
+    flat_leaves = rake_leaves(assignment; parent_value=assignment.value)
+    all_leaves = [leaf for (_, leaf, _, _) ∈ flat_leaves]
+
+    total_values = map(i->isassigned(grades, i) ? (display_credits == "percent" ? grades[i].submission.score.percent : grades[i].submission.score.earned) : NaN, 1:length(grades))
+
+    df = DataFrame(
+        Total = total_values,
+        Percent = map(total_values) do t
+            if isa(t, Percent)
+                t
+            elseif isa(t, Point)
+                Percent(t.value / assignment.value.value; normalize=false)
+            else
+                NaN
+            end
+        end,
+        Letter = map(total_values) do t
+            if isa(t, Percent)
+                credit2lettergrade(t)
+            elseif isa(t, Point)
+                credit2lettergrade(t, assignment.value)
+            else
+                NaN
+            end
+        end,
+        Missing = map(total_values) do t
+            if isa(t, Percent)
+                Point(assignment.value.value * (1 - t.value))
+            elseif isa(t, Point)
+                Point(assignment.value.value - t.value)
+            else
+                NaN
+            end
+        end
+    )
+
+    # add one column per leaf using the prefixed display codename
+    for (i, (path, leaf, parent_value, current_value)) ∈ enumerate(flat_leaves)
+        codename = Symbol(join(path.parts, "."))
+        insertcols!(df, i, codename => map(i->isassigned(grades, i) ? leaf_score(path, leaf, grades[i].submission.evaluations, parent_value, current_value; display_credits=display_credits) : missing, 1:length(grades)))
+    end
+
+    column_labels = [
+        names(df),
+        # map(x->repr(x.category)[20:end], all_leaves),
+        # map(x->x.is_group ? "Group" : "Individual", all_leaves),
+        vcat(display_credits == "auto" ? map(x->repr(typeof(x.value)), all_leaves) : fill(display_credits == "percent" ? "Percent" : "Point", length(all_leaves)), fill("", 4)),
+    ]
+
+    data = [
+        map(s->!isempty(s.person.name_preferred) ? s.person.name_preferred : s.person.name_given, gb.class.roster.students[students_idx]), # Preferred
+        map(s->s.person.name_family, gb.class.roster.students[students_idx]), # Last
+        map(s->s.person.id, gb.class.roster.students[students_idx]), # ID
+        map(s->s.person.email, gb.class.roster.students[students_idx]), # Email
+    ]
+    if !isempty(gb.class.teams)
+        team_names = String[]
+        for student ∈ gb.class.roster.students[students_idx]
+            found = false
+            for team ∈ gb.class.teams
+                if any(t -> t.person.id == student.person.id, team.roster.students)
+                    push!(team_names, team.name)
+                    found = true
+                    break
+                end
+            end
+            if !found
+                push!(team_names, "")
+            end
+        end
+    end
+
+    return df, all_leaves, column_labels, [join(collect(row), " ") for row ∈ zip(data...)]
+end
+
+function build_gradebook_display(gb::Gradebook;
+    assignment_filter=nothing,
+    includes_bonus=false,
+    viewing_attendance=false,
+    student_filter=nothing,
+    display_credits=DISPLAY_CREDITS
+)
+    assignments = if viewing_attendance
+        !isnothing(assignment_filter) ? gb.class.lectures[assignment_filter] : gb.class.lectures
+    else
+        !isnothing(assignment_filter) ? gb.class.course.assignments[assignment_filter] : gb.class.course.assignments
+    end
+    students_idx = if !isnothing(student_filter)
+        sort(if isa(student_filter, Vector{Int})
+            student_filter
+        elseif isa(student_filter, Roster)
+            map(s->gb.class.roster.by_id[s.person.id], student_filter.students)
+        elseif isa(student_filter, Vector{Student})
+            map(s->gb.class.roster.by_id[s.person.id], student_filter)
+        elseif isa(student_filter, Vector{String})
+            filter(!isnothing, map(s->try
+                gb.class.roster.by_id[get_student(s, gb.class.roster).person.id]
+            catch
+                nothing
+            end, student_filter))
+        else
+            error("Could not insert student filter which must be provided as roster or vector of integers, students, or string identifiers")
+        end)
+    else
+        (1:nrow(gb.total))
+    end
+
+    cols = map(a->a.codename, assignments)
+    df_raw = gb.raw[students_idx, Cols(cols...)]
+    df_penalty = gb.penalty[students_idx, Cols(cols...)]
+    df_total = gb.total[students_idx, Cols(cols...)]
+
+    df_total.Raw = map(map(i->df_raw[i, filter(j->isassigned(Matrix(df_raw), i, j), 1:ncol(df_raw))], 1:nrow(df_raw))) do row
+        viewing_attendance ? count(ispresent, row) : mapreduce(r->r.submission.score.earned, +, row; init=Point(0.0))
+    end
+
+    df_total.Penalty = map(eachrow(!viewing_attendance && isnothing(assignment_filter) ? gb.penalty[students_idx, :] : df_penalty)) do row
+        sum(row)
+    end
+
+    df_total.Total = if viewing_attendance
+        df_total.Penalty
+    else
+        df_total.Raw - df_total.Penalty
+    end
+
+    total_possible = viewing_attendance ? length(assignments) : mapreduce(a->a.value.value, +, collect(assignments)[begin:end-(includes_bonus ? 1 : 0)]; init=0.0)
+    df_total.Percent = map(df_total.Total) do t
+        Percent(t.value / total_possible; normalize=false)
+    end
+
+    df = DataFrame(
+        Raw = df_total.Raw,
+        Penalty = df_total.Penalty,
+        Total = df_total.Total,
+        Percent = df_total.Percent
+    )
+
+    for (i, assignment) ∈ enumerate(assignments)
+        insertcols!(df, i, assignment.codename=>map(g->ismissing(g) ? missing : (viewing_attendance ? g.status : g.submission.score.earned), [isassigned(gb.total[!, assignment.codename], ii) ? gb.total[ii, assignment.codename] : missing for ii ∈ students_idx]))
+    end
+
+    if !viewing_attendance
+        df.Letter = map(df.Percent) do p
+            credit2lettergrade(p)
+        end
+
+        df.GPA = map(df.Letter) do ℓ
+            ℓ.quality_points
+        end
+
+        df.Missing = map(df.Total) do t
+            Point(total_possible - t.value)
+        end
+    end
+
+    df.Absent = map(map(i->gb.raw[i, filter(j->isassigned(Matrix(gb.raw), i, j), 1:ncol(gb.raw))], students_idx)) do row
+        count(isabsent, row)
+    end
+
+    if !viewing_attendance
+        df.Extension = map(gb.class.roster.students[students_idx]) do student
+            get(student.notes, "Extension", length(student.extension_history) > 0 ? string(length(student.extension_history)) : "")
+        end
+
+        df.Accommodation = map(gb.class.roster.students[students_idx]) do student
+            get(student.notes, "Accommodation", !isempty(student.accommodations) ? map(a->a.type, student.accommodations) : "")
+        end
+    end
+
+    column_labels = if !viewing_attendance
+        [
+            names(df),
+            vcat(map(x->repr(x.category)[begin+11:end][begin:end-11], assignments), fill("", 10)),
+            vcat(map(x->x.is_group ? "Group" : "Individual", assignments), fill("", 10)),
+            vcat(map(x->repr(typeof(x).types[2]), assignments), fill("", 10)),
+        ]
+    else
+        [
+            names(df), # vcat(map(x->x.codename, filter(isattendance, gb.class.lectures)), fill("", 9)),
+            # vcat(map(x->repr(x.category)[20:end], filter(isattendance, gb.class.lectures)), fill("", 9)),
+            # vcat(map(x->x.is_group ? "Group" : "Individual", filter(isattendance, gb.class.lectures)), fill("", 9)),
+            # vcat(map(x->repr(typeof(x).types[2]), filter(isattendance, gb.class.lectures)), fill("", 9)),
+        ]
+    end
+
+    data = [
+        map(s->!isempty(s.person.name_preferred) ? s.person.name_preferred : s.person.name_given, gb.class.roster.students[students_idx]), # Preferred
+        map(s->s.person.name_family, gb.class.roster.students[students_idx]), # Last
+        map(s->s.person.id, gb.class.roster.students[students_idx]), # ID
+        map(s->s.person.email, gb.class.roster.students[students_idx]), # Email
+    ]
+    if !isempty(gb.class.teams)
+        team_names = String[]
+        for student ∈ gb.class.roster.students[students_idx]
+            found = false
+            for team ∈ gb.class.teams
+                if any(t -> t.person.id == student.person.id, team.roster.students)
+                    push!(team_names, team.name)
+                    found = true
+                    break
+                end
+            end
+            if !found
+                push!(team_names, "")
+            end
+        end
+    end
+
+    return df, assignments, column_labels, [join(collect(row), " ") for row ∈ zip(data...)]
+end
+
+
+"View gradebook for entire class or subset according to index filter of assignments or students."
+function view_gradebook(
+    gb::Gradebook;
+    assignment_filter=nothing,
+    includes_bonus=false,
+    student_filter=nothing,
+    display_credits=DISPLAY_CREDITS,
+    output_path=joinpath(pwd(), "gradebook", "build", "gradebook.html")
+)
+    df, assignments, column_labels, row_labels = build_gradebook_display(gb;
+        assignment_filter=assignment_filter,
+        includes_bonus=includes_bonus,
+        student_filter=student_filter,
+        display_credits=display_credits
+    )
+
+    return render_table(
+        df;
+        title="$(gb.class.codename_long): $(gb.class.course.name)",
+        subtitle="Class Gradebook",
+        output_path=output_path,
+        column_labels=column_labels,
+        row_labels=row_labels,
+        summary_row_labels=["Worth", "Due"], # , "Average (Point)", "Average (Percent)"],
+        summary_rows=[
+            (matrix, j)->j <= length(assignments) ? assignments[j].value : ( # all cells before summary columns
+                j == length(assignments) + 1 ? mapreduce(a->a.value, +, assignments[begin:end-(includes_bonus ? 1 : 0)]) : ( # raw
+                    j == length(assignments) + 3 ? mapreduce(a->a.value, +, assignments[begin:end-(includes_bonus ? 1 : 0)]) : ( # total
+                        ""))),
+            (matrix, j)->j <= length(assignments) ? assignments[j].due : (j == length(assignments) + 1 ? gb.class.term.finish : ""),
+            # (matrix, j)->j <= length(assignments) + 3 ? Point(sum(df[:, j])/length(df[:, j])) : ( # all cells + raw, penalty, and total
+            #     j <= length(assignments) + 5 ? credit2lettergrade(Percent(sum(df[:, j-2])/length(df[:, j-2]); normalize=false)) : ( # letter
+            #         j <= length(assignments) + 6 ? mapreduce(ℓ->ℓ.quality_points, +, df[:, j-1])/length(df[:, j-1]) : ( # gpa
+            #             j <= length(assignments) + 8 ? sum(df[:, j])/length(df[:, j]) : ( # missing and absent
+            #                 "")))),
+            # (matrix, j)->j <= length(assignments) ? Percent(float(sum(df[:, j]))/length(df[:, j]) / assignments[j].value.value; normalize=false) : 0.0
+        ],
+        invert_cols=Set(["Missing", "Penalty", "Absent"])
+    )
+end
+
+"View detailed breakdown of assignment performance across entire class or subset according to index filter of students."
+function view_assignment(
+    gb::Gradebook,
+    assignment::Assignment;
+    student_filter=nothing,
+    display_credits=DISPLAY_CREDITS,
+    output_path=joinpath(pwd(), "gradebook", "build", "assignment.html")
+)
+    df, items, column_labels, row_labels = build_assignment_display(gb, gb.total[!, assignment.codename], assignment; student_filter=student_filter, teams=gb.class.teams, display_credits=display_credits)
+
+    return render_table(
+        df;
+        title="$(assignment.name) ($(assignment.value) points)",
+        subtitle="Assignment Breakdown",
+        output_path=output_path,
+        column_labels=column_labels,
+        row_labels=row_labels,
+        summary_row_labels=["Worth"], # , "Average (Point)", "Average (Percent)"],
+        summary_rows=[
+            (matrix, j)->j <= length(items) ? items[j].value : "",
+            # (matrix, j)->j <= length(items) ? Point(sum(df[:, j])/length(df[:, j])) : 0.0,
+            # (matrix, j)->j <= length(items) ? Percent(float(sum(df[:, j]))/length(df[:, j]) / items[j].value.value; normalize=false) : 0.0
+        ],
+        invert_cols=Set(["Missing"])
+    )
+end
+
+"Similar to `view_gradebook` but specialized for attendance."
+function view_attendance(
+    gb::Gradebook;
+    assignment_filter=nothing,
+    student_filter=nothing,
+    output_path=joinpath(pwd(), "gradebook", "build", "attendance.html")
+)
+    df, records, column_labels, row_labels = build_gradebook_display(
+        gb;
+        assignment_filter=assignment_filter,
+        viewing_attendance=true,
+        student_filter=student_filter
+    )
+
+    return render_table(
+        df;
+        title="$(gb.class.course.name)",
+        subtitle="Attendance",
+        output_path=output_path,
+        column_labels=column_labels,
+        row_labels=row_labels,
+        summary_row_labels=["Due", "Present", "Present (Average)"],
+        summary_rows=[
+            (matrix, j)->j <= length(records) ? Date(records[j].due) : "",
+            (matrix, j)->j <= length(records) ? count(ispresent, df[:, j]) : "",
+            (matrix, j)->j <= length(records) ? count(ispresent, df[:, j])/length(df[:, j]) : ""
+        ],
+        invert_cols=Set(["Missing", "Absent"])
+    )
 end

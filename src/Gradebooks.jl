@@ -1,94 +1,141 @@
 module Gradebooks
 
-export uppercase2symbol
-export Course, Class
-export withdraw
 
+
+
+
+export AbstractGradebookNode, LeafPath, #= assign_paths!, =# isleaf, rake_leaves
+export update, withdraw!, reinstate!
+
+
+
+using AbstractTrees
 using Dates
 import Printf: @sprintf
 
-# configuration preferences for environment/workspace
+
+
 include("preferences.jl")
-# # types and overloads
-include("score.jl")
+include("utils.jl")
 include("datetime.jl")
+include("credit.jl")
+include("letter_grades.jl")
+
+
+abstract type AbstractGradebookNode end
+
+struct LeafPath
+    parts::Tuple{Vararg{Symbol}}
+end
+
+# LeafPath(parts::Tuple{Vararg{Symbol}}=()) = LeafPath(tuple(parts...))
+LeafPath(parts::Vector{Symbol}) = LeafPath(Tuple(parts))
+LeafPath() = LeafPath(())
+
+
+include("accommodations.jl")
+include("assignments.jl")
 include("people.jl")
 
-uppercase2symbol(s) = Symbol(uppercase("$s"))
 
-struct Course
-    code::Symbol
-    number::Integer
-    name::String
-    credits::Integer
-    codename::Symbol
-    function Course(code, number, name, credits, codename)
-        return new(uppercase2symbol("$code"), Int(number), name, credits, uppercase2symbol("$codename"))
-    end
-end
-Course(code, number, name, credits=3) = Course(code, number, name, credits, uppercase2symbol("$code$number"))
+# const _PATH_CACHE = Dict{UInt,LeafPath}()
 
-struct Class
-    course::Course
-    section::Integer
-    semester::Symbol
-    year::Integer
-    frequency::Symbol
-    time_start::Time
-    time_finish::Time
-    time_duration::Dates.CompoundPeriod
-    codename_short::Symbol
-    codename_long::Symbol
-    instructors::Vector{Instructor}
-    primary_instructor::Instructor
-    students::Vector{Student}
-    roster::Vector{Student}
-    function Class(course, section, semester, year, frequency, time_start, time_finish, time_duration, codename_short, codename_long, instructors, primary_instructor, students, roster)
-        time_start, time_finish = map(parse_time, [time_start, time_finish])
-        return new(course, section, uppercase2symbol(semester), year, dayname2codename(frequency), time_start, time_finish, canonicalize(time_finish - time_start),
-            uppercase2symbol("$codename_short"), uppercase2symbol("$codename_long"),
-            instructors, primary_instructor, students, roster
-        )
-    end
-end
-function Class(course, section, semester, year, frequency, time_start, time_finish, time_duration, roster, instructors::Vararg{Instructor})
-    return Class(course, section, semester, year, frequency, time_start, time_finish, time_duration,
-        course.codename, uppercase2symbol(join(["$(course.codename)", @sprintf("%03d", section), first(uppercase("$semester")) * (uppercase("$semester")[1:2] == "SU" ? "u" : "") * last("$year", 2)], "-")),
-        [instructors...], first([instructors...]), roster, roster
-    )
-end
-function Class(course, section, semester, year, frequency, time_start, time_duration::Dates.CompoundPeriod, roster, instructors::Vararg{Instructor})
-    return Class(course, section, semester, year, frequency, time_start, time_start + time_duration, time_duration, roster, instructors...)
-end
+# function clear_paths!()
+#     empty!(_PATH_CACHE)
+#     return nothing
+# end
 
-include("assignments.jl")
-include("gradebook.jl")
+LeafPath(node::Nothing; prefix=())          = LeafPath(prefix)
+LeafPath(node::LeafPath; prefix=())         = LeafPath(tuple(prefix..., node.parts...))
+LeafPath(node::Symbol; prefix=())           = LeafPath(tuple(prefix..., node))
+LeafPath(node::AbstractString; prefix=())   = LeafPath(tuple(prefix..., string2codename(node)))
+LeafPath(node::Assignment; prefix=())       = LeafPath(tuple(prefix..., node.codename))
+LeafPath(node::Question; prefix=())         = LeafPath(tuple(prefix..., node.codename))
 
+# function leaf_path(node; prefix=())
+#     if haskey(_PATH_CACHE, objectid(node))
+#         return _PATH_CACHE[objectid(node)]
+#     end
 
-function withdraw(roster, class, gb, student)
-    deleteat!(gb.raw_score, findfirst(x->x == student, roster))
-    deleteat!(gb.penalty, findfirst(x->x == student, roster))
-    deleteat!(gb.total, findfirst(x->x == student, roster))
-    deleteat!(roster, findfirst(x->x == student, roster))
-    class = Class(class.course, class.section, class.semester, class.year, class.frequency, class.time_start, class.time_duration, roster, class.instructors...)
-    return roster, class, gb
-end
+#     name = if hasproperty(node, :codename)
+#         Symbol(node.codename)
+#     elseif isa(node, AbstractGradebookNode)
+#         Symbol(typeof(node).name.name)
+#     else
+#         nothing
+#     end
 
-function withdraw(roster, class, gb, teams, student)
-    for (i, team) in enumerate(teams)
-        if student ∈ team.students
-            team_students = team.students
-            deleteat!(team_students, findfirst(x->x == student, team_students))
-            teams[i] = Team(team.name, team_students, team.codename)
+#     path = isnothing(name) ? LeafPath(prefix) : LeafPath(tuple(prefix..., name))
+#     _PATH_CACHE[objectid(node)] = path
+#     return path
+# end
+
+# function assign_paths!(node::T, prefix=()) where {T <: AbstractGradebookNode}
+#     current = leaf_path(node; prefix=prefix)
+#     _PATH_CACHE[objectid(node)] = current
+#     for child ∈ children(node)
+#         assign_paths!(child, current.parts)
+#     end
+#     return nothing
+# end
+
+"Determines if a node is a leaf (i.e., has no children)."
+isleaf(node::T) where {T <: AbstractGradebookNode} = isempty(children(node))
+
+function rake_leaves(node::T; prefix=(), parent_value=nothing) where {T <: AbstractGradebookNode}
+    trace = trace_leaf_resolution(node, parent_value; prefix=prefix)
+    current_path = trace.path
+    current_value = trace.resolved_value
+    if isleaf(node)
+        return [(current_path, node, parent_value, current_value)]
+    else
+        out = Tuple{LeafPath, Any, Any, Any}[]
+        for child ∈ children(node)
+            append!(out, rake_leaves(child; prefix=current_path.parts, parent_value=current_value))
         end
+        return out
     end
-    return withdraw(roster, class, gb, student)..., teams
 end
 
 
+include("class.jl")
+include("grades.jl")
+include("gradebook.jl")
+include("attendance.jl")
+
+
+function withdraw!(gb::Gradebook, student::Union{Student, String}; date::Date=today(), threshold=STRING_MATCH_THRESHOLD)
+    if isa(student, String)
+        student = get_student(student, gb.class.roster; threshold=threshold)
+    end
+    student.final_grade = LetterGrade("W")
+    student.enrollment_status = Withdrawn
+    student.withdrawal_date = date
+    gb.class.roster.students[gb.class.roster.by_id[student.person.id]] = student
+    return nothing
+end
+
+function reinstate!(gb::Gradebook, student::Union{Student, String}; date::Date=today(), threshold=STRING_MATCH_THRESHOLD)
+    if isa(student, String)
+        student = get_student(student, gb.class.roster; threshold=threshold)
+    end
+    student.notes[:withdrawal_date] = student.withdrawal_date  # preserve original withdrawal date
+    student.notes[:reinstatement_date] = date  # or however you want to track reinstatement
+    student.enrollment_status = Active
+    student.withdrawal_date = nothing
+    gb.class.roster.students[gb.class.roster.by_id[student.person.id]] = student
+    return nothing
+end
+
+
+include("trees.jl")
 include("base.jl")
 include("io.jl")
 include("plots.jl")
 include("reports.jl")
+
+
+
+
 
 end # end of module
