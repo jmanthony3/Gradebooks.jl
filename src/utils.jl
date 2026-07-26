@@ -23,6 +23,9 @@ function string2codename(s::AbstractString)
     end
     return string2uppercase_symbol(join(map(t->(first(t) == '{' && last(t) == '}') ? t[begin+1:end-1] : (isdigit(first(t)) ? t : first(filter(!ispunct, t))), tokens[firstword_idx:end])))
 end
+function string2codename(s::Symbol)
+    return string2codename("{" * String(s) * "}")
+end
 
 
 "Modifies the field(s) of an immutable `struct` and returns a new one."

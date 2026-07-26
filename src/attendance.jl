@@ -136,36 +136,36 @@ Records on date of entry (`date_stamp`) quality of attendance from a file matchi
 ## Warning
 If using this method, make sure to implement `attendance_status_map_from_string(x::AbstractString)`.
 """
-function attendance_record!(gb::Gradebook, date_stamp::Union{Date, String}, regex::Regex, dir::String; date_row::Int=1, use_last=true, threshold=STRING_MATCH_THRESHOLD)
+function attendance_record!(gb::Gradebook, date_stamp::Union{Date, String}, regex::Regex, dir::String; date_row::Int=1, use_last=true, threshold=STRING_MATCH_THRESHOLD, kwargs...)
     lecture_dates = map(x->Date(x.due), gb.class.lectures)
     course_exports = sort(filter(x->occursin(regex, basename(x)), readdir(dir; join=true)))
     for course_export ∈ course_exports[use_last ? [end] : begin:end]
-        submissions_df = CSV.read(course_export, DataFrame)
+        submissions_df = CSV.read(course_export, DataFrame; kwargs...)
         attendance_records_idx = findall(x->any(x .== string.(findall(x->!ismissing(x) && isa(parse_datetime(string_sanitize(x)), AbstractDateTime), submissions_df[date_row, :]))), names(submissions_df))
         attendance_records = map(x->parse_datetime(string_sanitize(x)), collect(submissions_df[date_row, attendance_records_idx]))
         first_column, first_row = 0, 0
-        for i ∈ 1:(first(attendance_records_idx)-1)
-            submissions_df[!, i] = convert.(String, map(x -> ismissing(x) ? "" : x, submissions_df[!, i]))
+        for j ∈ 1:(first(attendance_records_idx)-1)
+            submissions_df[!, j] = convert.(String, map(x -> ismissing(x) ? "" : x, submissions_df[!, j]))
             if first_column == 0
-                for (j, val) ∈ enumerate(submissions_df[!, i])
+                for (i, val) ∈ enumerate(submissions_df[!, j])
                     try
                         get_student(val, gb; threshold=threshold)
-                        first_row = j
+                        first_row = i
                         break
                     catch
                     end
                 end
             end
-            valid_student_vals = map(first_row:length(submissions_df[!, i])) do j
+            valid_student_vals = map(first_row:length(submissions_df[!, j])) do i
                 try
-                    get_student(submissions_df[j, i], gb.class.roster; threshold=threshold)
+                    get_student(submissions_df[i, j], gb.class.roster; threshold=threshold)
                     true
                 catch
                     false
                 end
             end
             if all(valid_student_vals)
-                first_column = i
+                first_column = j
                 break
             end
         end
