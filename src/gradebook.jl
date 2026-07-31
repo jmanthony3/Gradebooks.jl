@@ -96,11 +96,11 @@ function grades_post!(gb::Gradebook, assignments::Vector{Assignment}, src::Strin
         cols .= false
         cols[find_submission_col(submissions_df, assignment; threshold=threshold)] = true
         submissions_df′ = submissions_df[!, Cols(by, cols)]
-        submissions_df′ = DataFrame(Matrix(submissions_df′)[findfirst(!ismissing, submissions_df′[!, by]):end, :], names(submissions_df′))
-        submissions_df′[!, 1] = convert.(String, submissions_df′[!, 1])
-        submissions_df′[!, 2] = convert.(Point, (map(x->ismissing(x) ? 0.0 : (isa(x, String) ? parse(x, Float64) : x), submissions_df′[!, 2])))
+        submissions_df′′ = DataFrame(Matrix(submissions_df′)[findall(!ismissing, submissions_df′[!, by]), :], names(submissions_df′))
+        submissions_df′′[!, 1] = convert.(String, submissions_df′′[!, 1])
+        submissions_df′′[!, 2] = convert.(Point, (map(x->ismissing(x) ? 0.0 : (isa(x, AbstractString) ? parse(Float64, String(x)) : x), submissions_df′′[!, 2])))
         grades = Grade[]
-        for row ∈ eachrow(submissions_df′)
+        for row ∈ eachrow(submissions_df′′)
             push!(grades, grade(row[1], gb.class.roster, assignment, assignment.due, row[2]; threshold=threshold))
         end
         grades_post!(gb, grades)

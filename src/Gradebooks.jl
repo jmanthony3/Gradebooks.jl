@@ -104,25 +104,39 @@ include("gradebook.jl")
 include("attendance.jl")
 
 
-function withdraw!(gb::Gradebook, student::Union{Student, String}; date::Date=today(), threshold=STRING_MATCH_THRESHOLD)
+function withdraw!(gb::Gradebook, student::Union{Student, String}, date_effective::Date, date_recorded::Date=today(); threshold=STRING_MATCH_THRESHOLD)
     if isa(student, String)
         student = get_student(student, gb.class.roster; threshold=threshold)
     end
-    student.final_grade = LetterGrade("W")
-    student.enrollment_status = Withdrawn
-    student.withdrawal_date = date
+    # student.notes["Final Grade"] = student.final_grade
+    student = update(student; final_grade=LetterGrade(GradeLevel_W), enrollment_status=Withdrawn, withdrawal_date=date_effective)
+    # if haskey(student.notes, "Withdrawal Date (Recorded)")
+    #     x = student.notes["Withdrawal Date (Recorded)"]
+    #     student.notes["Withdrawal Date (Recorded)"] = push!(x, date_recorded)
+    # else
+    #     student.notes["Withdrawal Date (Recorded)"] = [date_recorded]
+    # end
     gb.class.roster.students[gb.class.roster.by_id[student.person.id]] = student
     return nothing
 end
 
-function reinstate!(gb::Gradebook, student::Union{Student, String}; date::Date=today(), threshold=STRING_MATCH_THRESHOLD)
+function reinstate!(gb::Gradebook, student::Union{Student, String}, date_effective::Date, date_recorded::Date=today(); threshold=STRING_MATCH_THRESHOLD)
     if isa(student, String)
         student = get_student(student, gb.class.roster; threshold=threshold)
     end
-    student.notes[:withdrawal_date] = student.withdrawal_date  # preserve original withdrawal date
-    student.notes[:reinstatement_date] = date  # or however you want to track reinstatement
-    student.enrollment_status = Active
-    student.withdrawal_date = nothing
+    student = update(student; final_grade=nothing, enrollment_status=Active, withdrawal_date=nothing)
+    # if haskey(student.notes, "Reinstatement Date (Effective)")
+    #     x = student.notes["Reinstatement Date (Effective)"]
+    #     student.notes["Reinstatement Date (Effective)"] = push!(x, date_effective)
+    # else
+    #     student.notes["Reinstatement Date (Effective)"] = [date_effective]
+    # end
+    # if haskey(student.notes, "Reinstatement Date (Recorded)")
+    #     x = student.notes["Reinstatement Date (Recorded)"]
+    #     student.notes["Reinstatement Date (Recorded)"] = push!(x, date_recorded)
+    # else
+    #     student.notes["Reinstatement Date (Recorded)"] = [date_recorded]
+    # end
     gb.class.roster.students[gb.class.roster.by_id[student.person.id]] = student
     return nothing
 end

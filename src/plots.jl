@@ -245,6 +245,35 @@ function build_assignment_display(gb::Gradebook, grades::Vector{Grade}, assignme
     return df, all_leaves, column_labels, [join(collect(row), " ") for row ∈ zip(data...)]
 end
 
+function sanitize_value(x)
+    try
+        return ismissing(x) || x === nothing ? missing : x
+    catch
+        return missing
+    end
+end
+
+function sanitize_column(col)
+    T = Union{Missing, eltype(col)}
+    out = Vector{T}(undef, length(col))
+    for i in eachindex(col)
+        out[i] = try
+            sanitize_value(col[i])
+        catch
+            missing
+        end
+    end
+    return out
+end
+
+function sanitize_dataframe(df::DataFrame)
+    out = DataFrame()
+    for name in names(df)
+        out[!, name] = sanitize_column(df[!, name])
+    end
+    return out
+end
+
 function build_gradebook_display(gb::Gradebook;
     assignment_filter=nothing,
     includes_bonus=false,
@@ -278,12 +307,18 @@ function build_gradebook_display(gb::Gradebook;
     end
 
     cols = map(a->a.codename, assignments)
-    df_raw = gb.raw[students_idx, Cols(cols...)]
-    df_penalty = gb.penalty[students_idx, Cols(cols...)]
-    df_total = gb.total[students_idx, Cols(cols...)]
+    safe_raw = sanitize_dataframe(gb.raw)
+    safe_penalty = sanitize_dataframe(gb.penalty)
+    safe_total = sanitize_dataframe(gb.total)
+    df_raw = safe_raw[students_idx, Cols(cols...)]
+    df_penalty = safe_penalty[students_idx, Cols(cols...)]
+    df_total = safe_total[students_idx, Cols(cols...)]
 
-    df_total.Raw = map(map(i->df_raw[i, filter(j->isassigned(Matrix(df_raw), i, j), 1:ncol(df_raw))], 1:nrow(df_raw))) do row
-        viewing_attendance ? count(ispresent, row) : mapreduce(r->r.submission.score.earned, +, row; init=Point(0.0))
+    df_total.Raw = map(map(i -> begin
+        row = collect(skipmissing([safe_raw[i, j] for j in 1:ncol(df_raw)]))
+        viewing_attendance ? count(ispresent, row) : mapreduce(r -> r.submission.score.earned, +, row; init=Point(0.0))
+    end, 1:nrow(df_raw))) do row
+        row
     end
 
     df_total.Penalty = map(eachrow(!viewing_attendance && isnothing(assignment_filter) ? gb.penalty[students_idx, :] : df_penalty)) do row

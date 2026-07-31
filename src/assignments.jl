@@ -133,28 +133,28 @@ struct Assignment <: AbstractGradebookNode
 end
 
 "Convenience function constructing `Assignment` to track attendance."
-Attendance(     name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Attendance_Assignment,    is_group, questions, string2codename(name))
+Attendance(     name, value, due, questions=nothing; is_group=false, codename=nothing) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Attendance_Assignment,    is_group, questions, string2codename(!isnothing(codename) ? codename : name))
 
 "Convenience function constructing `Assignment` for an exam."
-Exam(           name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Exam_Assignment,          is_group, questions, string2codename(name))
+Exam(           name, value, due, questions=nothing; is_group=false, codename=nothing) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Exam_Assignment,          is_group, questions, string2codename(!isnothing(codename) ? codename : name))
 
 "Convenience function constructing `Assignment` for homework."
-Homework(       name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Homework_Assignment,      is_group, questions, string2codename(name))
+Homework(       name, value, due, questions=nothing; is_group=false, codename=nothing) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Homework_Assignment,      is_group, questions, string2codename(!isnothing(codename) ? codename : name))
 
 "Convenience function constructing `Assignment` for some other academic item: e.g., extra credit."
-Other(          name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Other_Assignment,         is_group, questions, string2codename(name))
+Other(          name, value, due, questions=nothing; is_group=false, codename=nothing) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Other_Assignment,         is_group, questions, string2codename(!isnothing(codename) ? codename : name))
 
 "Convenience function constructing `Assignment` for a paper."
-Paper(          name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Paper_Assignment,         is_group, questions, string2codename(name))
+Paper(          name, value, due, questions=nothing; is_group=false, codename=nothing) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Paper_Assignment,         is_group, questions, string2codename(!isnothing(codename) ? codename : name))
 
 "Convenience function constructing `Assignment` for a presentation."
-Presentation(   name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Presentation_Assignment,  is_group, questions, string2codename(name))
+Presentation(   name, value, due, questions=nothing; is_group=false, codename=nothing) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Presentation_Assignment,  is_group, questions, string2codename(!isnothing(codename) ? codename : name))
 
 "Convenience function constructing `Assignment` for a project."
-Project(        name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Project_Assignment,       is_group, questions, string2codename(name))
+Project(        name, value, due, questions=nothing; is_group=false, codename=nothing) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Project_Assignment,       is_group, questions, string2codename(!isnothing(codename) ? codename : name))
 
 "Convenience function constructing `Assignment` for a quiz."
-Quiz(           name, value, due, questions=nothing; is_group=false) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Quiz_Assignment,          is_group, questions, string2codename(name))
+Quiz(           name, value, due, questions=nothing; is_group=false, codename=nothing) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Quiz_Assignment,          is_group, questions, string2codename(!isnothing(codename) ? codename : name))
 
 isattendance(x)                         = false
 isattendance(x::AssignmentCategory)     = x == Attendance_Assignment
