@@ -71,6 +71,7 @@ end
 "Wrapper of `Person` with an academic status unto a degree including final course performance."
 @kwdef struct Student <: AbstractPerson
     person::Person
+    lms_id::String = ""
     discipline::String = ""
     accommodations::Vector{Accommodation} = Accommodation[]
     extension_history::Vector{ExtensionGrant} = ExtensionGrant[]
@@ -104,6 +105,7 @@ isgraduated(x::Student)             = isgraduated(x.enrollment_status)
 struct StudentIndex
     by_email::Dict{String, Int}
     by_id::Dict{String, Int}
+    by_lms_id::Dict{String, Int}
     by_codename::Dict{Symbol, Int}
     by_alias::Dict{String, Int}
     by_name::Dict{String, Int}
@@ -111,10 +113,11 @@ end
 
 "One time construction of `students` in class roster for fast, dictionary lookups of vector positions from any field of `Person`."
 function StudentIndex(students::Vector{Student})
-    idx = StudentIndex(Dict(), Dict(), Dict(), Dict(), Dict())
+    idx = StudentIndex(Dict(), Dict(), Dict(), Dict(), Dict(), Dict())
     for (i, s) ∈ enumerate(students)
         haskey(idx.by_email, s.person.email) || (idx.by_email[s.person.email] = i)
         haskey(idx.by_id, s.person.id) || (idx.by_id[s.person.id] = i)
+        haskey(idx.by_lms_id, s.lms_id) || (idx.by_lms_id[s.lms_id] = i)
         haskey(idx.by_codename, s.person.codename) || (idx.by_codename[s.person.codename] = i)
         for alias ∈ s.person.name_aliases
             haskey(idx.by_alias, alias) || (idx.by_alias[alias] = i)
@@ -136,6 +139,8 @@ function Base.getproperty(r::Roster, sym::Symbol)
         return getfield(getfield(r, :index), sym)
     elseif sym == :by_id
         return getfield(getfield(r, :index), sym)
+    elseif sym == :by_lms_id
+        return getfield(getfield(r, :index), sym)
     elseif sym == :by_codename
         return getfield(getfield(r, :index), sym)
     elseif sym == :by_alias
@@ -147,11 +152,12 @@ function Base.getproperty(r::Roster, sym::Symbol)
     end
 end
 
-Base.propertynames(r::Roster) = (:students, :by_email, :by_id, :by_codename, :by_alias, :by_name)
+Base.propertynames(r::Roster) = (:students, :by_email, :by_id, :by_lms_id, :by_codename, :by_alias, :by_name)
 
 
 function student_candidates(s::Student)
     parts = String[
+        s.lms_id,
         s.person.email,
         split(s.person.email, "@")[1],
         string(s.person.id),
@@ -223,7 +229,14 @@ function update(person::Person; kwargs...)
 end
 
 function update(student::Student; kwargs...)
-    return Student(; person=update(student.person; collect(pairs(kwargs))[findall(fn->fn ∈ fieldnames(Person), keys(kwargs))]...), collect(pairs(kwargs))[findall(fn->fn ∉ fieldnames(Person), keys(kwargs))]...)
+    person = if any(fn->fn ∈ fieldnames(Person), keys(kwargs))
+        update(student.person; collect(pairs(kwargs))[findall(fn->fn ∈ fieldnames(Person), keys(kwargs))]...)
+    else
+        student.person
+    end
+    fields = map(f->getproperty(student, f), fieldnames(Student))
+    nt = NamedTuple{fieldnames(Student)}(fields)
+    return Student(; merge(nt, Dict(:person => person, collect(pairs(kwargs))[findall(fn->fn ∉ fieldnames(Person), keys(kwargs))]...))...)
 end
 
 function update(roster::Roster, student::Union{Student, String}; threshold=STRING_MATCH_THRESHOLD, kwargs...)

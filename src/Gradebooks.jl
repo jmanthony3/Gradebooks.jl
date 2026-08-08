@@ -144,6 +144,7 @@ end
 
 include("trees.jl")
 include("base.jl")
+include("privacy.jl")
 include("plots.jl")
 
 
