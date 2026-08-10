@@ -257,8 +257,13 @@ function redact_text(text::AbstractString,
     # 1. Collect protected ranges (start, stop) – longest first helps a bit
     protected_ranges = Tuple{Int,Int}[]
     for p in sort(protected; by=length, rev=true)
-        for m in eachmatch(Regex(escape_string(p)), text)
-            push!(protected_ranges, (m.offset, m.offset + length(m.match) - 1))
+        # @show p
+        # for m in eachmatch(Regex(escape_string(p)), text)
+        #     @show (m.offset, m.offset + length(m.match) - 1, m.match)
+        #     push!(protected_ranges, (m.offset, m.offset + length(m.match) - 1))
+        # end
+        for r in findall(p, text)
+            push!(protected_ranges, (r.start, r.stop))
         end
     end
 
