@@ -276,35 +276,12 @@ end
 
 function build_gradebook_display(gb::Gradebook;
     assignment_filter=nothing,
-    includes_bonus=false,
     viewing_attendance=false,
     student_filter=nothing,
     display_credits=DISPLAY_CREDITS
 )
-    assignments = if viewing_attendance
-        !isnothing(assignment_filter) ? gb.class.lectures[assignment_filter] : gb.class.lectures
-    else
-        !isnothing(assignment_filter) ? gb.class.course.assignments[assignment_filter] : gb.class.course.assignments
-    end
-    students_idx = if !isnothing(student_filter)
-        sort(if isa(student_filter, Vector{Int})
-            student_filter
-        elseif isa(student_filter, Roster)
-            map(s->gb.class.roster.by_id[s.person.id], student_filter.students)
-        elseif isa(student_filter, Vector{Student})
-            map(s->gb.class.roster.by_id[s.person.id], student_filter)
-        elseif isa(student_filter, Vector{String})
-            filter(!isnothing, map(s->try
-                gb.class.roster.by_id[get_student(s, gb.class.roster).person.id]
-            catch
-                nothing
-            end, student_filter))
-        else
-            error("Could not insert student filter which must be provided as roster or vector of integers, students, or string identifiers")
-        end)
-    else
-        (1:nrow(gb.total))
-    end
+    assignments = get_assignments(gb; assignment_filter=assignment_filter, viewing_attendance=viewing_attendance)
+    students_idx = get_students(gb; student_filter=student_filter)
 
     cols = map(a->a.codename, assignments)
     safe_raw = sanitize_dataframe(gb.raw)
@@ -314,27 +291,12 @@ function build_gradebook_display(gb::Gradebook;
     df_penalty = safe_penalty[students_idx, Cols(cols...)]
     df_total = safe_total[students_idx, Cols(cols...)]
 
-    df_total.Raw = map(map(i -> begin
-        row = collect(skipmissing([safe_raw[i, j] for j in 1:ncol(df_raw)]))
-        viewing_attendance ? count(ispresent, row) : mapreduce(r -> r.submission.score.earned, +, row; init=Point(0.0))
-    end, 1:nrow(df_raw))) do row
-        row
-    end
+    df_total.Raw = get_rawpoints(df_raw, safe_raw; viewing_attendance=viewing_attendance)
+    df_total.Penalty = get_penaltypoints(gb.penalty, df_penalty, [students_idx...]; viewing_attendance=viewing_attendance, assignment_filter=assignment_filter)
+    df_total.Total = get_totalpoints(df_total; viewing_attendance=viewing_attendance)
 
-    df_total.Penalty = map(eachrow(!viewing_attendance && isnothing(assignment_filter) ? gb.penalty[students_idx, :] : df_penalty)) do row
-        sum(row)
-    end
-
-    df_total.Total = if viewing_attendance
-        df_total.Penalty
-    else
-        df_total.Raw - df_total.Penalty
-    end
-
-    total_possible = viewing_attendance ? length(assignments) : mapreduce(a->a.value.value, +, collect(assignments)[begin:end-(includes_bonus ? 1 : 0)]; init=0.0)
-    df_total.Percent = map(df_total.Total) do t
-        Percent(t.value / total_possible; normalize=false)
-    end
+    total_possible = get_totalpossible(assignments; viewing_attendance=viewing_attendance)
+    df_total.Percent = get_percent(df_total, total_possible)
 
     df = DataFrame(
         Raw = df_total.Raw,
@@ -348,31 +310,16 @@ function build_gradebook_display(gb::Gradebook;
     end
 
     if !viewing_attendance
-        df.Letter = map(df.Percent) do p
-            credit2lettergrade(p)
-        end
-
-        df.GPA = map(df.Letter) do ℓ
-            ℓ.quality_points
-        end
-
-        df.Missing = map(df.Total) do t
-            Point(total_possible - t.value)
-        end
+        df.Letter = get_lettergrade(df)
+        df.GPA = get_gpa(df)
+        df.Missing = get_missing(df, total_possible)
     end
 
-    df.Absent = map(map(i->gb.raw[i, filter(j->isassigned(Matrix(gb.raw), i, j), 1:ncol(gb.raw))], students_idx)) do row
-        count(isabsent, row)
-    end
+    df.Absent = get_absent(gb, [students_idx...])
 
     if !viewing_attendance
-        df.Extension = map(gb.class.roster.students[students_idx]) do student
-            get(student.notes, "Extension", length(student.extension_history) > 0 ? string(length(student.extension_history)) : "")
-        end
-
-        df.Accommodation = map(gb.class.roster.students[students_idx]) do student
-            get(student.notes, "Accommodation", !isempty(student.accommodations) ? map(a->a.type, student.accommodations) : "")
-        end
+        df.Extension = get_extension([students_idx...], gb.class.roster)
+        df.Accommodation = get_accommodation([students_idx...], gb.class.roster)
     end
 
     column_labels = if !viewing_attendance
@@ -422,14 +369,12 @@ end
 function view_gradebook(
     gb::Gradebook;
     assignment_filter=nothing,
-    includes_bonus=false,
     student_filter=nothing,
     display_credits=DISPLAY_CREDITS,
     output_path=joinpath(pwd(), "gradebook", "build", "gradebook.html")
 )
     df, assignments, column_labels, row_labels = build_gradebook_display(gb;
         assignment_filter=assignment_filter,
-        includes_bonus=includes_bonus,
         student_filter=student_filter,
         display_credits=display_credits
     )
@@ -444,8 +389,8 @@ function view_gradebook(
         summary_row_labels=["Worth", "Due"], # , "Average (Point)", "Average (Percent)"],
         summary_rows=[
             (matrix, j)->j <= length(assignments) ? assignments[j].value : ( # all cells before summary columns
-                j == length(assignments) + 1 ? mapreduce(a->a.value, +, assignments[begin:end-(includes_bonus ? 1 : 0)]) : ( # raw
-                    j == length(assignments) + 3 ? mapreduce(a->a.value, +, assignments[begin:end-(includes_bonus ? 1 : 0)]) : ( # total
+                j == length(assignments) + 1 ? mapreduce(a->a.value, +, assignments) : ( # raw
+                    j == length(assignments) + 3 ? mapreduce(a->a.value, +, assignments) : ( # total
                         ""))),
             (matrix, j)->j <= length(assignments) ? assignments[j].due : (j == length(assignments) + 1 ? gb.class.term.finish : ""),
             # (matrix, j)->j <= length(assignments) + 3 ? Point(sum(df[:, j])/length(df[:, j])) : ( # all cells + raw, penalty, and total
