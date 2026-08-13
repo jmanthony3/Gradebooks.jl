@@ -201,6 +201,7 @@ show(io::IO, x::LeafPath) = print(io, string(x))
                 organization        = [s.person.organization for s ∈ students],
                 id                  = [s.person.id for s ∈ students],
                 codename            = [s.person.codename for s ∈ students],
+                lms_id              = [s.lms_id for s ∈ students],
                 discipline          = [s.discipline for s ∈ students],
                 enrollment_status   = [s.enrollment_status for s ∈ students],
                 final_grade         = [s.final_grade for s ∈ students],

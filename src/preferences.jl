@@ -1,6 +1,7 @@
 export DATE_FORMAT, set_date_format, get_date_format
 export INSTITUTION_NAME, set_institution_name, get_institution_name
 export INSTITUTION_EMAILDOMAIN, set_institution_emaildomain, get_institution_emaildomain
+export INSTITUTION_IDPREFIX, set_institution_idprefix, get_institution_idprefix
 export COURSE_QUALITYPOINTS_A, set_course_qualitypoints_a, get_course_qualitypoints_a
 export COURSE_QUALITYPOINTS_APLUS, set_course_qualitypoints_aplus, get_course_qualitypoints_aplus
 export COURSE_QUALITYPOINTS_PLUSMINUS, set_course_qualitypoints_plusminus, get_course_qualitypoints_plusminus
@@ -54,6 +55,17 @@ function set_institution_emaildomain(domain::String)
 end
 
 get_institution_emaildomain() = @load_preference("INSTITUTION_EMAILDOMAIN")
+
+
+"Student ID prefix: e.g., `\"LU\"` or `\"MIT\"`. This helps if searching by username instead of full email addresses."
+const INSTITUTION_IDPREFIX = @load_preference("INSTITUTION_IDPREFIX")
+
+function set_institution_idprefix(prefix::String)
+    @set_preferences!("INSTITUTION_IDPREFIX" => prefix)
+    @info("New `INSTITUTION_IDPREFIX` set; restart your Julia session for this change to take effect!")
+end
+
+get_institution_idprefix() = @load_preference("INSTITUTION_IDPREFIX")
 
 
 
