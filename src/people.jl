@@ -259,7 +259,7 @@ end
 function get_emails(roster::Roster; search::Union{Nothing, EmailClients}=nothing)
     emails = []
     for student ∈ roster.students
-        email = student.email
+        email = student.person.email
         username, domain = split(email, "@")
         if domain != INSTITUTION_EMAILDOMAIN
             email = join([username, INSTITUTION_EMAILDOMAIN], "@")

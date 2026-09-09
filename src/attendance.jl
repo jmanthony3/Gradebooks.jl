@@ -130,22 +130,114 @@ end
 """
 attendance_status_map_from_string(x::AbstractString)::AttendanceStatus = error("Attendance status map not yet implemented for `AbstractString`")
 
+function resolve_column_date_pairs(df::DataFrame, column_date_pairs::Vector{Pair{String, Date}}, row_first::Int)
+    resolved = Pair{Int, Date}[]
+    col_names = lowercase.(strip.(string.(names(df))))
+
+    for (col_label, lecture_date) in column_date_pairs
+        key = lowercase(strip(col_label))
+        matches = findall(==(key), col_names)
+
+        if !isempty(matches)
+            push!(resolved, first(matches) => lecture_date)
+            continue
+        end
+
+        # Fall back to scanning nearby rows for the label text itself.
+        found = false
+        for r in max(1, row_first-1):min(nrow(df), row_first+1)
+            for j in 1:ncol(df)
+                v = string(df[r, j])
+                if lowercase(strip(v)) == key
+                    push!(resolved, j => lecture_date)
+                    found = true
+                    break
+                end
+            end
+            found && break
+        end
+
+        if !found
+            error("Could not resolve column name $(col_label) to a dataframe column or nearby row label.")
+        end
+    end
+
+    return resolved
+end
+
 """
 Records on date of entry (`date_stamp`) quality of attendance from a file matching `regex` within `dir`.
 
 ## Warning
 If using this method, make sure to implement `attendance_status_map_from_string(x::AbstractString)`.
 """
-function attendance_record!(gb::Gradebook, date_stamp::Union{Date, String}, regex::Regex, dir::String; date_row::Int=1, use_last=true, threshold=STRING_MATCH_THRESHOLD, kwargs...)
+function attendance_record!(gb::Gradebook, date_stamp::Union{Date, String}, regex::Regex, dir::String, column_date_pairs=Vector{Pair{String, Date}}(); row_date::Int=1, row_first::Int=2, use_last=true, threshold=STRING_MATCH_THRESHOLD, kwargs...)
     lecture_dates = map(x->Date(x.due), gb.class.lectures)
     course_exports = sort(filter(x->occursin(regex, basename(x)), readdir(dir; join=true)))
-    for course_export ∈ course_exports[use_last ? [end] : begin:end]
+    for course_export in course_exports[use_last ? [end] : begin:end]
         submissions_df = CSV.read(course_export, DataFrame; kwargs...)
-        attendance_records_idx = findall(x->any(x .== string.(findall(x->!ismissing(x) && isa(parse_datetime(string_sanitize(x)), AbstractDateTime), submissions_df[date_row, :]))), names(submissions_df))
-        attendance_records = map(x->parse_datetime(string_sanitize(x)), collect(submissions_df[date_row, attendance_records_idx]))
+
+        # Explicit column-date mapping wins.
+        if !isempty(column_date_pairs)
+            resolved_pairs = resolve_column_date_pairs(submissions_df, column_date_pairs, row_first)
+            # @show resolved_pairs
+
+            # find the student-id column once
+            first_column, first_row = 0, 0
+            for j in 1:ncol(submissions_df)
+                col_vals = map(x -> ismissing(x) ? "" : String(x), submissions_df[!, j])
+                nonempty = findall(!isempty, col_vals)
+                if isempty(nonempty) || length(nonempty) <= (length(gb.class.roster.students) ÷ 2)
+                    continue
+                end
+                valid = map(nonempty) do i
+                    try
+                        get_student(col_vals[i], gb.class.roster; threshold=threshold)
+                        true
+                    catch
+                        false
+                    end
+                end
+                if all(valid)
+                    first_column, first_row = j, first(nonempty)
+                    break
+                end
+            end
+            # @show first_column, submissions_df[first_row:end, first_column]
+
+            if first_column == 0
+                error("Could not find a valid student ID column.")
+            end
+
+            for (col_idx, lecture_date) in resolved_pairs
+                lecture = gb.class.lectures[findlast(x -> x <= lecture_date, map(y -> Date(y.due), gb.class.lectures))]
+                # @show col_idx, lecture_date, lecture.codename
+                for i in first_row:nrow(submissions_df)
+                    student_val = submissions_df[i, first_column]
+                    status_val = submissions_df[i, col_idx]
+                    # @show i, student_val, status_val
+
+                    if ismissing(student_val) || isempty(strip(String(student_val)))
+                        continue
+                    end
+                    try
+                        student = get_student(String(student_val), gb.class.roster; threshold=threshold)
+                        status = attendance_status_map_from_string(string(status_val))
+                        record!(gb, student, lecture, AttendanceRecord(status, parse_date(date_stamp), "3rd Party"))
+                    catch
+                        continue
+                    end
+                end
+            end
+            # continue
+        end
+
+        # fallback old behavior: infer from date row + regex
+        attendance_records_idx = findall(x->any(x .== String.(findall(x->!ismissing(x) && isa(parse_datetime(string_sanitize(x)), AbstractDateTime), submissions_df[row_date, :]))), names(submissions_df))
+        attendance_records = map(x->parse_datetime(string_sanitize(x)), collect(submissions_df[row_date, attendance_records_idx]))
         first_column, first_row = 0, 0
         for j ∈ 1:(first(attendance_records_idx)-1)
-            submissions_df[!, j] = convert.(String, map(x -> ismissing(x) ? "" : x, submissions_df[!, j]))
+            submissions_df[!, j] = convert.(String, map(x -> ismissing(x) ? "" : String(x), submissions_df[!, j]))
             if first_column == 0
                 for (i, val) ∈ enumerate(submissions_df[!, j])
                     try
