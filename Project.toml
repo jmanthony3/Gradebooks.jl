@@ -30,7 +30,7 @@ PrettyTables = "3.1.2"
 Printf = "1.11.0"
 Random = "1.11.0"
 Revise = "3.12.3"
-SHA = "0.7.0"
+SHA = "0.7.0, 1"
 StringDistances = "1.0.0"
 julia = "1.6.7"
 
