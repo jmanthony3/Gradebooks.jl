@@ -23,8 +23,8 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - '1.12'
-          - '1.6'
+          - '1.13'
+          # - '1.6'
         os:
           - ubuntu-latest
         arch:
