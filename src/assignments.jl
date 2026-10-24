@@ -2,6 +2,7 @@ export Question, Rubric
 # public AssignmentCategory
 export Assignment, Attendance, Exam, Homework, Other, Paper, Presentation, Project, Quiz
 export isattendance, isexam, ishomework, isother, ispaper, ispresentation, isproject, isquiz
+export get_assignment
 export ExtensionGrant
 
 
@@ -180,6 +181,45 @@ isproject(x::Assignment)                = isproject(x.category)
 isquiz(x)                               = false
 isquiz(x::AssignmentCategory)           = x == Quiz_Assignment
 isquiz(x::Assignment)                   = isquiz(x.category)
+
+
+function assignment_candidates(a::Assignment)
+    parts = String[
+        string(a.codename),
+        a.name,
+    ]
+    return unique(filter(!isempty, map(string_sanitize, parts)))
+end
+
+"""
+Find needle (`identifier`), according to any field of `Assignment`, in haystack (`assignments`).
+
+`threshold` adjusts Levenshtein string matching criterion.
+"""
+function get_assignment(identifier::String, assignments::Vector{Assignment}; threshold=STRING_MATCH_THRESHOLD)
+    q = lowercase(string_sanitize(identifier))
+    exact = findall(a -> any(c -> lowercase(string_sanitize(c)) == q, assignment_candidates(a)), assignments)
+    if length(exact) == 1
+        return assignments[only(exact)]
+    elseif length(exact) > 1
+        error("Ambiguous assignment match for $(identifier): $(map(x->x.codename, assignments[exact]))")
+    else # fallback to fuzzy logic
+        scores = Tuple{Assignment, String, Int}[]
+        for a ∈ assignments
+            for c ∈ assignment_candidates(a)
+                push!(scores, (a, c, Levenshtein()(q, lowercase(string_sanitize(c)))))
+            end
+        end
+        sort!(scores, by=x->x[3])
+        best_assignment, best_candidate, best_dist = first(scores)
+        denom = max(length(q), length(string_sanitize(best_candidate)))
+        if denom > 0 && best_dist / denom < threshold
+            return best_assignment
+        else
+            error("Assignment not found according to identifier=$identifier")
+        end
+    end
+end
 
 
 struct ExtensionGrant

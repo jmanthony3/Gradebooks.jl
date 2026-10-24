@@ -1,4 +1,4 @@
-export view_gradebook, view_assignment, view_attendance
+export view_gradebook, view_assignment, view_attendance, view_major_distribution, view_attendance_tree_ring
 
 
 
@@ -6,6 +6,7 @@ using DataFrames
 using PrettyTables
 using Colors
 using ColorSchemes
+using Plots
 
 
 
@@ -95,7 +96,7 @@ function render_table(
         write(io, repr(p))
     end
 
-    return nothing
+    return p.data
 end
 
 function resolve_display_value(earned::Point, item, parent_value; display_credits=DISPLAY_CREDITS)
@@ -148,20 +149,20 @@ function total_for_grade(g, flat_leaves, assignment; display_credits=DISPLAY_CRE
     end
 end
 
-function build_assignment_display(gb::Gradebook, grades::Vector{Grade}, assignment::Assignment; student_filter=nothing, teams=Team[], display_credits=DISPLAY_CREDITS)
-    students_idx = if !isnothing(student_filter)
-        sort(if isa(student_filter, Vector{Int})
-            student_filter
-        elseif isa(student_filter, Roster)
-            map(s->gb.class.roster.by_id[s.person.id], student_filter.students)
-        elseif isa(student_filter, Vector{Student})
-            map(s->gb.class.roster.by_id[s.person.id], student_filter)
-        elseif isa(student_filter, Vector{String})
+function build_assignment_display(gb::Gradebook, grades::Vector{Grade}, assignment::Assignment; filter_students=nothing, teams=Team[], display_credits=DISPLAY_CREDITS)
+    students_idx = if !isnothing(filter_students)
+        sort(if isa(filter_students, Vector{Int})
+            filter_students
+        elseif isa(filter_students, Roster)
+            map(s->gb.class.roster.by_id[s.person.id], filter_students.students)
+        elseif isa(filter_students, Vector{Student})
+            map(s->gb.class.roster.by_id[s.person.id], filter_students)
+        elseif isa(filter_students, Vector{String})
             sort(filter(!isnothing, map(s->try
                 gb.class.roster.by_id[get_student(s, gb.class.roster).person.id]
             catch
                 nothing
-            end, student_filter)))
+            end, filter_students)))
         else
             error("Could not insert student filter which must be provided as roster or vector of integers, students, or string identifiers")
         end)
@@ -275,24 +276,31 @@ function sanitize_dataframe(df::DataFrame)
 end
 
 function build_gradebook_display(gb::Gradebook;
-    assignment_filter=nothing,
+    filter_assignments=nothing,
     viewing_attendance=false,
-    student_filter=nothing,
+    show_all=true,
+    filter_students=nothing,
     display_credits=DISPLAY_CREDITS
 )
-    assignments = get_assignments(gb; assignment_filter=assignment_filter, viewing_attendance=viewing_attendance)
-    students_idx = get_students(gb; student_filter=student_filter)
+    assignments = get_assignments(gb; filter_assignments=filter_assignments, viewing_attendance=viewing_attendance)
+    students_idx = get_students(gb; filter_students=filter_students)
 
-    cols = map(a->a.codename, assignments)
     safe_raw = sanitize_dataframe(gb.raw)
     safe_penalty = sanitize_dataframe(gb.penalty)
     safe_total = sanitize_dataframe(gb.total)
+    if !show_all
+        assignments = filter(assignments) do assignment
+            values = safe_total[students_idx, assignment.codename]
+            2 * count(x -> !ismissing(x), values) > length(students_idx)
+        end
+    end
+    cols = map(a->a.codename, assignments)
     df_raw = safe_raw[students_idx, Cols(cols...)]
     df_penalty = safe_penalty[students_idx, Cols(cols...)]
     df_total = safe_total[students_idx, Cols(cols...)]
 
     df_total.Raw = get_rawpoints(df_raw, safe_raw; viewing_attendance=viewing_attendance)
-    df_total.Penalty = get_penaltypoints(gb.penalty, df_penalty, [students_idx...]; viewing_attendance=viewing_attendance, assignment_filter=assignment_filter)
+    df_total.Penalty = get_penaltypoints(gb.penalty, df_penalty, [students_idx...]; viewing_attendance=viewing_attendance, filter_assignments=filter_assignments)
     df_total.Total = get_totalpoints(df_total; viewing_attendance=viewing_attendance)
 
     total_possible = get_totalpossible(assignments; viewing_attendance=viewing_attendance)
@@ -368,14 +376,16 @@ end
 "View gradebook for entire class or subset according to index filter of assignments or students."
 function view_gradebook(
     gb::Gradebook;
-    assignment_filter=nothing,
-    student_filter=nothing,
+    filter_assignments=nothing,
+    show_all=true,
+    filter_students=nothing,
     display_credits=DISPLAY_CREDITS,
     output_path=joinpath(pwd(), "gradebook", "build", "gradebook.html")
 )
     df, assignments, column_labels, row_labels = build_gradebook_display(gb;
-        assignment_filter=assignment_filter,
-        student_filter=student_filter,
+        filter_assignments=filter_assignments,
+        show_all=show_all,
+        filter_students=filter_students,
         display_credits=display_credits
     )
 
@@ -408,11 +418,11 @@ end
 function view_assignment(
     gb::Gradebook,
     assignment::Assignment;
-    student_filter=nothing,
+    filter_students=nothing,
     display_credits=DISPLAY_CREDITS,
     output_path=joinpath(pwd(), "gradebook", "build", "assignment.html")
 )
-    df, items, column_labels, row_labels = build_assignment_display(gb, gb.total[!, assignment.codename], assignment; student_filter=student_filter, teams=gb.class.teams, display_credits=display_credits)
+    df, items, column_labels, row_labels = build_assignment_display(gb, gb.total[!, assignment.codename], assignment; filter_students=filter_students, teams=gb.class.teams, display_credits=display_credits)
 
     return render_table(
         df;
@@ -434,15 +444,17 @@ end
 "Similar to `view_gradebook` but specialized for attendance."
 function view_attendance(
     gb::Gradebook;
-    assignment_filter=nothing,
-    student_filter=nothing,
+    filter_assignments=nothing,
+    show_all=true,
+    filter_students=nothing,
     output_path=joinpath(pwd(), "gradebook", "build", "attendance.html")
 )
     df, records, column_labels, row_labels = build_gradebook_display(
         gb;
-        assignment_filter=assignment_filter,
+        filter_assignments=filter_assignments,
         viewing_attendance=true,
-        student_filter=student_filter
+        show_all=show_all,
+        filter_students=filter_students
     )
 
     return render_table(
@@ -460,4 +472,74 @@ function view_attendance(
         ],
         invert_cols=Set(["Missing", "Absent"])
     )
+end
+
+function view_major_distribution(gb::Gradebook; output_path=joinpath(pwd(), "gradebook", "build", "major_distribution.png"))
+    disciplines = sort(unique(map(x->x.discipline, gb.class.roster.students)))
+    data = Tuple{Integer, String, Integer}[]
+    for (i, d) in enumerate(disciplines)
+        push!(data, (i, d, count(x->x.discipline==d, gb.class.roster.students)))
+    end
+    x, y = map(first, data), map(last, data)
+    z = map(x->x[2], data)
+    # p = bar(x, y;
+    #         label="",
+    #         xgrid=false,
+    #         xticks=(x, map(x->x[2], data)),
+    #         xrotation=45,
+    #         ylims=(0, iseven(maximum(y)) ? maximum(y) : (maximum(y) + 1)),
+    #         yticks=(0:2:(iseven(maximum(y)) ? maximum(y) : (maximum(y) + 1)), 0:2:(iseven(maximum(y)) ? maximum(y) : (maximum(y) + 1))),
+    #         title="Distribution of Major (N=$(mapreduce(last, +, data)))",
+    #         framestyle=:box,
+    #         dpi=300,
+    #     )
+    p = pie(["$(z[i]) ($(y[i]))" for i in 1:length(x)], y;
+            title="Distribution of Major (N=$(mapreduce(last, +, data)))",
+            framestyle=:box,
+            dpi=300,
+        )
+    # display(p)
+    savefig(p, output_path)
+end
+
+function view_attendance_tree_ring(gb::Gradebook; output_path=joinpath(pwd(), "gradebook", "build", "attendance_tree_ring.png"))
+    # https://discourse.julialang.org/t/radar-plot-in-plots-jl-or-makie-jl/88576/4
+    attendance_average = Tuple{Student, Percent}[]
+    for (i, row) ∈ enumerate(eachrow(gb.raw))
+        push!(attendance_average, (gb.class.roster.students[i], Percent((length(gb.class.lectures) - count(isabsent, row[findall(j->isassigned(gb.raw[!, j], i), 1:ncol(gb.raw))])) / length(gb.class.lectures); normalize=false)))
+    end
+    n = length(gb.class.roster)
+    Δθ = 2π/n
+    θ = collect(range(Δθ/2, 2π-Δθ/2; length=n))
+    push!(θ, first(θ))
+    r = map(y->100(y[2].value), attendance_average)
+    push!(r, first(r))
+    y_min = floor(minimum(r)) - (floor(minimum(r)) % 10)
+    Δr = y_min >= 90 ? 1 : (y_min >= 80 ? 2 : (y_min >= 50 ? 5 : 10))
+    p = plot(θ, r; label="Attendance", legend_position=(0.825, -0.025),
+        proj=:polar,
+        xaxis=false,
+        # xticks=(0:15:360, map(x->"$x", 0:15:360)),
+        ylims=(y_min, 100),
+        yticks=(0:Δr:100, map(x->"$x %", 0:Δr:100)),
+        ytickfontsize=8,
+        ytickfontfamily="Computer Modern",
+        markercolor=:blue,
+        markershape=:circle,
+        markersize=3,
+        fillrange=y_min,
+        fillalpha=0.15,
+        gridalpha=0.4,
+        # title="Attendance",
+        # titlefontfamily="Computer Modern",
+        # margin=5Plots.mm,
+        left_margin=-10Plots.mm,
+        aspect_ratio=:none,
+        size=(400, 400),
+        dpi=300,
+    )
+    z = 1.10*exp.(im*2π*(0.5:n-0.5)/n)
+    Plots.annotate!(p, real.(z), imag.(z), text.(map(x->x[1].final_grade, attendance_average), 8, "Computer Modern"))
+    # display(p)
+    savefig(p, output_path)
 end

@@ -33,31 +33,69 @@ function Gradebook(class::Class)
     return Gradebook(class, Grade[], df_raw, df_penalty, df_total)
 end
 
-function get_assignments(gb::Gradebook; assignment_filter=nothing, viewing_attendance=false)
+function get_assignments(gb::Gradebook; filter_assignments=nothing, viewing_attendance=false)
     return if viewing_attendance
-        !isnothing(assignment_filter) ? gb.class.lectures[assignment_filter] : gb.class.lectures
+        if !isnothing(filter_assignments)
+            filter_assignments = if isa(filter_assignments, Function)
+                f = filter(filter_assignments, gb.class.lectures)
+                map(l->findfirst(x->x.codename==l.codename, f), gb.class.lectures)
+            elseif isa(filter_assignments, Vector{Int})
+                filter_assignments
+            elseif isa(filter_assignments, Vector{Assignment})
+                map(l->findfirst(x->x.codename==l.codename, filter_assignments), gb.class.lectures)
+            elseif isa(filter_assignments, Vector{String})
+                f = map(l->get_assignment(l, gb.class.lectures), filter_assignments)
+                filter(!isnothing, map(x->findfirst(l->x.codename==l.codename, gb.class.lectures), f))
+            else
+                error("Could not insert assignment filter which must be provided as function or vector of integers, assignments, or string identifiers.")
+            end
+            gb.class.lectures[filter_assignments]
+        else
+            gb.class.lectures
+        end
     else
-        !isnothing(assignment_filter) ? gb.class.course.assignments[assignment_filter] : gb.class.course.assignments
+        if !isnothing(filter_assignments)
+            filter_assignments = if isa(filter_assignments, Function)
+                f = filter(filter_assignments, gb.class.course.assignments)
+                map(l->findfirst(x->x.codename==l.codename, f), gb.class.course.assignments)
+            elseif isa(filter_assignments, Vector{Int})
+                filter_assignments
+            elseif isa(filter_assignments, Vector{Assignment})
+                map(l->findfirst(x->x.codename==l.codename, filter_assignments), gb.class.course.assignments)
+            elseif isa(filter_assignments, Vector{String})
+                f = map(l->get_assignment(l, gb.class.course.assignments), filter_assignments)
+                filter(!isnothing, map(x->findfirst(l->x.codename==l.codename, gb.class.course.assignments), f))
+            else
+                error("Could not insert assignment filter which must be provided as function or vector of integers, assignments, or string identifiers.")
+            end
+            gb.class.course.assignments[filter_assignments]
+        else
+            gb.class.course.assignments
+        end
     end
 end
 
-function get_students(gb::Gradebook; student_filter=nothing)
-    return if !isnothing(student_filter)
-        sort(if isa(student_filter, Vector{Int})
-            student_filter
-        elseif isa(student_filter, Roster)
-            map(s->gb.class.roster.by_id[s.person.id], student_filter.students)
-        elseif isa(student_filter, Vector{Student})
-            map(s->gb.class.roster.by_id[s.person.id], student_filter)
-        elseif isa(student_filter, Vector{String})
-            filter(!isnothing, map(s->try
-                gb.class.roster.by_id[get_student(s, gb.class.roster).person.id]
-            catch
-                nothing
-            end, student_filter))
+function get_students(gb::Gradebook; filter_students=nothing)
+    return if !isnothing(filter_students)
+        if isa(filter_students, Function)
+            map(s->gb.class.roster.by_id[s.person.id], filter(filter_students, gb.class.roster.students))
         else
-            error("Could not insert student filter which must be provided as roster or vector of integers, students, or string identifiers")
-        end)
+            sort(if isa(filter_students, Vector{Int})
+                filter_students
+            elseif isa(filter_students, Roster)
+                map(s->gb.class.roster.by_id[s.person.id], filter_students.students)
+            elseif isa(filter_students, Vector{Student})
+                map(s->gb.class.roster.by_id[s.person.id], filter_students)
+            elseif isa(filter_students, Vector{String})
+                filter(!isnothing, map(s->try
+                    gb.class.roster.by_id[get_student(s, gb.class.roster).person.id]
+                catch
+                    nothing
+                end, filter_students))
+            else
+                error("Could not insert student filter which must be provided as roster or vector of integers, students, or string identifiers")
+            end)
+        end
     else
         (1:nrow(gb.total))
     end
@@ -65,15 +103,15 @@ end
 
 function get_rawpoints(df::DataFrame, df_safe::DataFrame; viewing_attendance=false)
     return map(map(i -> begin
-        row = collect(skipmissing([df_safe[i, j] for j in 1:ncol(df)]))
+        row = collect(skipmissing([df_safe[i, n] for n in names(df)]))
         viewing_attendance ? count(ispresent, row) : mapreduce(r -> r.submission.score.earned, +, row; init=Point(0.0))
     end, 1:nrow(df))) do row
         row
     end
 end
 
-function get_penaltypoints(df::DataFrame, df_penalty::DataFrame, students_idx::Vector{Int}; viewing_attendance=false, assignment_filter=nothing)
-    return map(eachrow(!viewing_attendance && isnothing(assignment_filter) ? df[students_idx, :] : df_penalty)) do row
+function get_penaltypoints(df::DataFrame, df_penalty::DataFrame, students_idx::Vector{Int}; viewing_attendance=false, filter_assignments=nothing)
+    return map(eachrow(!viewing_attendance && isnothing(filter_assignments) ? df[students_idx, :] : df_penalty)) do row
         sum(row)
     end
 end
@@ -208,6 +246,7 @@ end
 Base.propertynames(gb::Gradebook) = (:class, :grades, :raw, :penalty, :total, :raw_vector, :penalty_vector, :total_vector, :percent_vector, :letter_vector, :gpa_vector, :missing_vector, :absent_vector, :extension_vector, :accommodation_vector)
 
 get_student(identifier::String, gb::Gradebook; threshold=STRING_MATCH_THRESHOLD) = get_student(identifier, gb.class.roster; threshold=threshold)
+get_assignment(identifier::String, gb::Gradebook; threshold=STRING_MATCH_THRESHOLD) = get_assignment(identifier, gb.class.course.assignments; threshold=threshold)
 
 "Posts `grade` to gradebook."
 function post_grade!(gb::Gradebook, grade::Grade)
