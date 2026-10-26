@@ -149,7 +149,7 @@ function total_for_grade(g, flat_leaves, assignment; display_credits=DISPLAY_CRE
     end
 end
 
-function build_assignment_display(gb::Gradebook, grades::Vector{Grade}, assignment::Assignment; filter_students=nothing, teams=Team[], display_credits=DISPLAY_CREDITS)
+function build_assignment_display(gb::Gradebook, grades::Vector{Grade}, assignment::Assignment; filter_students=isactive, teams=Team[], display_credits=DISPLAY_CREDITS)
     students_idx = if !isnothing(filter_students)
         sort(if isa(filter_students, Vector{Int})
             filter_students
@@ -278,8 +278,7 @@ end
 function build_gradebook_display(gb::Gradebook;
     filter_assignments=nothing,
     viewing_attendance=false,
-    show_all=true,
-    filter_students=nothing,
+    filter_students=isactive,
     display_credits=DISPLAY_CREDITS
 )
     assignments = get_assignments(gb; filter_assignments=filter_assignments, viewing_attendance=viewing_attendance)
@@ -288,7 +287,7 @@ function build_gradebook_display(gb::Gradebook;
     safe_raw = sanitize_dataframe(gb.raw)
     safe_penalty = sanitize_dataframe(gb.penalty)
     safe_total = sanitize_dataframe(gb.total)
-    if !show_all
+    if isa(filter_assignments, Bool) && filter_assignments
         assignments = filter(assignments) do assignment
             values = safe_total[students_idx, assignment.codename]
             2 * count(x -> !ismissing(x), values) > length(students_idx)
@@ -376,15 +375,13 @@ end
 "View gradebook for entire class or subset according to index filter of assignments or students."
 function view_gradebook(
     gb::Gradebook;
-    filter_assignments=nothing,
-    show_all=true,
-    filter_students=nothing,
+    filter_assignments=true,
+    filter_students=isactive,
     display_credits=DISPLAY_CREDITS,
     output_path=joinpath(pwd(), "gradebook", "build", "gradebook.html")
 )
     df, assignments, column_labels, row_labels = build_gradebook_display(gb;
         filter_assignments=filter_assignments,
-        show_all=show_all,
         filter_students=filter_students,
         display_credits=display_credits
     )
@@ -418,7 +415,7 @@ end
 function view_assignment(
     gb::Gradebook,
     assignment::Assignment;
-    filter_students=nothing,
+    filter_students=isactive,
     display_credits=DISPLAY_CREDITS,
     output_path=joinpath(pwd(), "gradebook", "build", "assignment.html")
 )
@@ -444,16 +441,14 @@ end
 "Similar to `view_gradebook` but specialized for attendance."
 function view_attendance(
     gb::Gradebook;
-    filter_assignments=nothing,
-    show_all=true,
-    filter_students=nothing,
+    filter_assignments=true,
+    filter_students=isactive,
     output_path=joinpath(pwd(), "gradebook", "build", "attendance.html")
 )
     df, records, column_labels, row_labels = build_gradebook_display(
         gb;
         filter_assignments=filter_assignments,
         viewing_attendance=true,
-        show_all=show_all,
         filter_students=filter_students
     )
 

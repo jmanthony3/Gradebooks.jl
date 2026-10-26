@@ -46,6 +46,8 @@ function get_assignments(gb::Gradebook; filter_assignments=nothing, viewing_atte
             elseif isa(filter_assignments, Vector{String})
                 f = map(l->get_assignment(l, gb.class.lectures), filter_assignments)
                 filter(!isnothing, map(x->findfirst(l->x.codename==l.codename, gb.class.lectures), f))
+            elseif isa(filter_assignments, Bool) && filter_assignments
+                1:length(gb.class.lectures)
             else
                 error("Could not insert assignment filter which must be provided as function or vector of integers, assignments, or string identifiers.")
             end
@@ -65,6 +67,8 @@ function get_assignments(gb::Gradebook; filter_assignments=nothing, viewing_atte
             elseif isa(filter_assignments, Vector{String})
                 f = map(l->get_assignment(l, gb.class.course.assignments), filter_assignments)
                 filter(!isnothing, map(x->findfirst(l->x.codename==l.codename, gb.class.course.assignments), f))
+            elseif isa(filter_assignments, Bool) && filter_assignments
+                1:length(gb.class.course.assignments)
             else
                 error("Could not insert assignment filter which must be provided as function or vector of integers, assignments, or string identifiers.")
             end
@@ -110,7 +114,7 @@ function get_rawpoints(df::DataFrame, df_safe::DataFrame; viewing_attendance=fal
     end
 end
 
-function get_penaltypoints(df::DataFrame, df_penalty::DataFrame, students_idx::Vector{Int}; viewing_attendance=false, filter_assignments=nothing)
+function get_penaltypoints(df::DataFrame, df_penalty::DataFrame, students_idx::Vector{Int}; filter_assignments=nothing, viewing_attendance=false)
     return map(eachrow(!viewing_attendance && isnothing(filter_assignments) ? df[students_idx, :] : df_penalty)) do row
         sum(row)
     end
