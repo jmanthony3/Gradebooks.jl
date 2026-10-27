@@ -108,7 +108,7 @@ end
 function get_rawpoints(df::DataFrame, df_safe::DataFrame; viewing_attendance=false)
     return map(map(i -> begin
         row = collect(skipmissing([df_safe[i, n] for n in names(df)]))
-        viewing_attendance ? count(ispresent, row) : mapreduce(r -> r.submission.score.earned, +, row; init=Point(0.0))
+        viewing_attendance ? count(ispresent, row) : mapreduce(r->r.submission.score.earned, +, row; init=Point(0.0))
     end, 1:nrow(df))) do row
         row
     end
@@ -124,7 +124,7 @@ function get_totalpoints(df::DataFrame; viewing_attendance=false)
     return if viewing_attendance
         df.Penalty
     else
-        df.Raw - df.Penalty
+        Point.(max.(0, float.(df.Raw - df.Penalty)))
     end
 end
 

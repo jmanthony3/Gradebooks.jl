@@ -288,6 +288,7 @@ function build_gradebook_display(gb::Gradebook;
     safe_penalty = sanitize_dataframe(gb.penalty)
     safe_total = sanitize_dataframe(gb.total)
     if isa(filter_assignments, Bool) && filter_assignments
+        filter_assignments = nothing
         assignments = filter(assignments) do assignment
             values = safe_total[students_idx, assignment.codename]
             2 * count(x -> !ismissing(x), values) > length(students_idx)
@@ -298,8 +299,8 @@ function build_gradebook_display(gb::Gradebook;
     df_penalty = safe_penalty[students_idx, Cols(cols...)]
     df_total = safe_total[students_idx, Cols(cols...)]
 
-    df_total.Raw = get_rawpoints(df_raw, safe_raw; viewing_attendance=viewing_attendance)
-    df_total.Penalty = get_penaltypoints(gb.penalty, df_penalty, [students_idx...]; viewing_attendance=viewing_attendance, filter_assignments=filter_assignments)
+    df_total.Raw = get_rawpoints(df_raw, safe_raw[students_idx, :]; viewing_attendance=viewing_attendance)
+    df_total.Penalty = get_penaltypoints(gb.penalty, df_penalty, [students_idx...]; filter_assignments=filter_assignments, viewing_attendance=viewing_attendance)
     df_total.Total = get_totalpoints(df_total; viewing_attendance=viewing_attendance)
 
     total_possible = get_totalpossible(assignments; viewing_attendance=viewing_attendance)
