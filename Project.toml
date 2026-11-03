@@ -21,7 +21,7 @@ StringDistances = "88034a9c-02f8-509d-84a9-84ec65e18404"
 
 [compat]
 AbstractTrees = "0.4.5"
-CSV = "0.10.15"
+CSV = "0.10.15, 1"
 ColorSchemes = "3.31.0"
 Colors = "0.13.1"
 DataFrames = "1.8.1"
