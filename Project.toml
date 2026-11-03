@@ -22,7 +22,7 @@ TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 
 [compat]
 AbstractTrees = "0.4.5"
-CSV = "0.10.15"
+CSV = "0.10.15, 1"
 ColorSchemes = "3.31.0"
 Colors = "0.13.1"
 DataFrames = "1.8.1"
