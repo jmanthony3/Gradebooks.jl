@@ -133,29 +133,26 @@ struct Assignment <: AbstractGradebookNode
     end
 end
 
-"Convenience function constructing `Assignment` to track attendance."
-Attendance(     name, value, due, questions=nothing; is_group=false, codename=nothing) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Attendance_Assignment,    is_group, questions, string2codename(!isnothing(codename) ? codename : name))
+const CATEGORY = Dict(lowercase(replace(string(c), "_Assignment" => "")) => c
+                      for c in instances(AssignmentCategory))
 
-"Convenience function constructing `Assignment` for an exam."
-Exam(           name, value, due, questions=nothing; is_group=false, codename=nothing) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Exam_Assignment,          is_group, questions, string2codename(!isnothing(codename) ? codename : name))
+"""
+    make_assignment(name, value, due, category; questions=nothing, is_group=false, codename=nothing)
 
-"Convenience function constructing `Assignment` for homework."
-Homework(       name, value, due, questions=nothing; is_group=false, codename=nothing) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Homework_Assignment,      is_group, questions, string2codename(!isnothing(codename) ? codename : name))
+The only place assignment values, codenames, due times and child trees are normalized.
+"""
+function make_assignment(name, value::Credit, due, category::AssignmentCategory;
+                         questions=nothing, is_group=false, codename=nothing)
+    v  = value isa Percent ? Point(value.value * COURSE_POINT_SYSTEM) : value
+    cn = string2codename(something(codename, name))
+    qs = normalize_children(questions, v)      # ensures ≥1 leaf and checks that values add up
+    return Assignment(name, v, parse_datetime(due), category, is_group, qs, cn)
+end
 
-"Convenience function constructing `Assignment` for some other academic item: e.g., extra credit."
-Other(          name, value, due, questions=nothing; is_group=false, codename=nothing) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Other_Assignment,         is_group, questions, string2codename(!isnothing(codename) ? codename : name))
-
-"Convenience function constructing `Assignment` for a paper."
-Paper(          name, value, due, questions=nothing; is_group=false, codename=nothing) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Paper_Assignment,         is_group, questions, string2codename(!isnothing(codename) ? codename : name))
-
-"Convenience function constructing `Assignment` for a presentation."
-Presentation(   name, value, due, questions=nothing; is_group=false, codename=nothing) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Presentation_Assignment,  is_group, questions, string2codename(!isnothing(codename) ? codename : name))
-
-"Convenience function constructing `Assignment` for a project."
-Project(        name, value, due, questions=nothing; is_group=false, codename=nothing) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Project_Assignment,       is_group, questions, string2codename(!isnothing(codename) ? codename : name))
-
-"Convenience function constructing `Assignment` for a quiz."
-Quiz(           name, value, due, questions=nothing; is_group=false, codename=nothing) = Assignment(name, isa(value, Percent) ? (value * COURSE_POINT_SYSTEM) : value, due, Quiz_Assignment,          is_group, questions, string2codename(!isnothing(codename) ? codename : name))
+for (f, c) in ((:Exam, Exam_Assignment), (:Homework, Homework_Assignment), #= … =#)
+    @eval $f(name, value, due, questions=nothing; kw...) =
+        make_assignment(name, value, due, $c; questions, kw...)
+end
 
 isattendance(x)                         = false
 isattendance(x::AssignmentCategory)     = x == Attendance_Assignment
@@ -191,41 +188,21 @@ function assignment_candidates(a::Assignment)
     return unique(filter(!isempty, map(string_sanitize, parts)))
 end
 
-"""
-Find needle (`identifier`), according to any field of `Assignment`, in haystack (`assignments`).
-
-`threshold` adjusts Levenshtein string matching criterion.
-"""
-function get_assignment(identifier::String, assignments::Vector{Assignment}; threshold=STRING_MATCH_THRESHOLD)
-    q = lowercase(string_sanitize(identifier))
-    exact = findall(a -> any(c -> lowercase(string_sanitize(c)) == q, assignment_candidates(a)), assignments)
-    if length(exact) == 1
-        return assignments[only(exact)]
-    elseif length(exact) > 1
-        error("Ambiguous assignment match for $(identifier): $(map(x->x.codename, assignments[exact]))")
-    else # fallback to fuzzy logic
-        scores = Tuple{Assignment, String, Int}[]
-        for a ∈ assignments
-            for c ∈ assignment_candidates(a)
-                push!(scores, (a, c, Levenshtein()(q, lowercase(string_sanitize(c)))))
-            end
-        end
-        sort!(scores, by=x->x[3])
-        best_assignment, best_candidate, best_dist = first(scores)
-        denom = max(length(q), length(string_sanitize(best_candidate)))
-        if denom > 0 && best_dist / denom < threshold
-            return best_assignment
-        else
-            error("Assignment not found according to identifier=$identifier")
-        end
-    end
-end
+get_assignment(id, v::Vector{Assignment}; kw...) = lookup(id, v, assignment_candidates; what="assignment", kw...)
 
 
 struct ExtensionGrant
-    assignment::Assignment
-    due::DateTime
-    granted::DateTime
-    reason::String
-    notes::String
+    student_id::String; assignment::Symbol          # codename, not a copied Assignment
+    due::DateTime; granted::DateTime
+    reason::Symbol                                   # :odas, :athletics, :medical, …
+    waive_penalty::Bool; notes::String
+end
+
+effective_due(gb, s, a) = something(latest_extension(gb, s, a), a).due
+penalty(gb, g::Grade)   = gb.policy(g.submission.submitted - effective_due(gb, g.student, g.assignment))
+
+function grant_extension!(gb, student, assignment; due, reason=:other, notes="", granted=now())
+    # due may be a DateTime or a Period offset from the original due date
+    push!(gb.extensions, …)
+    repost!(gb, student, assignment)                 # recompute the penalty if already graded
 end
