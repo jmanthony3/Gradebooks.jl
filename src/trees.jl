@@ -64,7 +64,7 @@ AbstractTrees.printnode(io::IO, node::Course) = print(io, string(node.code) * st
 AbstractTrees.printnode(io::IO, node::Class) = print(io, string(node.codename_long))
 AbstractTrees.printnode(io::IO, node::Score) = print(io, string(node.earned) * " / " * string(node.value) * " (" * repr(node.percent) * ", " * repr(node.letter) *  ")" * (isempty(node.comment) ? "" : "# ") * node.comment)
 AbstractTrees.printnode(io::IO, node::Submission) = print(io, "[" * string(node.submitted) * "] " * AbstractTrees.printnode(io, node.score), "\n", join(map(e->AbstractTrees.printnode(io, e), node.evaluations), "\n\t"))
-AbstractTrees.printnode(io::IO, node::Grade) = print(io, node.student.person.name * " " * string(node.assignment.codename) * " " * AbstractTrees.printnode(io, node.submission))
+AbstractTrees.printnode(io::IO, node::Grade) = print(io, node.get_student(gb, node.identifier).person.name * " " * string(node.assignment.codename) * " " * AbstractTrees.printnode(io, node.submission))
 
 
 AbstractTrees.NodeType(::Type{<:AbstractGradebookNode}) = AbstractTrees.HasNodeType()
