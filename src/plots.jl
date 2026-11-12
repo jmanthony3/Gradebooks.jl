@@ -1,4 +1,4 @@
-export view_gradebook, view_assignment, view_attendance, view_major_distribution, view_attendance_tree_ring
+export view_gradebook, view_assignment, view_assignment_trends, view_attendance, view_major_distribution, view_attendance_tree_ring
 
 
 
@@ -437,6 +437,244 @@ function view_assignment(
         ],
         invert_cols=Set(["Missing"])
     )
+end
+
+function view_assignment_trends(
+    gb::Gradebook;
+    filter_students=nothing,
+    filter_teams=nothing,
+    forecast=false,
+    output_path=joinpath(pwd(), "gradebook", "build", "assignment_trends.png")
+)
+    all_assignments = sort(copy(gb.class.course.assignments); by=a -> a.due)
+    isempty(all_assignments) &&
+        throw(ArgumentError("The course has no assignments"))
+    # any(a -> a.value.value <= 0, all_assignments) &&
+    #     throw(ArgumentError("Assignment trend plots require positive assignment values"))
+
+    student_indices = isnothing(filter_students) ? Int[] :
+        collect(get_students(gb; filter_students=filter_students))
+
+    teams = if isnothing(filter_teams)
+        Team[]
+    elseif filter_teams isa Team
+        Team[filter_teams]
+    elseif filter_teams isa AbstractString
+        Team[get_team(String(filter_teams), gb.class.teams)]
+    elseif filter_teams isa AbstractVector{<:Team}
+        collect(filter_teams)
+    elseif filter_teams isa AbstractVector{<:AbstractString}
+        map(name -> get_team(String(name), gb.class.teams), filter_teams)
+    else
+        throw(ArgumentError(
+            "filter_teams must be a Team, team name, or vector of Teams or team names"
+        ))
+    end
+
+    team_indices = Int[]
+    for team in teams
+        append!(team_indices, get_students(gb; filter_students=team.roster))
+    end
+
+    cohort_indices = if isnothing(filter_students) && isnothing(filter_teams)
+        findall(isactive, gb.class.roster.students)
+    else
+        unique(vcat(student_indices, team_indices))
+    end
+
+    isempty(cohort_indices) &&
+        throw(ArgumentError("The selected student and team filters contain no students"))
+    forecast && isempty(student_indices) &&
+        throw(ArgumentError("forecast=true requires filter_students to select at least one student"))
+
+    n_students = length(gb.class.roster.students)
+    n_assignments = length(all_assignments)
+    # now_dt = now()
+    now_dt = begin
+        assignments = filter(all_assignments) do assignment
+            grades = gb.total[!, assignment.codename]
+            2 * count(i -> isassigned(grades, i), cohort_indices) > length(cohort_indices)
+        end
+        isempty(assignments) ? now() : maximum(map(a->a.due, assignments))
+    end
+
+    scores = fill(NaN, n_students, n_assignments)
+    for (j, assignment) in enumerate(all_assignments)
+        grades = gb.total[!, assignment.codename]
+        for i in 1:n_students
+            if isassigned(grades, i)
+                scores[i, j] =
+                    grades[i].submission.score.earned.value / assignment.value.value
+            end
+        end
+    end
+
+    bar_indices = findall(all_assignments) do assignment
+        grades = gb.total[!, assignment.codename]
+        2 * count(i -> isassigned(grades, i), cohort_indices) > length(cohort_indices)
+    end
+    isempty(bar_indices) &&
+        throw(ArgumentError("No assignments are graded for more than half of the selected cohort"))
+
+    class_assignment = fill(NaN, n_assignments)
+    class_running = fill(NaN, n_assignments)
+    class_earned = 0.0
+    class_possible = 0.0
+
+    for j in 1:n_assignments
+        assignment = all_assignments[j]
+        is_due = assignment.due <= now_dt
+        values = Float64[]
+
+        for i in cohort_indices
+            score = scores[i, j]
+            if !isnan(score)
+                push!(values, score)
+                class_earned += score * assignment.value.value
+                class_possible += assignment.value.value
+            elseif is_due
+                push!(values, 0.0)
+                class_possible += assignment.value.value
+            end
+        end
+
+        if !isempty(values)
+            class_assignment[j] = sum(values) / length(values)
+        end
+        if class_possible > 0
+            class_running[j] = class_earned / class_possible
+        end
+    end
+
+    x_all = collect(eachindex(all_assignments))
+    labels = map(a -> a.codename, all_assignments)
+    if !forecast
+        x_all = filter(j -> !isnan(class_assignment[j]), x_all)
+        labels = labels[x_all]
+    end
+    p = bar(
+        bar_indices,
+        100 .* hcat(class_assignment[bar_indices], class_running[bar_indices]);
+        bar_position=:dodge,
+        label=["Class assignment average" "Class running average"],
+        xticks=(x_all, labels),
+        xrotation=45,
+        ylabel="Performance (%)",
+        title="$(gb.class.course.name): Assignment Trends",
+        legend=:outerright,
+        framestyle=:box,
+    )
+
+    forecast_summaries = String[]
+
+    for student_index in student_indices
+        selected_student = gb.class.roster.students[student_index]
+        student_name = isempty(selected_student.person.name_preferred) ?
+            selected_student.person.name_given : selected_student.person.name_preferred
+        student_scores = scores[student_index, :]
+        student_running = fill(NaN, n_assignments)
+        earned = 0.0
+        possible = 0.0
+
+        for j in 1:n_assignments
+            assignment = all_assignments[j]
+            score = student_scores[j]
+
+            if !isnan(score)
+                earned += score * assignment.value.value
+                possible += assignment.value.value
+            elseif assignment.due <= now_dt
+                possible += assignment.value.value
+            end
+
+            if possible > 0
+                student_running[j] = 100 * earned / possible
+            end
+        end
+
+        x = forecast ? x_all : findall(j -> !isnan(student_scores[j]), eachindex(all_assignments))
+
+        plot!(p, x, 100 .* student_scores[1:length(x)];
+            label="$student_name assignment performance",
+            marker=:circle,
+            linewidth=2)
+        plot!(p, x, student_running[1:length(x)];
+            label="$student_name running average",
+            marker=:diamond,
+            linewidth=2)
+
+        if forecast
+            observed = findall(j -> !isnan(student_scores[j]), eachindex(all_assignments))
+            if isempty(observed)
+                push!(forecast_summaries,
+                    "$student_name: forecast unavailable (no graded assignments)")
+                continue
+            end
+
+            mean_x = sum(observed) / length(observed)
+            mean_y = sum(student_scores[observed]) / length(observed)
+            denom = sum((j - mean_x)^2 for j in observed)
+            slope = length(observed) > 1 && denom > 0 ?
+                sum((j - mean_x) * (student_scores[j] - mean_y) for j in observed) / denom : 0.0
+            intercept = mean_y - slope * mean_x
+
+            future = findall(j ->
+                isnan(student_scores[j]) && all_assignments[j].due > now_dt,
+                eachindex(all_assignments))
+
+            projected = fill(NaN, n_assignments)
+            if !isempty(future)
+                projected[future] = clamp.(
+                    intercept .+ slope .* future, 0.0, 1.0
+                )
+
+                forecast_line = fill(NaN, n_assignments)
+                last_observed = last(observed)
+                forecast_line[last_observed] = student_scores[last_observed]
+                forecast_line[future] = projected[future]
+
+                plot!(p, x_all, 100 .* forecast_line;
+                    label="$student_name forecast",
+                    marker=:utriangle,
+                    linestyle=:dash,
+                    linewidth=2)
+            end
+
+            final_earned = 0.0
+            final_possible = 0.0
+            for j in 1:n_assignments
+                assignment = all_assignments[j]
+                score = student_scores[j]
+
+                if !isnan(score)
+                    final_earned += score * assignment.value.value
+                    final_possible += assignment.value.value
+                elseif assignment.due <= now_dt
+                    final_possible += assignment.value.value
+                elseif !isnan(projected[j])
+                    final_earned += projected[j] * assignment.value.value
+                    final_possible += assignment.value.value
+                else
+                    final_possible += assignment.value.value
+                end
+            end
+
+            current = possible > 0 ? 100 * earned / possible : NaN
+            final = final_possible > 0 ? 100 * final_earned / final_possible : NaN
+            push!(forecast_summaries,
+                "$student_name: current $(isnan(current) ? "n/a" : "$(round(current; digits=1))%"), " *
+                "forecast final $(isnan(final) ? "n/a" : "$(round(final; digits=1))%")")
+        end
+    end
+
+    if !isempty(forecast_summaries)
+        plot!(p; title="$(gb.class.course.name): Assignment Trends\n" *
+            join(forecast_summaries, " | "))
+    end
+
+    mkpath(dirname(output_path))
+    savefig(p, output_path)
+    return p
 end
 
 "Similar to `view_gradebook` but specialized for attendance."
