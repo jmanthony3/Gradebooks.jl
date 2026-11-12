@@ -171,57 +171,7 @@ function student_candidates(s::Student)
     return unique(filter(!isempty, map(string_sanitize, parts)))
 end
 
-"""
-Find needle (`identifier`), according to any field of `Person`, in haystack (`roster`).
-
-`threshold` adjusts Levenshtein string matching criterion.
-"""
-function get_student(identifier::String, roster::Roster; threshold=STRING_MATCH_THRESHOLD)
-    exact = if occursin(", ", identifier)
-        family, given = split(identifier, ", ")
-        family_idx = findall(s -> any(c -> lowercase(string_sanitize(c)) == lowercase(string_sanitize(family)), student_candidates(s)), roster.students)
-        if isnothing(family_idx)
-            error("No student found with that family name: $family")
-        end
-        given_idx = findall(s->any(c->begin
-            if length(lowercase(string_sanitize(given))) <= length(lowercase(string_sanitize(c)))
-                lowercase(string_sanitize(c))[1:length(lowercase(string_sanitize(given)))] == lowercase(string_sanitize(given))
-            else
-                false
-            end
-        end, student_candidates(s)), roster.students[family_idx])
-        if isnothing(given_idx)
-            error("No student found with that name: $family, $given")
-        end
-        family_idx[given_idx]
-        # if is username without "@<organization>.<domain>"
-    elseif occursin('@', identifier)
-        roster.by_email[identifier]
-    else
-        q = lowercase(string_sanitize(identifier))
-        findall(s -> any(c -> lowercase(string_sanitize(c)) == q, student_candidates(s)), roster.students)
-    end
-    if length(exact) == 1
-        return roster.students[only(exact)]
-    elseif length(exact) > 1
-        error("Ambiguous student match for $(identifier): $(map(x->x.person.email, roster.students[exact]))")
-    else # fallback to fuzzy logic
-        scores = Tuple{Student, String, Int}[]
-        for s ∈ roster.students
-            for c ∈ student_candidates(s)
-                push!(scores, (s, c, Levenshtein()(q, lowercase(string_sanitize(c)))))
-            end
-        end
-        sort!(scores, by=x->x[3])
-        best_student, best_candidate, best_dist = first(scores)
-        denom = max(length(q), length(string_sanitize(best_candidate)))
-        if denom > 0 && best_dist / denom < threshold
-            return best_student
-        else
-            error("Student not found according to identifier=$identifier")
-        end
-    end
-end
+get_student(id, r::Roster; kw...) = lookup(id, r.students, student_candidates; what="student", kw...)
 
 
 function update(person::Person; kwargs...)
@@ -301,27 +251,4 @@ function team_candidates(t::Team)
     return unique(filter(!isempty, map(string_sanitize, parts)))
 end
 
-function get_team(identifier::String, teams::Vector{Team}; threshold=STRING_MATCH_THRESHOLD)
-    q = lowercase(string_sanitize(identifier))
-    exact = findall(t -> any(c -> lowercase(string_sanitize(c)) == q, team_candidates(t)), teams)
-    if length(exact) == 1
-        return teams[exact[1]]
-    elseif length(exact) > 1
-        error("Ambiguous team match for $(identifier): $(map(x -> x.name, teams[exact]))")
-    else # fallback to fuzzy logic
-        scores = Tuple{Team, String, Int}[]
-        for t ∈ teams
-            for c ∈ team_candidates(t)
-                push!(scores, (t, c, Levenshtein()(q, lowercase(string_sanitize(c)))))
-            end
-        end
-        sort!(scores, by=x->x[3])
-        best_team, best_candidate, best_dist = first(scores)
-        denom = max(length(q), length(string_sanitize(best_candidate)))
-        if denom > 0 && best_dist / denom < threshold
-            return best_team
-        else
-            error("Team not found according to identifier=$identifier")
-        end
-    end
-end
+get_team(id, teams::Vector{Team}; kw...) = lookup(id, teams, team_candidates; what="team", kw...)

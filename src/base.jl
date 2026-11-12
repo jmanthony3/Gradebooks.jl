@@ -373,48 +373,48 @@ show(io::IO, x::LeafPath) = print(io, string(x))
     /(a::Submission, b::Percent) = Submission(a.submitted, a.score / b, a.evaluations)
 
 
-    +(a::Grade, b::Grade) = Grade(a.student, a.assignment, Submission(max(a.submission.submitted, b.submission.submitted), a.submission.score + b.submission.score, vcat(a.submission.evaluations, b.submission.evaluations)))
-    -(a::Grade, b::Grade) = Grade(a.student, a.assignment, Submission(max(a.submission.submitted, b.submission.submitted), a.submission.score - b.submission.score, vcat(a.submission.evaluations, b.submission.evaluations)))
+    +(a::Grade, b::Grade) = Grade(a.identifier, a.assignment, Submission(max(a.submission.submitted, b.submission.submitted), a.submission.score + b.submission.score, vcat(a.submission.evaluations, b.submission.evaluations)))
+    -(a::Grade, b::Grade) = Grade(a.identifier, a.assignment, Submission(max(a.submission.submitted, b.submission.submitted), a.submission.score - b.submission.score, vcat(a.submission.evaluations, b.submission.evaluations)))
     ==(a::Grade, b::Grade) = a.submission.score.percent == b.submission.score.percent
     <(a::Grade, b::Grade) = a.submission.score.percent < b.submission.score.percent
     <=(a::Grade, b::Grade) = a.submission.score.percent <= b.submission.score.percent
     >(a::Grade, b::Grade) = a.submission.score.percent > b.submission.score.percent
     >=(a::Grade, b::Grade) = a.submission.score.percent >= b.submission.score.percent
     isless(a::Grade, b::Grade) = a.submission.score.percent < b.submission.score.percent
-    # show(io::IO, x::Grade) = print(io, join([x.student, x.assignment, x.submission], "\n"))
+    # show(io::IO, x::Grade) = print(io, join([x.identifier, x.assignment, x.submission], "\n"))
 
 
-    +(a::Grade, b::Real) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score + Float64(b), a.submission.evaluations))
+    +(a::Grade, b::Real) = Grade(a.identifier, a.assignment, Submission(a.submission.submitted, a.submission.score + Float64(b), a.submission.evaluations))
     +(a::Real, b::Grade) = b + a
-    -(a::Grade, b::Real) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score - Float64(b), a.submission.evaluations))
-    *(a::Grade, b::Real) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score * Float64(b), a.submission.evaluations))
+    -(a::Grade, b::Real) = Grade(a.identifier, a.assignment, Submission(a.submission.submitted, a.submission.score - Float64(b), a.submission.evaluations))
+    *(a::Grade, b::Real) = Grade(a.identifier, a.assignment, Submission(a.submission.submitted, a.submission.score * Float64(b), a.submission.evaluations))
     *(a::Real, b::Grade) = b * a
-    /(a::Grade, b::Real) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score / Float64(b), a.submission.evaluations))
+    /(a::Grade, b::Real) = Grade(a.identifier, a.assignment, Submission(a.submission.submitted, a.submission.score / Float64(b), a.submission.evaluations))
 
-    +(a::Grade, b::Point) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score + b, a.submission.evaluations))
+    +(a::Grade, b::Point) = Grade(a.identifier, a.assignment, Submission(a.submission.submitted, a.submission.score + b, a.submission.evaluations))
     +(a::Point, b::Grade) = b + a
-    -(a::Grade, b::Point) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score - b, a.submission.evaluations))
-    *(a::Grade, b::Point) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score * b, a.submission.evaluations))
+    -(a::Grade, b::Point) = Grade(a.identifier, a.assignment, Submission(a.submission.submitted, a.submission.score - b, a.submission.evaluations))
+    *(a::Grade, b::Point) = Grade(a.identifier, a.assignment, Submission(a.submission.submitted, a.submission.score * b, a.submission.evaluations))
     *(a::Point, b::Grade) = b * a
-    /(a::Grade, b::Point) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score / b, a.submission.evaluations))
+    /(a::Grade, b::Point) = Grade(a.identifier, a.assignment, Submission(a.submission.submitted, a.submission.score / b, a.submission.evaluations))
 
-    +(a::Grade, b::Percent) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score + b, a.submission.evaluations))
+    +(a::Grade, b::Percent) = Grade(a.identifier, a.assignment, Submission(a.submission.submitted, a.submission.score + b, a.submission.evaluations))
     +(a::Percent, b::Grade) = b + a
-    -(a::Grade, b::Percent) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score - b, a.submission.evaluations))
-    *(a::Grade, b::Percent) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score * b, a.submission.evaluations))
+    -(a::Grade, b::Percent) = Grade(a.identifier, a.assignment, Submission(a.submission.submitted, a.submission.score - b, a.submission.evaluations))
+    *(a::Grade, b::Percent) = Grade(a.identifier, a.assignment, Submission(a.submission.submitted, a.submission.score * b, a.submission.evaluations))
     *(a::Percent, b::Grade) = b * a
-    /(a::Grade, b::Percent) = Grade(a.student, a.assignment, Submission(a.submission.submitted, a.submission.score / b, a.submission.evaluations))
+    /(a::Grade, b::Percent) = Grade(a.identifier, a.assignment, Submission(a.submission.submitted, a.submission.score / b, a.submission.evaluations))
 
 
     function convert(::Type{Dict}, x::Grade)
-        dict_student = Dict(x.student)
+        dict_student = Dict(x.identifier)
         dict_assignment = Dict(x.assignment)
         dict_submission = Dict()
         dict_submission["assignment"] = dict_assignment
         dict_submission["datetime"] = x.submission.datetime
         dict_submission["score"] = Dict(x.submission.score)
         return Dict(
-            "student"       => dict_student,
+            "identifier"    => dict_student,
             "assignment"    => dict_assignment,
             "submission"    => dict_submission,
         )

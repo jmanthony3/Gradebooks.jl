@@ -15,6 +15,7 @@ import Printf: @sprintf
 
 
 
+include("exceptions.jl")
 include("preferences.jl")
 include("utils.jl")
 include("datetime.jl")
@@ -81,21 +82,6 @@ LeafPath(node::Question; prefix=())         = LeafPath(tuple(prefix..., node.cod
 
 "Determines if a node is a leaf (i.e., has no children)."
 isleaf(node::T) where {T <: AbstractGradebookNode} = isempty(children(node))
-
-function rake_leaves(node::T; prefix=(), parent_value=nothing) where {T <: AbstractGradebookNode}
-    trace = trace_leaf_resolution(node, parent_value; prefix=prefix)
-    current_path = trace.path
-    current_value = trace.resolved_value
-    if isleaf(node)
-        return [(current_path, node, parent_value, current_value)]
-    else
-        out = Tuple{LeafPath, Any, Any, Any}[]
-        for child ∈ children(node)
-            append!(out, rake_leaves(child; prefix=current_path.parts, parent_value=current_value))
-        end
-        return out
-    end
-end
 
 
 include("class.jl")

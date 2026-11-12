@@ -135,46 +135,14 @@ function leaf_score(path, item, evs, parent_value, current_value; display_credit
     return resolve_display_value(earned, item, parent_value; display_credits=display_credits)
 end
 
-function total_for_grade(g, flat_leaves, assignment; display_credits=DISPLAY_CREDITS)
-    points = 0.0
-    for (path, leaf, parent_value, current_value) ∈ flat_leaves
-        score = leaf_score(path, leaf, g.submission.evaluations, parent_value, current_value; display_credits="point")
-        points += score.value
-    end
-
-    return if display_credits == "percent"
-        Percent(points / assignment.value.value; normalize=false)
-    else
-        Point(points)
-    end
-end
-
 function build_assignment_display(gb::Gradebook, grades::Vector{Grade}, assignment::Assignment; filter_students=isactive, teams=Team[], display_credits=DISPLAY_CREDITS)
-    students_idx = if !isnothing(filter_students)
-        sort(if isa(filter_students, Vector{Int})
-            filter_students
-        elseif isa(filter_students, Roster)
-            map(s->gb.class.roster.by_id[s.person.id], filter_students.students)
-        elseif isa(filter_students, Vector{Student})
-            map(s->gb.class.roster.by_id[s.person.id], filter_students)
-        elseif isa(filter_students, Vector{String})
-            sort(filter(!isnothing, map(s->try
-                gb.class.roster.by_id[get_student(s, gb.class.roster).person.id]
-            catch
-                nothing
-            end, filter_students)))
-        else
-            error("Could not insert student filter which must be provided as roster or vector of integers, students, or string identifiers")
-        end)
-    else
-        (1:nrow(gb.total))
-    end
+    students_idx = get_students(gb; filter_students=filter_students)
     grades = grades[students_idx]
     # collect all leaf nodes once, with a unique display codename
-    flat_leaves = rake_leaves(assignment; parent_value=assignment.value)
+    flat_leaves = leaves(assignment, assignment.value)
     all_leaves = [leaf for (_, leaf, _, _) ∈ flat_leaves]
 
-    total_values = map(i->isassigned(grades, i) ? (display_credits == "percent" ? grades[i].submission.score.percent : grades[i].submission.score.earned) : NaN, 1:length(grades))
+    total_values = map(i->ismissing(grades, i) ? NaN : (display_credits == "percent" ? grades[i].submission.score.percent : grades[i].submission.score.earned), 1:length(grades))
 
     df = DataFrame(
         Total = total_values,
@@ -210,7 +178,7 @@ function build_assignment_display(gb::Gradebook, grades::Vector{Grade}, assignme
     # add one column per leaf using the prefixed display codename
     for (i, (path, leaf, parent_value, current_value)) ∈ enumerate(flat_leaves)
         codename = Symbol(join(path.parts, "."))
-        insertcols!(df, i, codename => map(i->isassigned(grades, i) ? leaf_score(path, leaf, grades[i].submission.evaluations, parent_value, current_value; display_credits=display_credits) : missing, 1:length(grades)))
+        insertcols!(df, i, codename => map(i->ismissing(grades, i) ? missing : leaf_score(path, leaf, grades[i].submission.evaluations, parent_value, current_value; display_credits=display_credits), 1:length(grades)))
     end
 
     column_labels = [
@@ -241,38 +209,10 @@ function build_assignment_display(gb::Gradebook, grades::Vector{Grade}, assignme
                 push!(team_names, "")
             end
         end
+        push!(data, team_names)
     end
 
     return df, all_leaves, column_labels, [join(collect(row), " ") for row ∈ zip(data...)]
-end
-
-function sanitize_value(x)
-    try
-        return ismissing(x) || x === nothing ? missing : x
-    catch
-        return missing
-    end
-end
-
-function sanitize_column(col)
-    T = Union{Missing, eltype(col)}
-    out = Vector{T}(undef, length(col))
-    for i in eachindex(col)
-        out[i] = try
-            sanitize_value(col[i])
-        catch
-            missing
-        end
-    end
-    return out
-end
-
-function sanitize_dataframe(df::DataFrame)
-    out = DataFrame()
-    for name in names(df)
-        out[!, name] = sanitize_column(df[!, name])
-    end
-    return out
 end
 
 function build_gradebook_display(gb::Gradebook;
@@ -284,9 +224,9 @@ function build_gradebook_display(gb::Gradebook;
     assignments = get_assignments(gb; filter_assignments=filter_assignments, viewing_attendance=viewing_attendance)
     students_idx = get_students(gb; filter_students=filter_students)
 
-    safe_raw = sanitize_dataframe(gb.raw)
-    safe_penalty = sanitize_dataframe(gb.penalty)
-    safe_total = sanitize_dataframe(gb.total)
+    safe_raw = deepcopy(gb.raw)
+    safe_penalty = deepcopy(gb.penalty)
+    safe_total = deepcopy(gb.total)
     if isa(filter_assignments, Bool) && filter_assignments
         filter_assignments = nothing
         assignments = filter(assignments) do assignment
@@ -314,7 +254,7 @@ function build_gradebook_display(gb::Gradebook;
     )
 
     for (i, assignment) ∈ enumerate(assignments)
-        insertcols!(df, i, assignment.codename=>map(g->ismissing(g) ? missing : (viewing_attendance ? g.status : g.submission.score.earned), [isassigned(gb.total[!, assignment.codename], ii) ? gb.total[ii, assignment.codename] : missing for ii ∈ students_idx]))
+        insertcols!(df, i, assignment.codename=>map(g->ismissing(g) ? missing : (viewing_attendance ? g.status : g.submission.score.earned), [ismissing(gb.total[!, assignment.codename], ii) ? missing : gb.total[ii, assignment.codename] for ii ∈ students_idx]))
     end
 
     if !viewing_attendance
@@ -367,6 +307,7 @@ function build_gradebook_display(gb::Gradebook;
                 push!(team_names, "")
             end
         end
+        push!(data, team_names)
     end
 
     return df, assignments, column_labels, [join(collect(row), " ") for row ∈ zip(data...)]
@@ -740,7 +681,7 @@ function view_attendance_tree_ring(gb::Gradebook; output_path=joinpath(pwd(), "g
     # https://discourse.julialang.org/t/radar-plot-in-plots-jl-or-makie-jl/88576/4
     attendance_average = Tuple{Student, Percent}[]
     for (i, row) ∈ enumerate(eachrow(gb.raw))
-        push!(attendance_average, (gb.class.roster.students[i], Percent((length(gb.class.lectures) - count(isabsent, row[findall(j->isassigned(gb.raw[!, j], i), 1:ncol(gb.raw))])) / length(gb.class.lectures); normalize=false)))
+        push!(attendance_average, (gb.class.roster.students[i], Percent((length(gb.class.lectures) - count(isabsent, row[findall(j->!ismissing(gb.raw[i, j]), 1:ncol(gb.raw))])) / length(gb.class.lectures); normalize=false)))
     end
     n = length(gb.class.roster)
     Δθ = 2π/n

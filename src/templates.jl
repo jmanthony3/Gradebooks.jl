@@ -17,12 +17,12 @@ end
 
 @kwdef struct AssignmentTemplate
     name::String
-    value::Point
+    value::Credit
     due::RelativeDate
     category::AssignmentCategory
     is_group::Bool
     questions::Vector{Question}
-    codename::String = string2codename(name)
+    codename::Union{Nothing, String} = nothing
     # assigned::RelativeDate
     # any other static metadata (rubric, questions, etc.)
     # extras::NamedTuple = (;)
@@ -100,9 +100,7 @@ function find_template_file(course_code; template=nothing, templates_dir)
     ]
 
     path = findfirst(isfile, candidates)
-    isnothing(path) && error(
-        "Template '$filename' not found. Searched: $(join(candidates, ", "))"
-    )
+    isnothing(path) && throw(TemplateError(filename, candidates))
 
     return candidates[path]
 end
@@ -136,7 +134,7 @@ function load_course_template(course_code::AbstractString;
             a["name"],
             (haskey(a, "percent") ? Percent(get(a, "percent", 0)) : Point(get(a, "point", 0))),
             due,
-            instances(AssignmentCategory)[findfirst(==(uppercasefirst(a["category"])*"_Assignment"), string.(instances(AssignmentCategory)))],
+            get(CATEGORY, lowercase(replace(a["category"], "_Assignment" => "")), error("Unknown assignment category: $(a["category"])")),
             # assigned,
             get(a, "is_group", false),
             questions,
@@ -146,9 +144,9 @@ function load_course_template(course_code::AbstractString;
 
     # @show meta["code"], meta["number"], meta["name"], meta["credits"]
 
-    CourseTemplate(
+    return CourseTemplate(
         meta["code"],
-        parse(Int, meta["number"]),
+        isa(meta["number"], AbstractString) ? parse(Int, meta["number"]) : meta["number"],
         meta["name"],
         meta["credits"],
         assignments
@@ -156,15 +154,12 @@ function load_course_template(course_code::AbstractString;
 end
 
 
-function absolute_date(start::Date, rel::RelativeDate)::Date
-    # week 1 begins on `start` (or the Monday of that week — pick a convention)
-    base = start + Day(7 * (rel.week - 1))
-    # align to the desired weekday
-    # -1 so that Sunday is first day of week (c.f. Dates.dayofweek and ISO 8601)
-    offset = mod(Int(rel.day) - dayofweek(base), 7) - 1
-    d = base + Day(offset)
-    # @show rel.week, rel.day, base, offset, d
-    return d
+function absolute_date(start::Date, rel::RelativeDate)
+    1 ≤ rel.day ≤ 7 || throw(TemplateError("day must be 1–7 (Sun–Sat); got $(rel.day)"))
+    rel.week ≥ 1    || throw(TemplateError("week must be ≥ 1; got $(rel.week)"))
+    sunday = start - Day(dayofweek(start) % 7)          # Sunday of week 1
+    return DateTime(sunday + Week(rel.week - 1) + Day(rel.day - 1),
+                    something(rel.time, MIDNIGHT))
 end
 
 """
@@ -174,16 +169,10 @@ Turn relative week/day offsets into absolute Dates using the semester start date
 """
 function resolve(template::CourseTemplate, term::Term, section, frequency, time_start, time_finish, roster::Roster, instructors...; kwargs...)
     assignments = map(template.assignments) do t
-        # assigned = absolute_date(term.start, t.assigned)
-        due      = absolute_date(term.start, t.due)
-
-        # @show t.name, due, t.value, t.category, t.is_group
-        # @show t.questions
-
-        Assignment(
+        make_assignment(
             t.name,
             t.value,
-            due,
+            absolute_date(term.start, t.due),
             t.category,
             t.is_group,
             !isempty(t.questions) ? t.questions : nothing,
