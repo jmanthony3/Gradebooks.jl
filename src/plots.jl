@@ -3,6 +3,7 @@ export view_gradebook, view_assignment, view_assignment_trends, view_attendance,
 
 
 using DataFrames
+using Distributions
 using PrettyTables
 using Colors
 using ColorSchemes
@@ -444,6 +445,7 @@ function view_assignment_trends(
     filter_students=nothing,
     filter_teams=nothing,
     forecast=false,
+    forecast_confidence=nothing,
     output_path=joinpath(pwd(), "gradebook", "build", "assignment_trends.png")
 )
     all_assignments = sort(copy(gb.class.course.assignments); by=a -> a.due)
@@ -486,6 +488,12 @@ function view_assignment_trends(
         throw(ArgumentError("The selected student and team filters contain no students"))
     forecast && isempty(student_indices) &&
         throw(ArgumentError("forecast=true requires filter_students to select at least one student"))
+    if !isnothing(forecast_confidence) &&
+       (!(forecast_confidence isa Real) ||
+        !isfinite(forecast_confidence) ||
+        !(0 < forecast_confidence < 1))
+        throw(ArgumentError("forecast_confidence must be between 0 and 1, or nothing"))
+    end
 
     n_students = length(gb.class.roster.students)
     n_assignments = length(all_assignments)
@@ -560,7 +568,7 @@ function view_assignment_trends(
         xticks=(x_all, labels),
         xrotation=45,
         ylabel="Performance (%)",
-        title="$(gb.class.course.name): Assignment Trends",
+        title="$(gb.class.codename): Assignment Trends",
         legend=:outerright,
         framestyle=:box,
     )
@@ -599,7 +607,7 @@ function view_assignment_trends(
             marker=:circle,
             linewidth=2)
         plot!(p, x, student_running[1:length(x)];
-            label="$student_name running average",
+            label="$student_name running average: $(round(student_running[end]; digits=2))%",
             marker=:diamond,
             linewidth=2)
 
@@ -611,11 +619,13 @@ function view_assignment_trends(
                 continue
             end
 
-            mean_x = sum(observed) / length(observed)
-            mean_y = sum(student_scores[observed]) / length(observed)
-            denom = sum((j - mean_x)^2 for j in observed)
-            slope = length(observed) > 1 && denom > 0 ?
-                sum((j - mean_x) * (student_scores[j] - mean_y) for j in observed) / denom : 0.0
+            n_observed = length(observed)
+            mean_x = sum(observed) / n_observed
+            mean_y = sum(student_scores[observed]) / n_observed
+            sxx = sum((j - mean_x)^2 for j in observed)
+
+            slope = n_observed > 1 && sxx > 0 ?
+                sum((j - mean_x) * (student_scores[j] - mean_y) for j in observed) / sxx : 0.0
             intercept = mean_y - slope * mean_x
 
             future = findall(j ->
@@ -623,54 +633,113 @@ function view_assignment_trends(
                 eachindex(all_assignments))
 
             projected = fill(NaN, n_assignments)
+            lower = fill(NaN, n_assignments)
+            upper = fill(NaN, n_assignments)
+
             if !isempty(future)
                 projected[future] = clamp.(
                     intercept .+ slope .* future, 0.0, 1.0
                 )
 
                 forecast_line = fill(NaN, n_assignments)
-                last_observed = last(observed)
-                forecast_line[last_observed] = student_scores[last_observed]
+                forecast_line[last(observed)] = student_scores[last(observed)]
                 forecast_line[future] = projected[future]
 
                 plot!(p, x_all, 100 .* forecast_line;
-                    label="$student_name forecast",
+                    label="$student_name forecast: $(round(100 * projected[end]; digits=2))%",
                     marker=:utriangle,
                     linestyle=:dash,
                     linewidth=2)
+
+                if !isnothing(forecast_confidence) && n_observed >= 3
+                    residual_sum_squares = sum(
+                        (student_scores[j] - (intercept + slope * j))^2
+                        for j in observed
+                    )
+                    residual_sd = sqrt(residual_sum_squares / (n_observed - 2))
+                    critical_value = quantile(
+                        TDist(n_observed - 2),
+                        (1 + forecast_confidence) / 2
+                    )
+
+                    for j in future
+                        prediction_sd = residual_sd * sqrt(
+                            1 + 1 / n_observed + (j - mean_x)^2 / sxx
+                        )
+                        margin = critical_value * prediction_sd
+                        lower[j] = clamp(projected[j] - margin, 0.0, 1.0)
+                        upper[j] = clamp(projected[j] + margin, 0.0, 1.0)
+                    end
+
+                    level_label = "$(round(Int, 100 * forecast_confidence))% prediction"
+                    plot!(p, x_all, 100 .* lower;
+                        label="$student_name $level_label lower: $(round(100 * lower[end]; digits=2))%",
+                        linestyle=:dot,
+                        linewidth=1.5)
+                    plot!(p, x_all, 100 .* upper;
+                        label="$student_name $level_label upper: $(round(100 * upper[end]; digits=2))%",
+                        linestyle=:dot,
+                        linewidth=1.5)
+                end
             end
 
             final_earned = 0.0
+            final_lower_earned = 0.0
+            final_upper_earned = 0.0
             final_possible = 0.0
+
             for j in 1:n_assignments
                 assignment = all_assignments[j]
                 score = student_scores[j]
+                points = assignment.value.value
 
                 if !isnan(score)
-                    final_earned += score * assignment.value.value
-                    final_possible += assignment.value.value
+                    final_earned += score * points
+                    final_lower_earned += score * points
+                    final_upper_earned += score * points
+                    final_possible += points
                 elseif assignment.due <= now_dt
-                    final_possible += assignment.value.value
+                    final_possible += points
                 elseif !isnan(projected[j])
-                    final_earned += projected[j] * assignment.value.value
-                    final_possible += assignment.value.value
+                    final_earned += projected[j] * points
+                    final_possible += points
+
+                    if !isnan(lower[j]) && !isnan(upper[j])
+                        final_lower_earned += lower[j] * points
+                        final_upper_earned += upper[j] * points
+                    else
+                        final_lower_earned += projected[j] * points
+                        final_upper_earned += projected[j] * points
+                    end
                 else
-                    final_possible += assignment.value.value
+                    final_possible += points
                 end
             end
 
             current = possible > 0 ? 100 * earned / possible : NaN
             final = final_possible > 0 ? 100 * final_earned / final_possible : NaN
-            push!(forecast_summaries,
-                "$student_name: current $(isnan(current) ? "n/a" : "$(round(current; digits=1))%"), " *
-                "forecast final $(isnan(final) ? "n/a" : "$(round(final; digits=1))%")")
+            summary = "$student_name: current $(isnan(current) ? "n/a" : "$(round(current; digits=2))%"), " *
+                "forecast final $(isnan(final) ? "n/a" : "$(round(final; digits=2))%")"
+
+            if !isnothing(forecast_confidence)
+                if n_observed >= 3 && !isempty(future) && final_possible > 0
+                    final_lower = 100 * final_lower_earned / final_possible
+                    final_upper = 100 * final_upper_earned / final_possible
+                    summary *= ", $(round(Int, 100 * forecast_confidence))% prediction range " *
+                        "$(round(final_lower; digits=2))%-$(round(final_upper; digits=2))%"
+                else
+                    summary *= ", prediction bounds unavailable"
+                end
+            end
+
+            push!(forecast_summaries, summary)
         end
     end
 
-    if !isempty(forecast_summaries)
-        plot!(p; title="$(gb.class.course.name): Assignment Trends\n" *
-            join(forecast_summaries, " | "))
-    end
+    # if !isempty(forecast_summaries)
+    #     plot!(p; title="$(gb.class.course.codename): Assignment Trends\n" *
+    #         join(forecast_summaries, " | "))
+    # end
 
     mkpath(dirname(output_path))
     savefig(p, output_path)
