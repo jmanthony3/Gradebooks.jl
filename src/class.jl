@@ -42,7 +42,7 @@ struct Term
     start::Date
     finish::Date
     holidays::Vector{Date}
-    code::Symbol
+    codename::Symbol
     metadata::Dict{Symbol,Any}
     Term(name, calendar_type, year, start, finish, holidays, code, metadata) = new(name, calendar_type, year, parse_date(start), parse_date(finish), map(parse_date, vcat(holidays...)), isa(code, Symbol) ? code : string2codename(code), metadata)
 end
@@ -72,15 +72,16 @@ struct Class <: AbstractGradebookNode
     instructors::Vector{Instructor}
     roster::Roster
     teams::Vector{Team}
+    codename::Symbol
 
-    function Class(course, term, section, frequency, time_start, time_finish, time_duration, instructors, roster, teams)
+    function Class(course, term, section, frequency, time_start, time_finish, time_duration, instructors, roster, teams, codename)
         return new(course, term, section, frequency2codesymbols(frequency), time_start, time_finish, canonicalize(time_finish - time_start),
-            instructors, roster, teams
+            instructors, roster, teams, codename
         )
     end
 end
 function Class(course, term, section, frequency, time_start, time_finish, instructors::Vector{Instructor}, students::Vector{Student}, teams::Vector{Team}=Team[])
-    return Class(course, term, section, frequency, time_start, time_finish, canonicalize(time_finish - time_start), instructors, Roster(students), teams
+    return Class(course, term, section, frequency, time_start, time_finish, canonicalize(time_finish - time_start), instructors, Roster(students), teams, string2uppercase_symbol("$(getfield(course, :codename))-$(getfield(term, :codename))-$(rpad(string(section), 3, '0'))")
     )
 end
 
