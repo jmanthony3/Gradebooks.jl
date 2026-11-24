@@ -40,11 +40,14 @@ istardy(r)                          = false
 istardy(r::AttendanceStatus)        = r == Tardy
 istardy(r::AttendanceRecord)        = istardy(r.status)
 
+
+absences(gb, i; through=last(gb.class.lectures)) = count(isabsent, gb.raw[i, :][filter(j->!ismissing(gb.raw[i, j]), length(gb.class.course.assignments) .+ (1:findlast(l->l<=through, gb.class.lectures)))]) # + count(==(0), Matrix(att.raw_score[occursin.(key, att.raw_score[!, "Email"]), :]))
+
 function record!(gb, student, lecture, record)
     if isactive(student) && (isnothing(student.final_grade) || student.final_grade ∉ [FN, W, I])
         i = gb.class.roster.by_id[student.person.id]
         gb.raw[i, lecture.codename] = record
-        t = count(isabsent, gb.raw[i, :][filter(j->isassigned(gb.raw[!, j], i), length(gb.class.course.assignments) .+ (1:length(gb.class.lectures)))]) # + count(==(0), Matrix(att.raw_score[occursin.(key, att.raw_score[!, "Email"]), :]))
+        t = absences(gb, i)
         p = Point(isabsent(record) && t > (ATTENDANCE_LIMIT + get_attendance_modifier(student)) ? ATTENDANCE_PENALTY : 0.0)
         gb.penalty[i, lecture.codename] = p
         gb.total[i, lecture.codename] = record
@@ -206,7 +209,7 @@ function attendance_record!(gb::Gradebook, date_stamp::Union{Date, String}, rege
             # @show first_column, submissions_df[first_row:end, first_column]
 
             if first_column == 0
-                error("Could not find a valid student ID column.")
+                throw(NotFound("Could not find a valid student ID column."))
             end
 
             for (col_idx, lecture_date) in resolved_pairs
@@ -262,7 +265,7 @@ function attendance_record!(gb::Gradebook, date_stamp::Union{Date, String}, rege
             end
         end
         if first_column == 0
-            error("Could not find a column whose non-empty values all identify students in the roster.")
+            throw(NotFound("Could not find a column whose non-empty values all identify students in the roster."))
         end
         for i ∈ attendance_records_idx
             submissions_df[!, i] = convert.(String, submissions_df[!, i])
@@ -275,7 +278,7 @@ function attendance_record!(gb::Gradebook, date_stamp::Union{Date, String}, rege
                 marks = map(x->(x[1], attendance_status_map_from_string(x[2]), "3rd Party"), eachrow(submissions_df[!, [1, i]]))
                 attendance_record!(gb, date_stamp, Date(attendance_record), marks; threshold=threshold)
             else
-                error("Attendance record date ($attendance_record) not found among lecture dates: $lecture_dates")
+                throw(NotFound("Attendance record date ($attendance_record) not found among lecture dates: $lecture_dates"))
             end
         end
     end
@@ -287,8 +290,8 @@ function attendance_update!(gb::Gradebook)
     df = select(gb.raw, map(x->x.codename, gb.class.lectures))
     for (i, row) ∈ enumerate(eachrow(df))
         for j ∈ 1:1:ncol(df)
-            t = count(isabsent, row[filter(k->isassigned(gb.raw[!, length(gb.class.course.assignments)+k], i), 1:j)]) # + count(==(0), collect(row)[begin:j])
-            p = Point(isassigned(df[!, j], i) && isabsent(row[j]) && t > (ATTENDANCE_LIMIT + get_attendance_modifier(gb.class.roster.students[i])) ? ATTENDANCE_PENALTY : 0.0)
+            t = absences(gb, i)
+            p = Point(ismissing(df[i, j]) && isabsent(row[j]) && t > (ATTENDANCE_LIMIT + get_attendance_modifier(gb.class.roster.students[i])) ? ATTENDANCE_PENALTY : 0.0)
             gb.penalty[i, gb.class.lectures[j].codename] = p
         end
     end

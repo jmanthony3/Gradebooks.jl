@@ -48,7 +48,7 @@ Base.propertynames(s::Score) = (:earned, :value, :percent, :letter, :comment)
 "Resolves evaluations to total points earned which may be calculated from percent earned against assignment part value."
 function score(assignment::Assignment, evaluations::Vector{Evaluation})
     points = 0.0
-    for (path, leaf, parent_value, current_value) ∈ rake_leaves(assignment; parent_value=assignment.value)
+    for (path, leaf, parent_value, current_value) ∈ leaves(assignment, assignment.value)
         score = leaf_score(path, leaf, evaluations, parent_value, current_value; display_credits="point")
         points += score.value
     end
@@ -65,9 +65,9 @@ struct Submission <: AbstractGradebookNode
 end
 
 
-"Couples student to submitted work for assignment."
+"Couples student identifier to submitted work for assignment."
 struct Grade <: AbstractGradebookNode
-    student::Student
+    identifier::String
     assignment::Assignment
     submission::Submission
 end
@@ -83,113 +83,13 @@ isproject(x::Grade)        = isproject(x.assignment)
 isquiz(x::Grade)           = isquiz(x.assignment)
 
 
-function normalize_mark(raw)
-    if raw isa Tuple
-        if length(raw) == 0
-            return Mark(Point(0.0)), ""
-        elseif length(raw) >= 2
-            value, comment = raw[1], raw[2]
-            return if value isa Mark
-                value, string(comment)
-            else
-                Mark(value), string(comment)
-            end
-        else
-            return normalize_mark(raw[1])
-        end
-    elseif raw isa Mark
-        return raw, ""
-    else
-        return Mark(raw), ""
-    end
-end
-
-function resolve_branch_value(node, parent_value)
-    if parent_value === nothing
-        return nothing
-    end
-
-    if !hasproperty(node, :value)
-        return parent_value
-    end
-
-    value = getproperty(node, :value)
-
-    if isa(value, Point)
-        return value
-    elseif isa(value, Percent)
-        if isa(parent_value, Point)
-            return Point(parent_value.value * value.value)
-        elseif isa(parent_value, Percent)
-            return Percent(parent_value.value * value.value)
-        else
-            return parent_value
-        end
-    end
-
-    return parent_value
-end
-
-function resolve_leaf_point_value(node, parent_value)
-    resolved = resolve_branch_value(node, parent_value)
-
-    if isa(resolved, Point)
-        return resolved
-    elseif isa(resolved, Percent)
-        return Point(resolved.value)
-    else
-        return Point(0.0)
-    end
-end
-
-function resolve_point_value(node, parent_value::Point)
-    return resolve_leaf_point_value(node, parent_value)
-end
-
-function resolve_point_value(node, parent_value::Percent)
-    return resolve_leaf_point_value(node, parent_value)
-end
-
-function trace_leaf_resolution(node, parent_value; prefix=())
-    path = LeafPath(node; prefix=prefix)
-    resolved = resolve_leaf_point_value(node, parent_value)
-    return (
-        path = path,
-        node_value = hasproperty(node, :value) ? getproperty(node, :value) : nothing,
-        parent_value = parent_value,
-        resolved_value = resolved
-    )
-end
-
-function get_leafvalue(leaf, nodevalue::Point)
-    if isa(leaf.value, Point)
-        return leaf.value
-    elseif isa(leaf.value, Percent)
-        return Point(nodevalue.value * leaf.value.value)
-    elseif isnothing(leaf.value)
-        return nodevalue
-    else
-        error("Leaf values must be of type `Point` or `Percent`, got leaf=$(typeof(leaf.value))")
-    end
-end
-
-function get_leaves(node::Question, nodevalue::Point)
-    base = get_leafvalue(node, nodevalue)
-    return if isnothing(node.parts)
-        [(node, base)]
-    else
-        leaves = Tuple{Question, Point}[]
-        append!(leaves, [get_leaves(part, base) for part ∈ node.parts]...)
-        leaves
-    end
-end
-
-function get_leaves(node::Vector{Question}, nodevalue::Point)
-    reduce(vcat, [get_leaves(leaf, nodevalue) for leaf ∈ node])
-end
-
-function get_leaves(node::Rubric, nodevalue::Point)
-    return [(metric, get_leafvalue(metric, nodevalue)) for metric ∈ node.metrics]
+"""Every leaf under `node` as (path, leaf, points). The only path/value resolver."""
+function leaves(node, parent::Point, prefix=())
+    path = (prefix..., node.codename)
+    v    = node.value isa Percent ? Point(parent.value * node.value.value) : something(node.value, parent)
+    kids = children(node)
+    isempty(kids) && return [(LeafPath(path), node, v)]
+    return reduce(vcat, (leaves(k, v, path) for k in kids))
 end
 
 function distribute_scalar_mark!(evaluations::Vector{Evaluation}, items, mark::Mark, nodevalue::Point, prefix=())

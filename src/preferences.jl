@@ -25,7 +25,7 @@ const DATE_FORMAT = @load_preference("DATE_FORMAT", "MMDDYYYY")
 
 function set_date_format(format::String)
     if !(format ∈ ["MMDDYYYY", "DDMMYYYY"])
-        @error "Invalid `DATE_FORMAT`. Please choose from: [\"MMDDYYYY\", \"DDMMYYYY\"]"
+        throw(InvalidPreference("DATE_FORMAT", format, ["\"MMDDYYYY\", \"DDMMYYYY\""]))
     end
     @set_preferences!("DATE_FORMAT" => format)
     @info("New `DATE_FORMAT` set; restart your Julia session for this change to take effect!")
@@ -201,7 +201,7 @@ const DISPLAY_CREDITS = @load_preference("DISPLAY_CREDITS", :auto)
 
 function set_display_credits(display::Symbol)
     if !(display ∈ Symbol.(instances(DISPLAY_CREDITS_TYPES)))
-        @error "Invalid `DISPLAY_CREDITS`. Please choose from symbols:" DISPLAY_CREDITS_TYPES
+        throw(InvalidPreference("DISPLAY_CREDITS", display, repr.(Symbol.(instances(DISPLAY_CREDITS_TYPES)))))
     end
     @set_preferences!("DISPLAY_CREDITS" => string(display))
     @info("New `DISPLAY_CREDITS` set; restart your Julia session for this change to take effect!")

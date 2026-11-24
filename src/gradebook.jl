@@ -19,16 +19,16 @@ end
 function Gradebook(class::Class)
     df_raw, df_penalty, df_total = DataFrame(), DataFrame(), DataFrame()
     for i ∈ 1:1:length(class.course.assignments)
-        insertcols!(df_raw, class.course.assignments[i].codename=>Vector{Grade}(undef, length(class.roster)))
+        insertcols!(df_raw, class.course.assignments[i].codename=>Vector{Union{Missing,Grade}}(missing, length(class.roster)))
         # insertcols!(df_penalty, class.course.assignments[i].codename=>Vector{Point}(undef, length(class.roster)))
         insertcols!(df_penalty, class.course.assignments[i].codename=>fill(Point(0.0), length(class.roster)))
-        insertcols!(df_total, class.course.assignments[i].codename=>Vector{Grade}(undef, length(class.roster)))
+        insertcols!(df_total, class.course.assignments[i].codename=>Vector{Union{Missing,Grade}}(missing, length(class.roster)))
     end
     for i ∈ 1:1:length(class.lectures)
-        insertcols!(df_raw, class.lectures[i].codename=>Vector{AttendanceRecord}(undef, length(class.roster)))
+        insertcols!(df_raw, class.lectures[i].codename=>Vector{Union{Missing,AttendanceRecord}}(missing, length(class.roster)))
         # insertcols!(df_penalty, class.lectures[i].codename=>Vector{Point}(undef, length(class.roster)))
         insertcols!(df_penalty, class.lectures[i].codename=>fill(Point(0.0), length(class.roster)))
-        insertcols!(df_total, class.lectures[i].codename=>Vector{AttendanceRecord}(undef, length(class.roster)))
+        insertcols!(df_total, class.lectures[i].codename=>Vector{Union{Missing,AttendanceRecord}}(missing, length(class.roster)))
     end
     return Gradebook(class, Grade[], df_raw, df_penalty, df_total)
 end
@@ -49,7 +49,7 @@ function get_assignments(gb::Gradebook; filter_assignments=nothing, viewing_atte
             elseif isa(filter_assignments, Bool) && filter_assignments
                 1:length(gb.class.lectures)
             else
-                error("Could not insert assignment filter which must be provided as function or vector of integers, assignments, or string identifiers.")
+                throw(TypeError("Could not insert assignment filter.", Union{Function, Vector{Int}, Vector{Assignment}, Vector{String}}, typeof(filter_assignments)))
             end
             gb.class.lectures[filter_assignments]
         else
@@ -70,7 +70,7 @@ function get_assignments(gb::Gradebook; filter_assignments=nothing, viewing_atte
             elseif isa(filter_assignments, Bool) && filter_assignments
                 1:length(gb.class.course.assignments)
             else
-                error("Could not insert assignment filter which must be provided as function or vector of integers, assignments, or string identifiers.")
+                throw(TypeError("Could not insert assignment filter.", Union{Function, Vector{Int}, Vector{Assignment}, Vector{String}}, typeof(filter_assignments)))
             end
             gb.class.course.assignments[filter_assignments]
         else
@@ -97,7 +97,7 @@ function get_students(gb::Gradebook; filter_students=nothing)
                     nothing
                 end, filter_students))
             else
-                error("Could not insert student filter which must be provided as roster or vector of integers, students, or string identifiers")
+                throw(TypeError("Could not insert student filter.", Union{Function, Vector{Int}, Vector{Student}, Vector{String}}, typeof(filter_students)))
             end)
         end
     else
@@ -157,7 +157,7 @@ function get_missing(df::DataFrame, total_possible::Float64)
 end
 
 function get_absent(gb::Gradebook, students_idx::Vector{Int})
-    return map(map(i->gb.raw[i, filter(j->isassigned(Matrix(gb.raw), i, j), 1:ncol(gb.raw))], students_idx)) do row
+    return map(map(i->gb.raw[i, filter(j->ismissing(gb.raw[i, j]), 1:ncol(gb.raw))], students_idx)) do row
         count(isabsent, row)
     end
 end
@@ -182,9 +182,9 @@ function Base.getproperty(gb::Gradebook, sym::Symbol)
         students_idx = (1:nrow(getfield(gb, :total)))
 
         cols = map(a->a.codename, assignments)
-        safe_raw = sanitize_dataframe(getfield(gb, :raw))
-        safe_penalty = sanitize_dataframe(getfield(gb, :penalty))
-        safe_total = sanitize_dataframe(getfield(gb, :total))
+        safe_raw = deepcopy(getfield(gb, :raw))
+        safe_penalty = deepcopy(getfield(gb, :penalty))
+        safe_total = deepcopy(getfield(gb, :total))
         df_raw = safe_raw[students_idx, Cols(cols...)]
         df_penalty = safe_penalty[students_idx, Cols(cols...)]
         df_total = safe_total[students_idx, Cols(cols...)]
@@ -254,7 +254,7 @@ get_assignment(identifier::String, gb::Gradebook; threshold=STRING_MATCH_THRESHO
 
 "Posts `grade` to gradebook."
 function post_grade!(gb::Gradebook, grade::Grade)
-    i = gb.class.roster.by_id[grade.student.person.id]
+    i = gb.class.roster.by_id[get_student(gb, grade.identifier).person.id]
     gb.raw[i, grade.assignment.codename] = grade
     p = Point(grade.assignment.value * latepenalty(grade))
     gb.penalty[i, grade.assignment.codename] = p
@@ -274,14 +274,15 @@ function grades_post!(gb::Gradebook, grades::Vector{Grade})
     gb.grades = grades
     students = gb.class.roster.students
     for grade ∈ filter(g->isactive(g.student) && (isnothing(g.student.final_grade) || all(g.student.final_grade .!= [FN, W, I])), grades)
-        i, j = gb.class.roster.by_id[grade.student.person.id], length(gb.class.course.assignments)
+        student = get_student(gb, grade.identifier)
+        i, j = gb.class.roster.by_id[student.person.id], length(gb.class.course.assignments)
         post_grade!(gb, grade)
         x, y = zero(Point), zero(Point)
-        for (_, g) ∈ enumerate(gb.total[i, :][filter(k->isassigned(gb.raw[!, k], i), 1:j)])
+        for (_, g) ∈ enumerate(gb.total[i, :][filter(k->ismissing(gb.raw[i, k]), 1:j)])
             x += g.submission.score.earned.value
             y += g.assignment.value
         end
-        students[i] = update(grade.student; final_grade=credit2lettergrade(x, y))
+        students[i] = update(student; final_grade=credit2lettergrade(x, y))
     end
     gb.class = update(gb.class; roster=Roster(students))
     return nothing
@@ -295,16 +296,14 @@ function grades_post!(gb::Gradebook, assignments::Vector{Assignment}, src::Strin
         if length(exact) == 1
             return only(exact)
         elseif length(exact) > 1
-            error("Ambiguous submission column for $(assignment.name): $(headers[exact])")
+            throw(AmbiguousMatch(assignment.name, headers[exact]))
         else # fuzzy fallback only if exact matching failed
             scores = map(h->(h, Levenshtein()(target, string_sanitize(h))), headers)
             best_name, best_dist = first(sort(scores, by=x->x[2]))
             if best_dist / max(length(target), length(string_sanitize(best_name))) < threshold
                 return findfirst(==(best_name), headers)
             end
-            matches = map(x->first(x), (sort(scores, by=x->x[2])))
-            @error "Assignments with most similar names:" matches
-            error("No reasonable submission column found for $(assignment.name)")
+            throw(AmbiguousMatch(assignment.name, map(x->first(x), (sort(scores, by=x->x[2])))))
         end
     end
     submissions_df = CSV.read(src, DataFrame)

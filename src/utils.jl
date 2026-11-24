@@ -37,3 +37,14 @@ function _update(x; kwargs...)
     return T((merge(nt, kwargs))...)
 end
 update(x; kwargs...) = _update(x; kwargs...)
+
+function lookup(id, items, candidates; what, threshold=STRING_MATCH_THRESHOLD)
+    q = normkey(id)
+    hits = findall(x -> q ∈ normkey.(candidates(x)), items)
+    length(hits) == 1 && return items[only(hits)]
+    length(hits) > 1  && throw(AmbiguousMatch(what, id, items[hits]))
+    best, ratio = fuzzy_best(q, items, candidates)
+    ratio < threshold || throw(NotFound(what, id, suggestions(q, items, candidates)))
+    @warn "Fuzzy-matched $what" id matched=best   # a fuzzy match should never be silent
+    return best
+end
