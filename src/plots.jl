@@ -440,12 +440,287 @@ function view_assignment(
     )
 end
 
+function fit_assignment_trend(assignments, scores, cutoff, is_group)
+    history = findall(j ->
+        assignments[j].due <= cutoff &&
+        assignments[j].is_group == is_group,
+        eachindex(assignments))
+
+    isempty(history) && return nothing
+
+    # Missing assignments due by the cutoff count as zero.
+    y = [isnan(scores[j]) ? 0.0 : scores[j] for j in history]
+    x = Float64.(history)
+    n = length(history)
+    mean_x = sum(x) / n
+    mean_y = sum(y) / n
+    sxx = sum((xj - mean_x)^2 for xj in x)
+
+    slope = n > 1 && sxx > 0 ?
+        sum((x[k] - mean_x) * (y[k] - mean_y) for k in eachindex(x)) / sxx : 0.0
+    intercept = mean_y - slope * mean_x
+
+    residual_variance = if n >= 3 && sxx > 0
+        residual_ss = sum(
+            (y[k] - (intercept + slope * x[k]))^2
+            for k in eachindex(x)
+        )
+        residual_ss / (n - 2)
+    else
+        NaN
+    end
+
+    return (; n, mean_x, sxx, slope, intercept, residual_variance)
+end
+
+function forecast_final_grade(assignments, scores, cutoff, confidence)
+    history = findall(j -> assignments[j].due <= cutoff, eachindex(assignments))
+    isempty(history) && return nothing
+
+    future = findall(j ->
+        assignments[j].due > cutoff && isnan(scores[j]),
+        eachindex(assignments))
+
+    individual_model = fit_assignment_trend(assignments, scores, cutoff, false)
+    group_model = fit_assignment_trend(assignments, scores, cutoff, true)
+
+    n_assignments = length(assignments)
+    predicted = fill(NaN, n_assignments)
+    lower_predictions = fill(NaN, n_assignments)
+    upper_predictions = fill(NaN, n_assignments)
+
+    for j in future
+        model = assignments[j].is_group ? group_model : individual_model
+        isnothing(model) && continue
+
+        predicted[j] = clamp(
+            model.intercept + model.slope * j, 0.0, 1.0
+        )
+
+        if !isnothing(confidence) && isfinite(model.residual_variance)
+            critical_value = quantile(
+                TDist(model.n - 2),
+                (1 + confidence) / 2
+            )
+            prediction_sd = sqrt(
+                model.residual_variance *
+                (1 + 1 / model.n + (j - model.mean_x)^2 / model.sxx)
+            )
+            margin = critical_value * prediction_sd
+            lower_predictions[j] = clamp(predicted[j] - margin, 0.0, 1.0)
+            upper_predictions[j] = clamp(predicted[j] + margin, 0.0, 1.0)
+        end
+    end
+
+    points = [a.value.value for a in assignments]
+    total_possible = sum(points)
+    known_earned = sum(
+        isnan(scores[j]) ? 0.0 : scores[j] * points[j]
+        for j in eachindex(assignments)
+    )
+
+    forecast_available = all(j -> !isnan(predicted[j]), future)
+    final_grade = if forecast_available && total_possible > 0
+        forecast_earned = sum(predicted[j] * points[j] for j in future)
+        100 * (known_earned + forecast_earned) / total_possible
+    else
+        nothing
+    end
+
+    lower_grade = nothing
+    upper_grade = nothing
+
+    if !isnothing(confidence) && !isnothing(final_grade)
+        if isempty(future)
+            lower_grade = final_grade
+            upper_grade = final_grade
+        else
+            variance_components = Tuple{Float64, Int}[]
+            intervals_available = true
+
+            for (is_group, model) in ((false, individual_model), (true, group_model))
+                type_future = filter(j ->
+                    assignments[j].is_group == is_group,
+                    future)
+                isempty(type_future) && continue
+
+                if isnothing(model) || !isfinite(model.residual_variance)
+                    intervals_available = false
+                    break
+                end
+
+                type_points = points[type_future]
+                total_type_points = sum(type_points)
+                weighted_x_deviation = sum(
+                    type_points[k] * (type_future[k] - model.mean_x)
+                    for k in eachindex(type_future)
+                )
+
+                variance = model.residual_variance * (
+                    sum(p^2 for p in type_points) +
+                    total_type_points^2 / model.n +
+                    weighted_x_deviation^2 / model.sxx
+                )
+                push!(variance_components, (variance, model.n - 2))
+            end
+
+            if intervals_available && !isempty(variance_components)
+                total_variance = sum(first, variance_components)
+                denominator = sum(
+                    variance^2 / degrees_freedom
+                    for (variance, degrees_freedom) in variance_components
+                )
+                degrees_freedom = denominator > 0 ?
+                    total_variance^2 / denominator :
+                    minimum(last, variance_components)
+                margin_points = quantile(
+                    TDist(degrees_freedom),
+                    (1 + confidence) / 2
+                ) * sqrt(total_variance)
+
+                future_points = sum(points[future])
+                known_points = known_earned
+                forecast_earned = sum(predicted[j] * points[j] for j in future)
+
+                lower_grade = 100 * clamp(
+                    known_points + forecast_earned - margin_points,
+                    known_points,
+                    known_points + future_points
+                ) / total_possible
+                upper_grade = 100 * clamp(
+                    known_points + forecast_earned + margin_points,
+                    known_points,
+                    known_points + future_points
+                ) / total_possible
+            end
+        end
+    end
+
+    return (;
+        history,
+        future,
+        predicted,
+        lower_predictions,
+        upper_predictions,
+        final_grade,
+        lower_grade,
+        upper_grade,
+        individual_model,
+        group_model
+    )
+end
+
+function forecast_running_series(assignments, scores, cutoff, result, confidence)
+    n = length(assignments)
+    running = fill(NaN, n)
+    lower = fill(NaN, n)
+    upper = fill(NaN, n)
+    points = [a.value.value for a in assignments]
+
+    cutoff_index = last(result.history)
+    fixed_earned = 0.0
+    fixed_possible = 0.0
+    forecast_earned = 0.0
+    forecast_possible = 0.0
+    projected_indices = Int[]
+
+    for j in 1:n
+        if j in result.history
+            score = isnan(scores[j]) ? 0.0 : scores[j]
+            fixed_earned += score * points[j]
+            fixed_possible += points[j]
+        elseif !isnan(scores[j])
+            fixed_earned += scores[j] * points[j]
+            fixed_possible += points[j]
+        elseif !isnan(result.predicted[j])
+            forecast_earned += result.predicted[j] * points[j]
+            forecast_possible += points[j]
+            push!(projected_indices, j)
+        else
+            # A future assignment without a matching category model makes
+            # later cumulative predictions incomplete.
+            break
+        end
+
+        cumulative_possible = fixed_possible + forecast_possible
+        if j == cutoff_index || j > cutoff_index
+            running[j] = 100 * (fixed_earned + forecast_earned) / cumulative_possible
+        end
+
+        if isnothing(confidence) || j <= cutoff_index || isempty(projected_indices)
+            continue
+        end
+
+        variance_components = Tuple{Float64, Int}[]
+        intervals_available = true
+
+        for (is_group, model) in (
+            (false, result.individual_model),
+            (true, result.group_model),
+        )
+            type_indices = filter(
+                k -> assignments[k].is_group == is_group,
+                projected_indices
+            )
+            isempty(type_indices) && continue
+
+            if isnothing(model) || !isfinite(model.residual_variance)
+                intervals_available = false
+                break
+            end
+
+            type_points = points[type_indices]
+            total_type_points = sum(type_points)
+            weighted_x_deviation = sum(
+                type_points[k] * (type_indices[k] - model.mean_x)
+                for k in eachindex(type_indices)
+            )
+
+            variance = model.residual_variance * (
+                sum(p^2 for p in type_points) +
+                total_type_points^2 / model.n +
+                weighted_x_deviation^2 / model.sxx
+            )
+            push!(variance_components, (variance, model.n - 2))
+        end
+
+        if !intervals_available || isempty(variance_components)
+            continue
+        end
+
+        total_variance = sum(first, variance_components)
+        denominator = sum(
+            variance^2 / degrees_freedom
+            for (variance, degrees_freedom) in variance_components
+        )
+        degrees_freedom = denominator > 0 ?
+            total_variance^2 / denominator :
+            minimum(last, variance_components)
+        margin = quantile(TDist(degrees_freedom), (1 + confidence) / 2) *
+            sqrt(total_variance)
+
+        min_earned = fixed_earned
+        max_earned = fixed_earned + forecast_possible
+        expected_earned = fixed_earned + forecast_earned
+
+        lower[j] = 100 * clamp(
+            expected_earned - margin, min_earned, max_earned
+        ) / cumulative_possible
+        upper[j] = 100 * clamp(
+            expected_earned + margin, min_earned, max_earned
+        ) / cumulative_possible
+    end
+
+    return (; running, lower, upper)
+end
+
 function view_assignment_trends(
     gb::Gradebook;
     filter_students=nothing,
     filter_teams=nothing,
     forecast=false,
     forecast_confidence=nothing,
+    forecast_bandfill=false,
     output_path=joinpath(pwd(), "gradebook", "build", "assignment_trends.png")
 )
     all_assignments = sort(copy(gb.class.course.assignments); by=a -> a.due)
@@ -560,22 +835,57 @@ function view_assignment_trends(
         x_all = filter(j -> !isnan(class_assignment[j]), x_all)
         labels = labels[x_all]
     end
+    legend_entries = NamedTuple[]
     p = bar(
-        bar_indices,
+        [bar_indices .- 0.15, bar_indices .+ 0.15],
         100 .* hcat(class_assignment[bar_indices], class_running[bar_indices]);
         bar_position=:dodge,
+        bar_width=0.2,
+        seriescolor=[:blue :orange],
+        # fill_z=[class_assignment[bar_indices] class_running[bar_indices]],
         label=["Class assignment average" "Class running average"],
         xticks=(x_all, labels),
         xrotation=45,
+        yticks=0:10:100,
         ylabel="Performance (%)",
         title="$(gb.class.codename): Assignment Trends",
-        legend=:outerright,
+        legend=:none,
         framestyle=:box,
     )
+    hline!([90], color=:black, linestyle=:solid, label="")
+    Plots.annotate!([(last(x_all), 92, text("A", :black, :right, 10, rotation=0))])
+    hline!([80], color=:black, linestyle=:solid, label="")
+    Plots.annotate!([(last(x_all), 82, text("B", :black, :right, 10, rotation=0))])
+    hline!([70], color=:black, linestyle=:solid, label="")
+    Plots.annotate!([(last(x_all), 72, text("C", :black, :right, 10, rotation=0))])
+    hline!([60], color=:black, linestyle=:solid, label="")
+    Plots.annotate!([(last(x_all), 62, text("D", :black, :right, 10, rotation=0))])
+    hline!([50], color=:black, linestyle=:solid, label="")
+    Plots.annotate!([(last(x_all), 52, text("F", :black, :right, 10, rotation=0))])
+    vline!([findlast(j -> all_assignments[j].due <= now_dt, eachindex(all_assignments))+0.5], color=:black, linestyle=:solid, label="")
+    Plots.annotate!([(findlast(j -> all_assignments[j].due <= now_dt, eachindex(all_assignments))+0.25, 90, text("Graded so far", :black, :center, 10, rotation=90))])
 
-    forecast_summaries = String[]
+    # Each time you add a series to p, also register a matching entry:
+    push!(legend_entries, (
+        label = "Class assignment average",
+        color = :blue,
+        kind = :bar,
+    ))
+    push!(legend_entries, (
+        label = "Class running average",
+        color = :orange,
+        kind = :bar,
+    ))
 
-    for student_index in student_indices
+    n_selected = length(student_indices)
+    student_colors = [
+        get(colorschemes[:viridis],
+            0.1 + 0.8 * (i - 1) / max(n_selected - 1, 1))
+        for i in 1:n_selected
+    ]
+
+    for (student_number, student_index) in enumerate(student_indices)
+        student_color = student_colors[student_number]
         selected_student = gb.class.roster.students[student_index]
         student_name = isempty(selected_student.person.name_preferred) ?
             selected_student.person.name_given : selected_student.person.name_preferred
@@ -592,6 +902,7 @@ function view_assignment_trends(
                 earned += score * assignment.value.value
                 possible += assignment.value.value
             elseif assignment.due <= now_dt
+                student_scores[j] = 0.0
                 possible += assignment.value.value
             end
 
@@ -600,150 +911,248 @@ function view_assignment_trends(
             end
         end
 
-        x = forecast ? x_all : findall(j -> !isnan(student_scores[j]), eachindex(all_assignments))
+        x = findall(j -> !isnan(student_scores[j]), eachindex(all_assignments))
 
+        # Each time you add a series to p, also register a matching entry:
+        entry = (
+            label = "$student_name performance: $(round(possible - earned; digits=2)) points missing",
+            color = student_color,
+            kind = :scatter,
+            linestyle = :solid,
+            marker = :circle,
+        )
+        push!(legend_entries, entry)
+
+        scatter!(p, x, 100 .* student_scores[1:length(x)];
+            label=false,
+            color=entry.color,
+            marker=entry.marker,
+            # linestyle=entry.linestyle,
+            linewidth=2)
         plot!(p, x, 100 .* student_scores[1:length(x)];
-            label="$student_name assignment performance",
-            marker=:circle,
+            label=false,
+            color=entry.color,
+            marker=:none,
+            linestyle=entry.linestyle,
+            linewidth=2)
+
+        # Each time you add a series to p, also register a matching entry:
+        entry = (
+            label = "$student_name running average: $(round(student_running[length(x)]; digits=2))% ($(credit2lettergrade(Percent(student_running[length(x)] / 100; normalize=false))))",
+            color = student_color,
+            kind = :scatter,
+            linestyle = :dash,
+            marker = :diamond,
+        )
+        push!(legend_entries, entry)
+
+        scatter!(p, x, student_running[1:length(x)];
+            label=false,
+            color=entry.color,
+            marker=entry.marker,
+            # linestyle=entry.linestyle,
             linewidth=2)
         plot!(p, x, student_running[1:length(x)];
-            label="$student_name running average: $(round(student_running[end]; digits=2))%",
-            marker=:diamond,
+            label=false,
+            color=entry.color,
+            marker=:none,
+            linestyle=entry.linestyle,
             linewidth=2)
 
         if forecast
-            observed = findall(j -> !isnan(student_scores[j]), eachindex(all_assignments))
-            if isempty(observed)
-                push!(forecast_summaries,
-                    "$student_name: forecast unavailable (no graded assignments)")
-                continue
-            end
+            result = forecast_final_grade(
+                all_assignments, student_scores, now_dt, forecast_confidence
+            )
 
-            n_observed = length(observed)
-            mean_x = sum(observed) / n_observed
-            mean_y = sum(student_scores[observed]) / n_observed
-            sxx = sum((j - mean_x)^2 for j in observed)
-
-            slope = n_observed > 1 && sxx > 0 ?
-                sum((j - mean_x) * (student_scores[j] - mean_y) for j in observed) / sxx : 0.0
-            intercept = mean_y - slope * mean_x
-
-            future = findall(j ->
-                isnan(student_scores[j]) && all_assignments[j].due > now_dt,
-                eachindex(all_assignments))
-
-            projected = fill(NaN, n_assignments)
-            lower = fill(NaN, n_assignments)
-            upper = fill(NaN, n_assignments)
-
-            if !isempty(future)
-                projected[future] = clamp.(
-                    intercept .+ slope .* future, 0.0, 1.0
+            if !isempty(result.future)
+                running_forecast = forecast_running_series(
+                    all_assignments, student_scores, now_dt, result, forecast_confidence
                 )
 
-                forecast_line = fill(NaN, n_assignments)
-                forecast_line[last(observed)] = student_scores[last(observed)]
-                forecast_line[future] = projected[future]
+                anchor = last(result.history)
+                anchor_value = student_running[anchor]
+                
+                if !isnan(anchor_value)
+                    running_forecast.running[anchor] = anchor_value
+                
+                    if !isempty(filter(j -> !isnan(running_forecast.lower[j]), result.future))
+                        running_forecast.lower[anchor] = anchor_value
+                    end
+                    if !isempty(filter(j -> !isnan(running_forecast.upper[j]), result.future))
+                        running_forecast.upper[anchor] = anchor_value
+                    end
+                end
 
-                plot!(p, x_all, 100 .* forecast_line;
-                    label="$student_name forecast: $(round(100 * projected[end]; digits=2))%",
-                    marker=:utriangle,
-                    linestyle=:dash,
-                    linewidth=2)
-
-                if !isnothing(forecast_confidence) && n_observed >= 3
-                    residual_sum_squares = sum(
-                        (student_scores[j] - (intercept + slope * j))^2
-                        for j in observed
+                if !isnothing(forecast_confidence) && !isnothing(result.upper_grade)
+                    band_indices = findall(j ->
+                        !isnan(running_forecast.running[j]) &&
+                        !isnan(running_forecast.lower[j]) &&
+                        !isnan(running_forecast.upper[j]),
+                        eachindex(all_assignments)
                     )
-                    residual_sd = sqrt(residual_sum_squares / (n_observed - 2))
-                    critical_value = quantile(
-                        TDist(n_observed - 2),
-                        (1 + forecast_confidence) / 2
-                    )
+                    if forecast_bandfill && !isempty(band_indices)
+                        forecast_values = running_forecast.running[band_indices]
+                        plot!(p, band_indices, running_forecast.upper[band_indices];
+                            fillrange=forecast_values,
+                            fillcolor=student_color,
+                            fillalpha=0.12,
+                            linealpha=0,
+                            label=false)
+                    end
+                    level = round(Int, 100 * forecast_confidence)
+                    upper_indices = findall(j -> !isnan(running_forecast.upper[j]), eachindex(all_assignments))
+                    if !isempty(upper_indices)
+                        forecast_label = isnothing(result.final_grade) ?
+                            "$student_name forecast" :
+                            "$student_name forecast: $(round(result.final_grade; digits=2))%"
 
-                    for j in future
-                        prediction_sd = residual_sd * sqrt(
-                            1 + 1 / n_observed + (j - mean_x)^2 / sxx
+                        # Each time you add a series to p, also register a matching entry:
+                        entry = (
+                            label = "$student_name upper prediction: $(round(result.upper_grade; digits=2))% ($(credit2lettergrade(Percent(result.upper_grade / 100; normalize=false))))",
+                            color = student_color,
+                            kind = :line,
+                            linestyle = :solid,
+                            marker = :none,
                         )
-                        margin = critical_value * prediction_sd
-                        lower[j] = clamp(projected[j] - margin, 0.0, 1.0)
-                        upper[j] = clamp(projected[j] + margin, 0.0, 1.0)
+                        push!(legend_entries, entry)
+                        # plot!(p, result.future,
+                        #     100 .* result.upper_predictions[result.future];
+                        #     label=false,
+                        #     color=entry.color,
+                        #     linestyle=entry.linestyle,
+                        #     linewidth=1.5)
+                        # Add this entry and plot as the forecast series using the student's color.
+                        plot!(p, upper_indices, running_forecast.upper[upper_indices];
+                            label=false,
+                            color=entry.color,
+                            linestyle=entry.linestyle,
+                            linewidth=2)
                     end
-
-                    level_label = "$(round(Int, 100 * forecast_confidence))% prediction"
-                    plot!(p, x_all, 100 .* lower;
-                        label="$student_name $level_label lower: $(round(100 * lower[end]; digits=2))%",
-                        linestyle=:dot,
-                        linewidth=1.5)
-                    plot!(p, x_all, 100 .* upper;
-                        label="$student_name $level_label upper: $(round(100 * upper[end]; digits=2))%",
-                        linestyle=:dot,
-                        linewidth=1.5)
                 end
-            end
 
-            final_earned = 0.0
-            final_lower_earned = 0.0
-            final_upper_earned = 0.0
-            final_possible = 0.0
+                forecast_indices = findall(j -> !isnan(running_forecast.running[j]), eachindex(all_assignments))
+                if !isempty(forecast_indices)
+                    forecast_label = isnothing(result.final_grade) ?
+                        "$student_name forecast" :
+                        "$student_name forecast: $(round(result.final_grade; digits=2))%"
 
-            for j in 1:n_assignments
-                assignment = all_assignments[j]
-                score = student_scores[j]
-                points = assignment.value.value
+                    # Each time you add a series to p, also register a matching entry:
+                    entry = (
+                        label = "$student_name forecast: $(round(result.final_grade; digits=2))% ($(credit2lettergrade(Percent(result.final_grade / 100; normalize=false))))",
+                        color = student_color,
+                        kind = :line,
+                        linestyle = :dash,
+                        marker = :none,
+                    )
+                    push!(legend_entries, entry)
+                    # plot!(p, result.future, 100 .* result.predicted[result.future];
+                    #     label=false,
+                    #     color=entry.color,
+                    #     linestyle=entry.linestyle,
+                    #     linewidth=2)
+                    # Add this entry and plot as the forecast series using the student's color.
+                    plot!(p, forecast_indices, running_forecast.running[forecast_indices];
+                        label=false,
+                        color=entry.color,
+                        linestyle=entry.linestyle,
+                        linewidth=2)
+                end
 
-                if !isnan(score)
-                    final_earned += score * points
-                    final_lower_earned += score * points
-                    final_upper_earned += score * points
-                    final_possible += points
-                elseif assignment.due <= now_dt
-                    final_possible += points
-                elseif !isnan(projected[j])
-                    final_earned += projected[j] * points
-                    final_possible += points
-
-                    if !isnan(lower[j]) && !isnan(upper[j])
-                        final_lower_earned += lower[j] * points
-                        final_upper_earned += upper[j] * points
-                    else
-                        final_lower_earned += projected[j] * points
-                        final_upper_earned += projected[j] * points
+                if !isnothing(forecast_confidence) && !isnothing(result.lower_grade)
+                    band_indices = findall(j ->
+                        !isnan(running_forecast.running[j]) &&
+                        !isnan(running_forecast.lower[j]) &&
+                        !isnan(running_forecast.upper[j]),
+                        eachindex(all_assignments)
+                    )
+                    if forecast_bandfill && !isempty(band_indices)
+                        forecast_values = running_forecast.running[band_indices]
+                        plot!(p, band_indices, running_forecast.lower[band_indices];
+                            fillrange=forecast_values,
+                            fillcolor=student_color,
+                            fillalpha=0.12,
+                            linealpha=0,
+                            label=false)
                     end
-                else
-                    final_possible += points
+                    level = round(Int, 100 * forecast_confidence)
+                    lower_indices = findall(j -> !isnan(running_forecast.lower[j]), eachindex(all_assignments))
+                    if !isempty(lower_indices)
+                        forecast_label = isnothing(result.final_grade) ?
+                            "$student_name forecast" :
+                            "$student_name forecast: $(round(result.final_grade; digits=2))%"
+
+                        # Each time you add a series to p, also register a matching entry:
+                        entry = (
+                            label = "$student_name lower prediction: $(round(result.lower_grade; digits=2))% ($(credit2lettergrade(Percent(result.lower_grade / 100; normalize=false))))",
+                            color = student_color,
+                            kind = :line,
+                            marker = :none,
+                            linestyle = :dot,
+                        )
+                        push!(legend_entries, entry)
+                        # plot!(p, result.future,
+                        #     100 .* result.lower_predictions[result.future];
+                        #     label=false,
+                        #     color=entry.color,
+                        #     linestyle=entry.linestyle,
+                        #     linewidth=1.5,
+                        #     legendtitle="$level% confidence interval")
+                        # Add this entry and plot as the forecast series using the student's color.
+                        plot!(p, lower_indices, running_forecast.lower[lower_indices];
+                            label=false,
+                            color=entry.color,
+                            linestyle=entry.linestyle,
+                            linewidth=2)
+                        plot!(p, legendtitle="$level% confidence interval")
+                    end
                 end
             end
-
-            current = possible > 0 ? 100 * earned / possible : NaN
-            final = final_possible > 0 ? 100 * final_earned / final_possible : NaN
-            summary = "$student_name: current $(isnan(current) ? "n/a" : "$(round(current; digits=2))%"), " *
-                "forecast final $(isnan(final) ? "n/a" : "$(round(final; digits=2))%")"
-
-            if !isnothing(forecast_confidence)
-                if n_observed >= 3 && !isempty(future) && final_possible > 0
-                    final_lower = 100 * final_lower_earned / final_possible
-                    final_upper = 100 * final_upper_earned / final_possible
-                    summary *= ", $(round(Int, 100 * forecast_confidence))% prediction range " *
-                        "$(round(final_lower; digits=2))%-$(round(final_upper; digits=2))%"
-                else
-                    summary *= ", prediction bounds unavailable"
-                end
-            end
-
-            push!(forecast_summaries, summary)
         end
     end
 
-    # if !isempty(forecast_summaries)
-    #     plot!(p; title="$(gb.class.course.codename): Assignment Trends\n" *
-    #         join(forecast_summaries, " | "))
-    # end
+    legend_plot = plot(;
+        legend=:left,
+        legendtitle=isnothing(forecast_confidence) ?
+            "Assignment trends" :
+            "$(round(Int, 100 * forecast_confidence))% prediction interval",
+        framestyle=:none,
+        grid=false,
+        axis=false,
+    )
+
+    for entry in legend_entries
+        if entry.kind == :bar
+            bar!(legend_plot, [NaN], [NaN];
+                label=entry.label,
+                color=entry.color)
+        elseif entry.kind == :scatter
+            scatter!(legend_plot, [NaN], [NaN];
+                label=entry.label,
+                color=entry.color,
+                marker=entry.marker)
+        else
+            plot!(legend_plot, [NaN], [NaN];
+                label=entry.label,
+                color=entry.color,
+                marker=entry.marker,
+                # markersize=32,
+                # markerstrokewidth=0.1,
+                linestyle=entry.linestyle)
+        end
+    end
+
+    combined = plot(
+        p,
+        legend_plot;
+        layout=@layout([graph{0.75w} legend{0.25w}]),
+        size=(1200, 800),
+        margin=5Plots.mm,
+        dpi=300
+    )
 
     mkpath(dirname(output_path))
-    savefig(p, output_path)
-    return p
+    savefig(combined, output_path)
+    return combined
 end
 
 "Similar to `view_gradebook` but specialized for attendance."
