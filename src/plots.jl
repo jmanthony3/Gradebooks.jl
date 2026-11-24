@@ -872,7 +872,7 @@ function view_assignment_trends(
         kind = :bar,
     ))
     push!(legend_entries, (
-        label = "Class running average",
+        label = "Class running average: $(round(100class_running[end]; digits=2))% ($(credit2lettergrade(Percent(class_running[end]; normalize=false))))",
         color = :orange,
         kind = :bar,
     ))
