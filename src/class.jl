@@ -81,7 +81,7 @@ struct Class <: AbstractGradebookNode
     end
 end
 function Class(course, term, section, frequency, time_start, time_finish, instructors::Vector{Instructor}, students::Vector{Student}, teams::Vector{Team}=Team[])
-    return Class(course, term, section, frequency, time_start, time_finish, canonicalize(time_finish - time_start), instructors, Roster(students), teams, string2uppercase_symbol("$(getfield(course, :codename))-$(getfield(term, :codename))-$(rpad(string(section), 3, '0'))")
+    return Class(course, term, section, frequency, time_start, time_finish, canonicalize(time_finish - time_start), instructors, Roster(students), teams, string2uppercase_symbol("$(getfield(course, :codename))-$(getfield(term, :codename))-$(lpad(string(section), 3, '0'))")
     )
 end
 
