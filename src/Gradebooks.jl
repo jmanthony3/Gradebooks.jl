@@ -147,6 +147,7 @@ include("base.jl")
 include("templates.jl")
 include("privacy.jl")
 include("plots.jl")
+include("reports.jl")
 
 
 
