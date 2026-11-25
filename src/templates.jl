@@ -124,7 +124,7 @@ function load_course_template(course_code::AbstractString;
         due = RelativeDate(
             a["due"]["week"],
             a["due"]["day"],
-            get(a["due"], "time", nothing) === nothing ? nothing : Time(a["due"]["time"])
+            get(a["due"], "time", nothing) === nothing ? nothing : parse_time(a["due"]["time"])
         )
 
         # @show a["name"], due, a["value"], a["category"], get(a, "is_group", false), get(a, "questions", Question[])
@@ -176,6 +176,9 @@ function resolve(template::CourseTemplate, term::Term, section, frequency, time_
     assignments = map(template.assignments) do t
         # assigned = absolute_date(term.start, t.assigned)
         due      = absolute_date(term.start, t.due)
+        if t.due.time !== nothing
+            due = DateTime(due) + (t.due.time - Time(0))
+        end
 
         # @show t.name, due, t.value, t.category, t.is_group
         # @show t.questions

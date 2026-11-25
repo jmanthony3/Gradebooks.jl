@@ -401,7 +401,7 @@ function view_gradebook(
                 j == length(assignments) + 1 ? mapreduce(a->a.value, +, assignments) : ( # raw
                     j == length(assignments) + 3 ? mapreduce(a->a.value, +, assignments) : ( # total
                         ""))),
-            (matrix, j)->j <= length(assignments) ? assignments[j].due : (j == length(assignments) + 1 ? gb.class.term.finish : ""),
+            (matrix, j)->j <= length(assignments) ? (Time(assignments[j].due) == MIDNIGHT ? Date(assignments[j].due) : assignments[j].due) : (j == length(assignments) + 1 ? gb.class.term.finish : ""),
             # (matrix, j)->j <= length(assignments) + 3 ? Point(sum(df[:, j])/length(df[:, j])) : ( # all cells + raw, penalty, and total
             #     j <= length(assignments) + 5 ? credit2lettergrade(Percent(sum(df[:, j-2])/length(df[:, j-2]); normalize=false)) : ( # letter
             #         j <= length(assignments) + 6 ? mapreduce(ℓ->ℓ.quality_points, +, df[:, j-1])/length(df[:, j-1]) : ( # gpa
